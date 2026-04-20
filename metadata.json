@@ -1,0 +1,7 @@
+{
+  "name": "Joselito",
+  "description": "Aplicación de toma de datos y cuadros de mando de la planta de producción de Joselito",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
