@@ -26,14 +26,14 @@ const MainMenu: React.FC<MainMenuProps> = ({
   onUpdateOperario
 }) => {
   const areas: AreaCard[] = [
-    { id: 'sb-preparacion', name: 'PREPARACIÓN', sub: 'Sala Blanca', icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012-2"/></svg>, status: 'active', taller: 1 },
+    { id: 'sb-preparacion', name: 'DESHUESADO/PRENSADO', sub: 'Sala Blanca', icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012-2"/></svg>, status: 'active', taller: 1 },
     { id: 'sb-loncheado', name: 'LONCHEADO', sub: 'Sala Blanca', icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.628.282a2 2 0 01-1.806 0l-.628-.282a6 6 0 00-3.86-.517l-2.387.477a2 2 0 00-1.022.547l-1.16 1.16a2 2 0 000 2.828l1.16 1.16a2 2 0 001.022.547l2.387.477a6 6 0 003.86-.517l.628-.282a2 2 0 011.806 0l.628.282a6 6 0 003.86-.517l2.387-.477a2 2 0 001.022-.547l1.16-1.16a2 2 0 000-2.828l-1.16-1.16z"/></svg>, status: 'active', taller: 1 },
     { id: 'sb-empaquetado-loncheado', name: 'EMP. LONCHEADO', sub: 'Sala Blanca', icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>, status: 'active', taller: 1 },
     { id: 'sb-empaquetado-deshuesado', name: 'EMP. DESHUESADO', sub: 'Sala Blanca', icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>, status: 'active', taller: 1 },
     { id: 'env-envasado', name: 'ENVASADO', sub: 'Envasado', icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>, status: 'active', taller: 2 },
     { id: 'env-empaquetado', name: 'EMPAQUETADO', sub: 'Envasado', icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>, status: 'active', taller: 2 },
     { id: 'expedicion', name: 'EXPEDICIONES', sub: 'Salida de Mercancía', icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>, status: 'active', taller: 3 },
-    { id: 'preparacion-exp', name: 'PREPARACIÓN EXP.', sub: 'Expediciones', icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012-2"/></svg>, status: 'active', taller: 3 },
+    { id: 'preparacion-exp', name: 'PREP. EXPEDICIONES', sub: 'Expediciones', icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012-2"/></svg>, status: 'active', taller: 3 },
     { id: 'movimiento-jamones', name: 'MOVIMIENTOS', sub: 'Logística Interna', icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>, status: 'active', taller: 4 }
   ];
 
@@ -46,7 +46,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
   };
 
   const workshops = [
-    { id: 1, name: 'SALA BLANCA', sub: 'Preparación, Loncheado y Empaquetado', icon: <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.628.282a2 2 0 01-1.806 0l-.628-.282a6 6 0 00-3.86-.517l-2.387.477a2 2 0 00-1.022.547l-1.16 1.16a2 2 0 000 2.828l1.16 1.16a2 2 0 001.022.547l2.387.477a6 6 0 003.86-.517l.628-.282a2 2 0 011.806 0l.628.282a6 6 0 003.86-.517l2.387-.477a2 2 0 001.022-.547l1.16-1.16a2 2 0 000-2.828l-1.16-1.16z"/></svg> },
+    { id: 1, name: 'SALA BLANCA', sub: 'Deshuesado/Prensado, Loncheado y Empaquetado', icon: <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.628.282a2 2 0 01-1.806 0l-.628-.282a6 6 0 00-3.86-.517l-2.387.477a2 2 0 00-1.022.547l-1.16 1.16a2 2 0 000 2.828l1.16 1.16a2 2 0 001.022.547l2.387.477a6 6 0 003.86-.517l.628-.282a2 2 0 011.806 0l.628.282a6 6 0 003.86-.517l2.387-.477a2 2 0 001.022-.547l1.16-1.16a2 2 0 000-2.828l-1.16-1.16z"/></svg> },
     { id: 2, name: 'ENVASADO', sub: 'Envasado y Empaquetado', icon: <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg> },
     { id: 3, name: 'EXPEDICIONES', sub: 'Expediciones y Preparación', icon: <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg> },
     { id: 4, name: 'MOVIMIENTOS', sub: 'Logística Interna', icon: <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg> }
@@ -56,7 +56,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
 
   return (
     <div className="min-h-[60vh] py-2 sm:py-4 flex flex-col items-center animate-in fade-in zoom-in duration-500">
-      <div className="text-center mb-4 sm:mb-6 flex flex-col items-center px-4">
+      <div className="text-center mb-4 sm:mb-6 hidden sm:flex flex-col items-center px-4">
         <div className="flex flex-col items-center mb-2 overflow-visible">
           {/* Logo Joselito mejorado */}
           {JOSELITO_LOGO ? (
@@ -122,7 +122,8 @@ const MainMenu: React.FC<MainMenuProps> = ({
               const workshopName = workshop?.name || '';
               const dashboardId = selectedWorkshop === 1 ? 'sala-blanca-dashboard' : 
                                   selectedWorkshop === 2 ? 'envasado-dashboard' : 
-                                  selectedWorkshop === 3 ? 'expediciones-dashboard' : null;
+                                  selectedWorkshop === 3 ? 'expediciones-dashboard' :
+                                  selectedWorkshop === 4 ? 'movimientos-dashboard' : null;
               
               if (!dashboardId) return null;
 

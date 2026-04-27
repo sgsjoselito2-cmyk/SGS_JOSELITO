@@ -24,24 +24,22 @@ interface TOP15IndicatorsProps {
 }
 
 const TALLERES = [
-  { id: 'sala-blanca', name: 'SALA BLANCA', taller: 'Producción' },
-  { id: 'movimiento-jamones', name: 'MOVIMIENTO JAMONES', taller: 'Producción' },
-  { id: 'sb-preparacion', name: 'PREPARACIÓN SB', taller: 'Sala Blanca' },
-  { id: 'sb-loncheado', name: 'LONCHEADO SB', taller: 'Sala Blanca' },
-  { id: 'sb-empaquetado-loncheado', name: 'EMP. LONCHEADO SB', taller: 'Sala Blanca' },
-  { id: 'sb-empaquetado-deshuesado', name: 'EMP. DESHUESADO SB', taller: 'Sala Blanca' },
-  { id: 'env-envasado', name: 'ENVASADO', taller: 'Envasado' },
-  { id: 'env-empaquetado', name: 'EMPAQUETADO ENV', taller: 'Envasado' },
-  { id: 'expedicion', name: 'EXPEDICIONES', taller: 'Expediciones' },
-  { id: 'preparacion-exp', name: 'PREPARACIÓN EXP', taller: 'Expediciones' },
-  { id: 'movimiento-jamones-log', name: 'MOVIMIENTOS', taller: 'Movimientos' },
-  { id: 'preparacion', name: 'PREPARACIÓN', taller: 'Logística' },
-  { id: 'expedicion-log', name: 'EXPEDICIÓN', taller: 'Logística' }
+  { id: 'sb-preparacion', name: 'DESHUESADO/PRENSADO', taller: 'SALA BLANCA' },
+  { id: 'sb-loncheado', name: 'LONCHEADO', taller: 'SALA BLANCA' },
+  { id: 'sb-empaquetado-loncheado', name: 'EMP. LONCHEADO', taller: 'SALA BLANCA' },
+  { id: 'sb-empaquetado-deshuesado', name: 'EMP. DESHUESADO', taller: 'SALA BLANCA' },
+  { id: 'env-envasado', name: 'ENVASADO', taller: 'ENVASADO' },
+  { id: 'env-empaquetado', name: 'EMPAQUETADO', taller: 'ENVASADO' },
+  { id: 'expedicion', name: 'EXPEDICIONES', taller: 'EXPEDICIONES' },
+  { id: 'preparacion-exp', name: 'PREPARACIÓN', taller: 'EXPEDICIONES' },
+  { id: 'movimiento-jamones', name: 'MOVIMIENTOS', taller: 'MOVIMIENTOS' }
 ];
 
 const TALLER_BG_COLORS: Record<string, string> = {
-  'Producción': 'bg-blue-50/30',
-  'Logística': 'bg-emerald-50/30'
+  'SALA BLANCA': 'bg-indigo-50/30',
+  'ENVASADO': 'bg-cyan-50/30',
+  'EXPEDICIONES': 'bg-amber-50/30',
+  'MOVIMIENTOS': 'bg-slate-50/30'
 };
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
@@ -52,26 +50,40 @@ const isTimeBased = (wsId: string) => {
 
 const TALLER_INDICATORS: Record<string, {id: string, name: string}[]> = {
   'sb-loncheado': [
-    { id: 'availability', name: 'Disponibilidad' },
-    { id: 'performance', name: 'Rendimiento' },
-    { id: 'quality', name: 'Calidad' },
-    { id: 'oee', name: 'OEE' },
-    { id: 'merma1', name: 'Merma (desaparecido)' },
-    { id: 'merma2', name: 'Merma 2' },
-    { id: 'subproducto', name: 'Subproducto' }
+    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' },
+    { id: 'rendimiento', name: 'RENDIMIENTO (%)' },
+    { id: 'calidad', name: 'CALIDAD (%)' },
+    { id: 'merma1', name: '% MERMA 1' },
+    { id: 'merma2', name: '% MERMA 2' },
+    { id: 'subproducto', name: '% SUBPROD' }
   ],
   'sb-preparacion': [
-    { id: 'pph', name: 'PPH' },
-    { id: 'availability', name: 'Disponibilidad' },
-    { id: 'performance', name: 'Rendimiento' },
-    { id: 'quality', name: 'Calidad' },
-    { id: 'oee', name: 'OEE' }
+    { id: 'pph', name: 'PPH PESAR' }
+  ],
+  'sb-empaquetado-loncheado': [
+    { id: 'pph_blister', name: 'PPH - Envasado Blister' },
+    { id: 'pph_sin_blister', name: 'PPH - Envasado Sin Blister' }
+  ],
+  'sb-empaquetado-deshuesado': [
+    { id: 'pph', name: 'PPH' }
+  ],
+  'env-envasado': [
+    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' },
+    { id: 'rendimiento', name: 'RENDIMIENTO (%)' },
+    { id: 'calidad', name: 'CALIDAD (%)' },
+    { id: 'productividad', name: 'OEE (%)' }
+  ],
+  'env-empaquetado': [
+    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' },
+    { id: 'rendimiento', name: 'RENDIMIENTO (%)' },
+    { id: 'calidad', name: 'CALIDAD (%)' },
+    { id: 'productividad', name: 'OEE (%)' }
   ],
   'default': [
-    { id: 'availability', name: 'Disponibilidad' },
-    { id: 'performance', name: 'Rendimiento' },
-    { id: 'quality', name: 'Calidad' },
-    { id: 'oee', name: 'OEE' }
+    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' },
+    { id: 'rendimiento', name: 'RENDIMIENTO (%)' },
+    { id: 'calidad', name: 'CALIDAD (%)' },
+    { id: 'productividad', name: 'OEE (%)' }
   ]
 };
 
@@ -95,7 +107,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
 
   // Drill-down state
   const [drillDownPareto, setDrillDownPareto] = useState<{ workshopId: string, date: string } | null>(null);
-  const [drillDownRecords, setDrillDownRecords] = useState<{ workshopId: string, date: string, type: 'availability' | 'performance' | 'quality', category: string } | null>(null);
+  const [drillDownRecords, setDrillDownRecords] = useState<{ workshopId: string, date: string, type: 'disponibilidad' | 'rendimiento' | 'calidad', category: string } | null>(null);
 
   const allData = useMemo(() => [...history, ...activities], [history, activities]);
 
@@ -118,28 +130,64 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
     setDrillDownPareto({ workshopId, date });
   };
 
-  const handleParetoBarDoubleClick = (workshopId: string, date: string, type: 'availability' | 'performance' | 'quality', category: string) => {
+  const handleParetoBarDoubleClick = (workshopId: string, date: string, type: 'disponibilidad' | 'rendimiento' | 'calidad', category: string) => {
     setDrillDownRecords({ workshopId, date, type, category });
   };
 
   // Helper to get objective for a workshop and indicator
-  const getWorkshopObjective = (wsId: string, indicatorId: string, dateStr?: string) => {
-    const objs = allObjectives[wsId] || [];
+  const getWorkshopObjective = (wsId: string, indicator_id: string, dateStr?: string) => {
+    const objs = [...(allObjectives[wsId] || [])].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
     const targetDate = dateStr || selectedDate;
-    const found = objs.find(o => o.validFrom <= targetDate && (o.indicatorId === indicatorId || (!o.indicatorId && indicatorId === 'oee')));
-    if (found) {
-      if (indicatorId === 'availability') return found.disponibilidad;
-      if (indicatorId === 'performance') return found.rendimiento;
-      if (indicatorId === 'quality') return found.calidad;
-      if (indicatorId === 'oee') return parseFloat(((found.disponibilidad * found.rendimiento * found.calidad) / 10000).toFixed(1));
-      return found.objetivo;
+    
+    // Helper function for prioritized lookup
+    const getVal = (id: string, list: any[], date: string) => {
+      const spec = list.find(o => o.valid_from <= date && o.indicator_id === id);
+      if (spec && spec.objetivo) return spec.objetivo;
+      
+      const master = list.find(o => o.valid_from <= date && (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id));
+      if (master) {
+        if (id === 'disponibilidad') return master.disponibilidad || 0;
+        if (id === 'rendimiento') return master.rendimiento || 0;
+        if (id === 'calidad') return master.calidad || 0;
+      }
+      return 0;
+    };
+
+    const isOEEPart = ['disponibilidad', 'rendimiento', 'calidad', 'productividad', 'oee'].includes(indicator_id);
+    if (isOEEPart) {
+      if (indicator_id === 'productividad' || indicator_id === 'oee') {
+        const specProd = objs.find(o => o.valid_from <= targetDate && (o.indicator_id === 'productividad' || o.indicator_id === 'oee'));
+        if (specProd && specProd.objetivo) return specProd.objetivo;
+        
+        // If no explicit OEE goal, calculate from components (which also follow priority)
+        const d = getVal('disponibilidad', objs, targetDate);
+        const r = getVal('rendimiento', objs, targetDate);
+        const c = getVal('calidad', objs, targetDate);
+        return parseFloat(((d * r * c) / 10000).toFixed(1));
+      }
+      return getVal(indicator_id, objs, targetDate);
     }
-    // Fallbacks
-    if (indicatorId === 'availability' || indicatorId === 'performance' || indicatorId === 'quality') return 85;
-    if (indicatorId === 'oee') return 62;
-    if (indicatorId === 'merma1' || indicatorId === 'merma2') return 3;
-    if (indicatorId === 'subproducto') return 5;
-    return 0;
+
+    // Default fallbacks for non-OEE indicators
+    if (indicator_id === 'pph') {
+      const spec = objs.find(o => o.valid_from <= targetDate && o.indicator_id === 'pph');
+      return spec?.objetivo || spec?.pph || 0;
+    }
+    if (indicator_id === 'merma1') {
+      const spec = objs.find(o => o.valid_from <= targetDate && o.indicator_id === 'merma1');
+      return spec?.objetivo || spec?.merma1 || 3;
+    }
+    if (indicator_id === 'merma2') {
+      const spec = objs.find(o => o.valid_from <= targetDate && o.indicator_id === 'merma2');
+      return spec?.objetivo || spec?.merma2 || 3;
+    }
+    if (indicator_id === 'subproducto') {
+      const spec = objs.find(o => o.valid_from <= targetDate && o.indicator_id === 'subproducto');
+      return spec?.objetivo || spec?.subproducto || 5;
+    }
+
+    const simpleMatch = objs.find(o => o.valid_from <= targetDate && o.indicator_id === indicator_id);
+    return simpleMatch?.objetivo || 0;
   };
 
   const handlePrintA3 = async () => {
@@ -326,9 +374,17 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
 
         const date = new Date(w.year, 0, 1);
         date.setDate(date.getDate() + (w.week - 1) * 7);
-        const objs = allObjectives[ws.id] || [];
-        const found = objs.find(o => o.validFrom <= date.toISOString().split('T')[0]) || { productividad: 62 };
-        const objective = Math.round(found.productividad);
+        const dateStr = date.toISOString().split('T')[0];
+        const objs = [...(allObjectives[ws.id] || [])].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+        const found = objs.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id));
+        
+        let objective = 62;
+        if (found) {
+          const d = found.disponibilidad || 0;
+          const r = found.rendimiento || 0;
+          const c = found.calidad || 0;
+          objective = Math.round((d * r * c) / 10000);
+        }
 
         if (data.length === 0) return { stats: null, objective };
         return { stats: calculateStats(data, ws.id, weekMermas), objective };
@@ -370,18 +426,26 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
 
         const date = new Date(w.year, 0, 1);
         date.setDate(date.getDate() + (w.week - 1) * 7);
-        const objs = allObjectives[ws.id] || [];
-        const found = objs.find(o => o.validFrom <= date.toISOString().split('T')[0]) || { productividad: 62 };
-        const objective = Math.round(found.productividad);
+        const dateStr = date.toISOString().split('T')[0];
+        const objs = [...(allObjectives[ws.id] || [])].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+        const found = objs.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id));
+        
+        let objective = 62;
+        if (found) {
+          const d = found.disponibilidad || 0;
+          const r = found.rendimiento || 0;
+          const c = found.calidad || 0;
+          objective = Math.round((d * r * c) / 10000);
+        }
 
         if (weekActivities.length === 0) return { name: `S${w.week}`, Disp: 0, Rto: 0, Prod: 0, Obj: objective };
         
         const stats = calculateStats(weekActivities, ws.id, weekMermas);
         return { 
           name: `S${w.week}`, 
-          Disp: stats.availability || 0, 
-          Rto: stats.performance || 0, 
-          Prod: stats.oee || 0, 
+          Disp: stats.disponibilidad || 0, 
+          Rto: stats.rendimiento || 0, 
+          Prod: stats.productividad || 0, 
           Obj: objective 
         };
       });
@@ -476,14 +540,15 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
   const renderTable = (title: string, columns: string[], stats: any[]) => (
     <div className={`bg-white ${isPrinting ? 'p-1' : 'p-2'} rounded-xl border border-slate-100 shadow-sm overflow-hidden shrink-0`}>
       <h3 className={`${isPrinting ? 'text-[11px]' : 'text-[13px]'} font-black text-slate-900 uppercase tracking-tighter mb-1 px-1`}>{title}</h3>
-      <div className="overflow-x-auto no-scrollbar max-h-[500px] overflow-y-auto">
-        <table className={`w-full ${isPrinting ? 'text-[8px]' : 'text-[10px]'} border-collapse`}>
-          <thead className="sticky top-0 z-30">
+      <div className="overflow-x-auto no-scrollbar max-h-[500px] overflow-y-auto relative">
+        <table className={`w-full ${isPrinting ? 'text-[8px]' : 'text-[10px]'} border-collapse table-fixed`}>
+          <thead className="sticky top-0 z-50">
             <tr className="bg-slate-900 text-white font-black text-[10px] uppercase tracking-wider">
-              <th className={`p-1 text-left border border-slate-700 ${isPrinting ? 'w-24' : 'w-28'}`}>Taller</th>
-              <th className={`p-1 text-left border border-slate-700 ${isPrinting ? 'w-24' : 'w-48'}`}>Indicador</th>
-              <th className="p-1 text-center border border-slate-700 w-10">Obj</th>
-              {columns.map(col => <th key={col} className="p-1 text-center border border-slate-700 min-w-[35px] text-[12px]">{col}</th>)}
+              <th className={`p-1 text-left border border-slate-700 bg-slate-900 sticky left-0 z-50 ${isPrinting ? 'w-20' : 'w-24'} shadow-[2px_0_0_rgba(0,0,0,0.1)]`}>Taller</th>
+              <th className={`p-1 text-left border border-slate-700 bg-slate-900 sticky ${isPrinting ? 'left-[80px] w-24' : 'left-[96px] w-32'} z-50 shadow-[2px_0_0_rgba(0,0,0,0.1)]`}>Subárea</th>
+              <th className={`p-1 text-left border border-slate-700 bg-slate-900 sticky ${isPrinting ? 'left-[176px] w-24' : 'left-[224px] w-40'} z-50 shadow-[2px_0_0_rgba(0,0,0,0.1)]`}>Indicador</th>
+              <th className="p-1 text-center border border-slate-700 bg-slate-900 w-10">Obj</th>
+              {columns.map(col => <th key={col} className="p-1 text-center border border-slate-700 bg-slate-900 min-w-[35px] text-[12px]">{col}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -491,32 +556,42 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
               const objective = getWorkshopObjective(row.id, row.indicatorId);
               const bgColor = TALLER_BG_COLORS[row.taller] || 'bg-white';
               
-              // Calculate rowspan for Taller
-              const tallerRows = stats.filter(r => r.id === row.id);
-              const isFirstOfWorkshop = idx === 0 || stats[idx - 1].id !== row.id;
+              // Calculate rowspan for Taller/Subarea
+              const tallerRows = stats.filter(r => r.workshopName === row.workshopName);
+              const isFirstOfWorkshop = idx === 0 || stats[idx - 1].workshopName !== row.workshopName;
               
+              // Taller rowspan
+              const tallerGroupRows = stats.filter(r => r.taller === row.taller);
+              const isFirstOfTaller = idx === 0 || stats[idx - 1].taller !== row.taller;
+
               return (
-                <tr key={`${row.id}-${row.indicatorId}`} className={`${bgColor} hover:bg-white transition-colors`}>
+                <tr key={`${row.id}-${row.indicatorId}-${idx}`} className={`${bgColor} hover:bg-white transition-colors`}>
+                  {isFirstOfTaller && (
+                    <td 
+                      rowSpan={tallerGroupRows.length}
+                      className="p-1 font-black border border-slate-200 bg-slate-50 sticky left-0 z-40 text-slate-400 text-[9px] uppercase leading-tight shadow-[2px_0_0_rgba(0,0,0,0.05)]"
+                      style={{ verticalAlign: 'top' }}
+                    >
+                      {row.taller}
+                    </td>
+                  )}
                   {isFirstOfWorkshop && (
                     <td 
                       rowSpan={tallerRows.length}
-                      className="p-1 font-black border border-slate-200 bg-slate-50/50"
+                      className={`p-1 font-black border border-slate-200 bg-white sticky ${isPrinting ? 'left-[80px]' : 'left-[96px]'} z-40 text-slate-800 text-[11px] leading-tight shadow-[2px_0_0_rgba(0,0,0,0.05)]`}
                       style={{ verticalAlign: 'top' }}
                     >
-                      <div className="flex flex-col leading-tight">
-                        <span className={`uppercase text-slate-400 font-bold ${isPrinting ? 'text-[7px]' : 'text-[9px]'}`}>{row.taller}</span>
-                        <span className="text-slate-800 text-[12px]">{row.workshopName}</span>
-                      </div>
+                      {row.workshopName}
                     </td>
                   )}
-                  <td className="p-1 font-bold border border-slate-200 uppercase text-slate-600 bg-white italic">
+                  <td className={`p-1 font-bold border border-slate-200 uppercase text-slate-600 bg-white italic sticky ${isPrinting ? 'left-[176px]' : 'left-[224px]'} z-40 shadow-[2px_0_0_rgba(0,0,0,0.05)]`}>
                     {row.indicatorName}
                   </td>
                   <td className="p-1 text-center font-black border border-slate-200 text-blue-600 bg-blue-50/30">
-                    {objective !== 0 ? (row.indicatorId === 'pph' ? objective : `${objective}%`) : '—'}
+                    {objective !== 0 ? (row.indicatorId.startsWith('pph') ? objective : `${objective}%`) : '—'}
                   </td>
                   {row.values.map((val: any, i: number) => {
-                    const isKPI = (row.indicatorId === 'oee' || row.indicatorId === 'availability' || row.indicatorId === 'performance' || row.indicatorId === 'quality');
+                    const isKPI = (row.indicatorId === 'productividad' || row.indicatorId === 'oee' || row.indicatorId === 'disponibilidad' || row.indicatorId === 'rendimiento' || row.indicatorId === 'calidad');
                     const numVal = parseFloat(val);
                     
                     const colObj = getWorkshopObjective(row.id, row.indicatorId, title.includes('Diario') ? last7Days[i] : undefined);
@@ -538,7 +613,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
                         className={`p-1 text-center font-bold border border-slate-200 select-none ${isEmpty ? 'text-slate-300' : (isGood ? 'text-emerald-600 bg-emerald-50/30' : 'text-red-500 bg-red-50/30')}`}
                         title={date && isKPI ? "Doble clic para ver Pareto" : ""}
                       >
-                        {isEmpty ? '-' : (row.indicatorId === 'pph' ? val : `${val}%`)}
+                        {isEmpty ? '-' : (row.indicatorId.startsWith('pph') ? val : `${val}%`)}
                       </td>
                     );
                   })}
@@ -652,8 +727,8 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               { [
-                { title: 'Esperas y Averías', data: paretos.esperas, type: 'availability' as const, unit: 'min' },
-                { title: 'Pérdida Rendimiento', data: paretos.performance, type: 'performance' as const, unit: 'min' }
+                { title: 'Esperas y Averías', data: paretos.esperas, type: 'disponibilidad' as const, unit: 'min' },
+                { title: 'Pérdida Rendimiento', data: paretos.performance, type: 'rendimiento' as const, unit: 'min' }
               ].map(pareto => (
                 <div key={pareto.title} className="space-y-1">
                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{pareto.title}</h4>
@@ -785,12 +860,12 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
           <div className="space-y-4">
             <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter border-l-8 border-blue-600 pl-4">Evolución Semanal por Taller</h3>
             <div className="grid grid-cols-4 gap-6">
-              {weeklyStats.map(ws => (
-                <div key={ws.id} className="bg-slate-50 p-4 rounded-3xl border border-slate-200 flex flex-col h-[350px]">
-                  <h4 className="text-xl font-black text-slate-800 uppercase mb-3 text-center">{ws.name}</h4>
+              {workshopWeeklyData.map(ww => (
+                <div key={`report-${ww.id}`} className="bg-slate-50 p-4 rounded-3xl border border-slate-200 flex flex-col h-[350px]">
+                  <h4 className="text-xl font-black text-slate-800 uppercase mb-3 text-center">{ww.name}</h4>
                   <div className="flex-1 w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={ws.values} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
+                      <ComposedChart data={ww.values} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" />
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 800, fill: '#475569'}} />
                         <YAxis tick={{fontSize: 10, fontWeight: 800, fill: '#475569'}} axisLine={false} tickLine={false} domain={[0, 100]} />
@@ -812,8 +887,8 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
             <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter border-l-8 border-amber-600 pl-4">Pareto Pérdidas - {TALLERES.find(t => t.id === selectedWorkshopPareto)?.name}</h3>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                { [
-                  { title: 'Esperas y Averías', data: paretos.esperas, type: 'availability' as const, unit: 'min' },
-                  { title: 'Pérdida Rendimiento', data: paretos.performance, type: 'performance' as const, unit: 'min' }
+                  { title: 'Esperas y Averías', data: paretos.esperas, type: 'disponibilidad' as const, unit: 'min' },
+                  { title: 'Pérdida Rendimiento', data: paretos.performance, type: 'rendimiento' as const, unit: 'min' }
                 ].map(pareto => (
                   <div key={pareto.title} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
                     <h4 className="text-lg font-black text-slate-400 uppercase tracking-widest mb-4">{pareto.title}</h4>
@@ -857,7 +932,7 @@ interface ParetoModalProps {
   date: string;
   allData: Activity[];
   onClose: () => void;
-  onBarDoubleClick: (type: 'availability' | 'performance' | 'quality', category: string) => void;
+  onBarDoubleClick: (type: 'disponibilidad' | 'rendimiento' | 'calidad', category: string) => void;
 }
 
 const ParetoModal: React.FC<ParetoModalProps> = ({ workshopId, date, allData, onClose, onBarDoubleClick }) => {
@@ -865,14 +940,14 @@ const ParetoModal: React.FC<ParetoModalProps> = ({ workshopId, date, allData, on
   
   const paretos = useMemo(() => {
     const wsData = allData.filter(a => a.area === workshopId && a.fecha === date);
-    const availability: Record<string, number> = {};
-    const performance: Record<string, number> = {};
-    const quality: Record<string, number> = {};
+    const disponibilidad: Record<string, number> = {};
+    const rendimiento: Record<string, number> = {};
+    const calidad: Record<string, number> = {};
     const timeBased = isTimeBased(workshopId);
 
     wsData.forEach(act => {
       if (act.tipoTarea === TaskType.ESPERAS || act.tipoTarea === TaskType.AVERIA) {
-        availability[act.formato] = (availability[act.formato] || 0) + (act.duracionMin || 0);
+        disponibilidad[act.formato] = (disponibilidad[act.formato] || 0) + (act.duracionMin || 0);
       }
       if (act.tipoTarea === TaskType.PRODUCCION) {
         const isLaser = workshopId === 'corte-laser' || act.area === 'corte-laser';
@@ -882,7 +957,7 @@ const ParetoModal: React.FC<ParetoModalProps> = ({ workshopId, date, allData, on
           : (teo > 0 ? (60 / teo) : 0) * (act.cantidad || 0);
         const loss = (act.duracionMin || 0) - theoreticalTotal;
         if (loss > 0) {
-          performance[act.formato] = (performance[act.formato] || 0) + loss;
+          rendimiento[act.formato] = (rendimiento[act.formato] || 0) + loss;
         }
       }
     });
@@ -894,14 +969,14 @@ const ParetoModal: React.FC<ParetoModalProps> = ({ workshopId, date, allData, on
         .slice(0, 8);
 
     return {
-      availability: formatPareto(availability),
-      performance: formatPareto(performance)
+      disponibilidad: formatPareto(disponibilidad),
+      rendimiento: formatPareto(rendimiento)
     };
   }, [allData, workshopId, date]);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-      <div className="bg-white w-full max-w-5xl rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300 overflow-y-auto">
+      <div className="bg-white w-full max-w-5xl rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-y-auto">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
           <div>
             <h3 className="text-lg font-black text-slate-900 uppercase tracking-tighter">Paretos de Pérdida - {workshopName}</h3>
@@ -914,8 +989,8 @@ const ParetoModal: React.FC<ParetoModalProps> = ({ workshopId, date, allData, on
         
         <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-3 gap-6">
           {[
-            { title: 'Disponibilidad (Esperas/Averías)', data: paretos.availability, type: 'availability' as const, unit: 'min' },
-            { title: 'Rendimiento (Pérdida Tiempo)', data: paretos.performance, type: 'performance' as const, unit: 'min' }
+            { title: 'Disponibilidad (Esperas/Averías)', data: paretos.disponibilidad, type: 'disponibilidad' as const, unit: 'min' },
+            { title: 'Rendimiento (Pérdida Tiempo)', data: paretos.rendimiento, type: 'rendimiento' as const, unit: 'min' }
           ].map(pareto => (
             <div key={pareto.title} className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
               <h4 className="text-[14px] font-black text-slate-400 uppercase tracking-widest mb-4">{pareto.title}</h4>
@@ -959,7 +1034,7 @@ const ParetoModal: React.FC<ParetoModalProps> = ({ workshopId, date, allData, on
 interface RecordsModalProps {
   workshopId: string;
   date: string;
-  type: 'availability' | 'performance' | 'quality';
+  type: 'disponibilidad' | 'rendimiento' | 'calidad';
   category: string;
   allData: Activity[];
   onClose: () => void;
@@ -970,13 +1045,13 @@ const RecordsModal: React.FC<RecordsModalProps> = ({ workshopId, date, type, cat
     return allData.filter(a => {
       if (a.area !== workshopId || a.fecha !== date) return false;
       
-      if (type === 'availability') {
+      if (type === 'disponibilidad') {
         return (a.tipoTarea === TaskType.ESPERAS || a.tipoTarea === TaskType.AVERIA) && a.formato === category && !a.afectaCalidad;
       }
-      if (type === 'performance') {
+      if (type === 'rendimiento') {
         return a.tipoTarea === TaskType.PRODUCCION && a.formato === category;
       }
-      if (type === 'quality') {
+      if (type === 'calidad') {
         const name = a.formato.toUpperCase();
         const isQualityTask = ['REPROCESADO', 'REPROCESO', 'REPASAR', 'REPINTADO', 'RETRABAJO', 'CALIDAD'].some(kw => name.includes(kw));
         const isProdQuality = false; // Cantidad NOK no longer tracked
@@ -988,8 +1063,8 @@ const RecordsModal: React.FC<RecordsModalProps> = ({ workshopId, date, type, cat
   }, [allData, workshopId, date, type, category]);
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-      <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300 overflow-y-auto">
+      <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-y-auto">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-blue-600 text-white">
           <div>
             <h3 className="text-lg font-black uppercase tracking-tighter">Registros Detallados</h3>
@@ -1009,7 +1084,7 @@ const RecordsModal: React.FC<RecordsModalProps> = ({ workshopId, date, type, cat
                 <th className="p-2 text-center border border-slate-200">Fin</th>
                 <th className="p-2 text-center border border-slate-200">Duración</th>
                 <th className="p-2 text-center border border-slate-200">Cant.</th>
-                {type === 'performance' && (
+                {type === 'rendimiento' && (
                   <>
                     <th className="p-2 text-center border border-slate-200">T. Teo (min)</th>
                     <th className="p-2 text-center border border-slate-200">T. Real (min)</th>
@@ -1036,7 +1111,7 @@ const RecordsModal: React.FC<RecordsModalProps> = ({ workshopId, date, type, cat
                     <td className="p-2 border border-slate-200 text-center">{rec.horaFin}</td>
                     <td className="p-2 border border-slate-200 text-center font-black">{rec.duracionMin} min</td>
                     <td className="p-2 border border-slate-200 text-center">{rec.cantidad || 0}</td>
-                    {type === 'performance' && (
+                    {type === 'rendimiento' && (
                       <>
                         <td className="p-2 border border-slate-200 text-center text-blue-600 font-bold">{theoreticalTotal.toFixed(1)}</td>
                         <td className="p-2 border border-slate-200 text-center text-slate-600 font-bold">{realTime}</td>
@@ -1051,7 +1126,7 @@ const RecordsModal: React.FC<RecordsModalProps> = ({ workshopId, date, type, cat
               })}
               {filteredRecords.length === 0 && (
                 <tr>
-                  <td colSpan={(type === 'performance' ? 9 : type === 'quality' ? 7 : 6) + ((workshopId === 'mecanizado' || workshopId === 'curvadora' || workshopId === 'corte-laser' || workshopId === 'soldadura-carcasas' || workshopId === 'soldadura-rodetes') ? 1 : 0)} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">No se encontraron registros detallados</td>
+                  <td colSpan={(type === 'rendimiento' ? 9 : type === 'calidad' ? 7 : 6) + ((workshopId === 'mecanizado' || workshopId === 'curvadora' || workshopId === 'corte-laser' || workshopId === 'soldadura-carcasas' || workshopId === 'soldadura-rodetes') ? 1 : 0)} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">No se encontraron registros detallados</td>
                 </tr>
               )}
             </tbody>

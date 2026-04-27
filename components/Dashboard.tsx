@@ -15,6 +15,7 @@ interface DashboardProps {
   masterSpeeds: MasterSpeed[];
   incidenceMaster: IncidenceMaster[];
   oeeObjectives: OEEObjectives;
+  allObjectives?: Record<string, OEEObjectives[]>;
   workshopName?: string;
   selectedArea?: string;
   mermas?: any[];
@@ -42,27 +43,43 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
   let totalPartsNok = 0;
   let theoreticalTimeSum = 0;
 
+  const aid = (areaId || '').toLowerCase();
+
+  const parseTime = (timeStr: string) => {
+    if (!timeStr) return 0;
+    const [h, m] = timeStr.split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+
   data.forEach(act => {
-    const duration = act.duracionMin || 0;
+    // Robust field access for duration and quantity
+    let duration = Number(act.duracionMin ?? (act as any).duration ?? (act as any).duracion_min ?? 0);
+    
+    // Fallback if duration is missing but times are present
+    if (duration === 0 && act.horaInicio && act.horaFin) {
+      const start = parseTime(act.horaInicio);
+      const end = parseTime(act.horaFin);
+      duration = end >= start ? (end - start) : (24 * 60 - start + end);
+    }
+    
     totalTime += duration;
 
-    if (act.tipoTarea === TaskType.PRODUCCION) {
+    const tipo = act.tipoTarea || (act as any).tipo_tarea;
+
+    if (tipo === TaskType.PRODUCCION || tipo === 'P') {
       timeP += duration;
-      totalParts += (act.cantidad || 0);
-      totalPartsNok += (act.cantidadNok || 0);
+      const cant = Number(act.cantidad ?? (act as any).quantity ?? (act as any).cantidad_ok ?? 0);
+      const cantNok = Number(act.cantidadNok ?? (act as any).quantity_nok ?? (act as any).cantidad_nok ?? 0);
+      totalParts += cant;
+      totalPartsNok += cantNok;
       
-      const isLaser = act.area === 'corte-laser' || areaId === 'corte-laser';
-      const teoManual = Number(act.tiempoTeoricoManual || 0);
-      const cant = Number(act.cantidad || 0);
+      const isLaser = act.area === 'corte-laser' || aid === 'corte-laser';
+      const teoManual = Number(act.tiempoTeoricoManual ?? (act as any).tiempo_teorico ?? (act as any).theo_time ?? 0);
 
       if (isLaser) {
         theoreticalTimeSum += (teoManual > 0 ? (60 / teoManual) : 0);
       } else {
-        // En Joselito, theoreticalTimeSum se calcula como (unidades_reales / unidades_hora) * 60
-        // que es igual a (60 / unidades_hora) * unidades_reales.
-        // Aquí cant = Cantidad OK (act.cantidad). 
-        // El usuario pide para Loncheado: Tiempo teórico = (Cantidad Ok + cantidad reprocesar) / unidades hora
-        const totalUnitsForTheo = areaId === 'sb-loncheado' ? (cant + (act.cantidadNok || 0)) : cant;
+        const totalUnitsForTheo = aid.includes('loncheado') ? (cant + cantNok) : cant;
         theoreticalTimeSum += (teoManual > 0 ? (60 / teoManual) : 0) * totalUnitsForTheo;
       }
     }
@@ -92,29 +109,29 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
   let quality = 100;
   let performance = 0;
 
-  if (areaId === 'sb-loncheado') {
-    // Disponibilidad = Tiempo trabajando (P) / (Tiempo (P) + Esperas + Averías)
-    // downtimeSum ya incluye Esperas, Averías y Sin Trabajo.
-    const loncheadoDowntime = timeE_Quality + timeE_NoQuality + timeA_Quality + timeA_NoQuality;
-    availability = (timeP + loncheadoDowntime) > 0 ? (timeP / (timeP + loncheadoDowntime)) * 100 : 0;
-    
-    // Rendimiento = Tiempo teórico / tiempo real (timeP)
-    performance = timeP > 0 ? (theoreticalTimeSum / timeP) * 100 : 0;
-    
-    // Calidad = Cantidad OK / (Cantidad ok + Cantidad reprocesada)
-    quality = (totalParts + totalPartsNok) > 0 ? (totalParts / (totalParts + totalPartsNok)) * 100 : 100;
-  } else if (areaId === 'sb-preparacion') {
-    // PPH = nº unidades / Tiempo trabajado en horas
-    // Usaremos el performance o calidad como base si es necesario, pero el usuario pide PPH.
-    // Lo calcularemos al final.
-    
-    // OEE Estándar para Preparación si no se indica otra cosa
-    let downtimeSum = timeS + timeA_NoQuality + timeA_Quality + timeE_NoQuality + timeE_Quality;
-    availability = totalTime > 0 ? ((totalTime - downtimeSum) / totalTime) * 100 : 0;
-    const prodTime = totalTime - downtimeSum;
-    performance = prodTime > 0 ? (theoreticalTimeSum / prodTime) * 100 : 0;
-    quality = (totalParts + totalPartsNok) > 0 ? (totalParts / (totalParts + totalPartsNok)) * 100 : 100;
-  } else if (areaId === 'corte-laser') {
+  if (aid.includes('sb-preparacion')) {
+      // PPH = nº unidades / Tiempo trabajado en horas
+      // Usaremos el performance o calidad como base si es necesario, pero el usuario pide PPH.
+      // Lo calcularemos al final.
+      
+      // OEE Estándar para Preparación si no se indica otra cosa
+      let downtimeSum = timeS + timeA_NoQuality + timeA_Quality + timeE_NoQuality + timeE_Quality;
+      availability = totalTime > 0 ? ((totalTime - downtimeSum) / totalTime) * 100 : 0;
+      const prodTime = totalTime - downtimeSum;
+      performance = prodTime > 0 ? (theoreticalTimeSum / prodTime) * 100 : 0;
+      quality = (totalParts + totalPartsNok) > 0 ? (totalParts / (totalParts + totalPartsNok)) * 100 : 100;
+    } else if (aid.includes('sb-loncheado')) {
+      // Disponibilidad = Tiempo trabajando (P) / (Tiempo (P) + Esperas + Averías)
+      // downtimeSum ya incluye Esperas, Averías y Sin Trabajo.
+      const loncheadoDowntime = timeE_Quality + timeE_NoQuality + timeA_Quality + timeA_NoQuality;
+      availability = (timeP + loncheadoDowntime) > 0 ? (timeP / (timeP + loncheadoDowntime)) * 100 : 0;
+      
+      // Rendimiento = Tiempo teórico / tiempo real (timeP)
+      performance = timeP > 0 ? (theoreticalTimeSum / timeP) * 100 : 0;
+      
+      // Calidad = Cantidad OK / (Cantidad ok + Cantidad reprocesada)
+      quality = (totalParts + totalPartsNok) > 0 ? (totalParts / (totalParts + totalPartsNok)) * 100 : 100;
+    } else if (aid === 'corte-laser') {
     const totalAverias = timeA_Quality + timeA_NoQuality;
     availability = (timeP + timeE_NoQuality + totalAverias) > 0 ? (timeP / (timeP + timeE_NoQuality + totalAverias)) * 100 : 0;
     quality = (totalParts + totalPartsNok) > 0 ? (totalParts / (totalParts + totalPartsNok)) * 100 : 100;
@@ -156,11 +173,40 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
     }
   }
 
-  // PPH Preparación
+  // PPH Calculations
   let pph = 0;
+  let pph_blister = 0;
+  let pph_sin_blister = 0;
+
+  // PPH helper: cantidad / horas-persona
+  const calcPPH = (acts: typeof data) => {
+    const personMinutes = acts.reduce((sum, a) => {
+      const nOps = Array.isArray(a.operarios) ? a.operarios.length : 1;
+      return sum + (a.duracionMin || 0) * nOps;
+    }, 0);
+    const personHours = personMinutes / 60;
+    const totalQty = acts.reduce((sum, a) => sum + (a.cantidad || 0), 0);
+    return personHours > 0 ? totalQty / personHours : 0;
+  };
+
   if (areaId === 'sb-preparacion') {
-    const hoursWorked = timeP / 60;
-    pph = hoursWorked > 0 ? totalParts / hoursWorked : 0;
+    const acts = data.filter(a => 
+      a.tipoTarea === TaskType.PRODUCCION && 
+      a.formato?.toUpperCase().includes('PESAR')
+    );
+    pph = calcPPH(acts);
+  }
+
+  if (areaId === 'sb-empaquetado-deshuesado') {
+    const acts = data.filter(a => a.tipoTarea === TaskType.PRODUCCION);
+    pph = calcPPH(acts);
+  }
+
+  if (areaId === 'sb-empaquetado-loncheado') {
+    const blisterActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && (a.formato?.toUpperCase().includes('BLISTER') || a.formato?.toUpperCase().includes('BLÍSTER')));
+    const sinBlisterActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && !a.formato?.toUpperCase().includes('BLISTER') && !a.formato?.toUpperCase().includes('BLÍSTER'));
+    pph_blister = calcPPH(blisterActs);
+    pph_sin_blister = calcPPH(sinBlisterActs);
   }
 
   const finalAvailability = Math.min(100, availability > 0 ? availability : 0);
@@ -171,16 +217,18 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
   const hasData = data.length > 0;
 
   return {
-    availability: hasData ? finalAvailability.toFixed(1) : '',
-    performance: hasData ? finalPerformance.toFixed(1) : '',
-    quality: hasData ? finalQuality.toFixed(1) : '',
-    oee: hasData ? oee.toFixed(1) : '',
+    disponibilidad: hasData ? finalAvailability.toFixed(1) : '',
+    rendimiento: hasData ? finalPerformance.toFixed(1) : '',
+    calidad: hasData ? finalQuality.toFixed(1) : '',
+    productividad: hasData ? oee.toFixed(1) : '',
     totalParts,
     downtime: (totalTime - timeP).toFixed(0),
-    merma1: merma1.toFixed(2),
-    merma2: merma2.toFixed(2),
-    subproducto: subproducto.toFixed(2),
-    pph: pph.toFixed(1)
+    merma1: hasData ? merma1.toFixed(2) : '',
+    merma2: hasData ? merma2.toFixed(2) : '',
+    subproducto: hasData ? subproducto.toFixed(2) : '',
+    pph: hasData ? pph.toFixed(0) : '',
+    pph_blister: hasData ? pph_blister.toFixed(0) : '',
+    pph_sin_blister: hasData ? pph_sin_blister.toFixed(0) : ''
   };
 };
 
@@ -190,6 +238,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   masterSpeeds, 
   incidenceMaster, 
   oeeObjectives,
+  allObjectives = {},
   workshopName,
   selectedArea,
   mermas = []
@@ -198,8 +247,66 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [aiAnalysis, setAiAnalysis] = useState<string>('Analizando datos con IA...');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  // Helper to get objective for a workshop and indicator based on date
+  const getObjectiveForDate = (indicator_id: string, dateStr: string) => {
+    if (!selectedArea) return (oeeObjectives as any)[indicator_id] || 0;
+    
+    const objs = allObjectives[selectedArea] || [];
+    const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+    
+    // Helper function for prioritized lookup
+    const getVal = (id: string) => {
+      const spec = sorted.find(o => o.valid_from <= dateStr && o.indicator_id === id);
+      if (spec && spec.objetivo) return spec.objetivo;
+      
+      const master = sorted.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id));
+      if (master) {
+        if (id === 'disponibilidad' || id === 'availability') return master.disponibilidad || 0;
+        if (id === 'rendimiento' || id === 'performance') return master.rendimiento || 0;
+        if (id === 'calidad' || id === 'quality') return master.calidad || 0;
+      }
+      return 0;
+    };
+
+    const isOEEPart = ['disponibilidad', 'rendimiento', 'calidad', 'productividad', 'oee', 'availability', 'performance', 'quality'].includes(indicator_id);
+    if (isOEEPart) {
+      if (indicator_id === 'productividad' || indicator_id === 'oee') {
+        const specProd = sorted.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee'));
+        if (specProd && specProd.objetivo) return specProd.objetivo;
+        
+        // If no explicit OEE goal, calculate from components (which also follow priority)
+        const d = getVal('disponibilidad');
+        const r = getVal('rendimiento');
+        const c = getVal('calidad');
+        return parseFloat(((d * r * c) / 10000).toFixed(1));
+      }
+      return getVal(indicator_id);
+    }
+
+    // Default fallbacks for non-OEE indicators
+    if (indicator_id === 'pph') {
+      const spec = sorted.find(o => o.valid_from <= dateStr && o.indicator_id === 'pph');
+      return spec?.objetivo || spec?.pph || (oeeObjectives as any).pph || 0;
+    }
+    if (indicator_id === 'merma1') {
+      const spec = sorted.find(o => o.valid_from <= dateStr && o.indicator_id === 'merma1');
+      return spec?.objetivo || spec?.merma1 || (oeeObjectives as any).merma1 || 3;
+    }
+    if (indicator_id === 'merma2') {
+      const spec = sorted.find(o => o.valid_from <= dateStr && o.indicator_id === 'merma2');
+      return spec?.objetivo || spec?.merma2 || (oeeObjectives as any).merma2 || 3;
+    }
+    if (indicator_id === 'subproducto') {
+      const spec = sorted.find(o => o.valid_from <= dateStr && o.indicator_id === 'subproducto');
+      return spec?.objetivo || spec?.subproducto || (oeeObjectives as any).subproducto || 5;
+    }
+
+    const simpleMatch = sorted.find(o => o.valid_from <= dateStr && o.indicator_id === indicator_id);
+    return simpleMatch?.objetivo || (oeeObjectives as any)[indicator_id] || 0;
+  };
+
   // Drill-down state
-  const [drillDownRecords, setDrillDownRecords] = useState<{ type: 'availability' | 'performance' | 'quality', category: string } | null>(null);
+  const [drillDownRecords, setDrillDownRecords] = useState<{ type: 'disponibilidad' | 'rendimiento' | 'calidad', category: string } | null>(null);
 
   const allData = useMemo(() => [...history, ...activities], [history, activities]);
 
@@ -214,7 +321,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const handleParetoBarDoubleClick = (type: 'availability' | 'performance' | 'quality', category: string) => {
+  const handleParetoBarDoubleClick = (type: 'disponibilidad' | 'rendimiento' | 'calidad', category: string) => {
     setDrillDownRecords({ type, category });
   };
 
@@ -380,10 +487,10 @@ const Dashboard: React.FC<DashboardProps> = ({
       const prompt = `Analiza los indicadores de producción de Joselito (Productor de Jamones) para el taller ${workshopName} en la fecha ${selectedDate}.
       
       DATOS REALES:
-      - Disponibilidad: ${stats.availability}% (Objetivo: ${oeeObjectives.disponibilidad}%)
-      - Rendimiento: ${stats.performance}% (Objetivo: ${oeeObjectives.rendimiento}%)
-      - Calidad: ${stats.quality}% (Objetivo: ${oeeObjectives.calidad}%)
-      - OEE Global: ${stats.oee}% (Objetivo: ${oeeObjectives.productividad}%)
+      - Disponibilidad: ${stats.disponibilidad}% (Objetivo: ${oeeObjectives.disponibilidad}%)
+      - Rendimiento: ${stats.rendimiento}% (Objetivo: ${oeeObjectives.rendimiento}%)
+      - Calidad: ${stats.calidad}% (Objetivo: ${oeeObjectives.calidad}%)
+      - OEE Global: ${stats.productividad}% (Objetivo: ${oeeObjectives.productividad}%)
       
       PRINCIPALES CAUSAS DE PÉRDIDA:
       - Esperas: ${JSON.stringify(paretos.esperas)}
@@ -412,9 +519,9 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const renderScorecardTable = (title: string, data: any[]) => {
     const indicators = [
-      { id: 'availability', objKey: 'disponibilidad', label: 'DISPONIBILIDAD (%)' },
-      { id: 'performance', objKey: 'rendimiento', label: 'RENDIMIENTO (%)' },
-      { id: 'quality', objKey: 'calidad', label: 'CALIDAD (%)' }
+      { id: 'disponibilidad', objKey: 'disponibilidad', label: 'DISPONIBILIDAD (%)' },
+      { id: 'rendimiento', objKey: 'rendimiento', label: 'RENDIMIENTO (%)' },
+      { id: 'calidad', objKey: 'calidad', label: 'CALIDAD (%)' }
     ];
 
     if (selectedArea === 'sb-loncheado') {
@@ -425,6 +532,15 @@ const Dashboard: React.FC<DashboardProps> = ({
       );
     }
     if (selectedArea === 'sb-preparacion') {
+      indicators.unshift({ id: 'pph', objKey: 'pph', label: 'PPH PESAR' });
+    }
+    if (selectedArea === 'sb-empaquetado-loncheado') {
+      indicators.unshift(
+        { id: 'pph_blister', objKey: 'pph_blister', label: 'PPH ENV. BLISTER' },
+        { id: 'pph_sin_blister', objKey: 'pph_sin_blister', label: 'PPH ENV. SIN BLISTER' }
+      );
+    }
+    if (selectedArea === 'sb-empaquetado-deshuesado') {
       indicators.unshift({ id: 'pph', objKey: 'pph', label: 'PPH' });
     }
 
@@ -440,9 +556,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           </thead>
           <tbody>
             {indicators.map((indicator) => {
-              const objValue = (oeeObjectives as any)[indicator.objKey || ''] || 0;
+              const staticObj = (oeeObjectives as any)[indicator.objKey || ''] || 0;
               const isLowerBetter = indicator.id.startsWith('merma') || indicator.id === 'subproducto';
-              const isPPH = indicator.id === 'pph';
+              const isPPH = indicator.id.startsWith('pph');
 
               return (
                 <tr key={indicator.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
@@ -450,15 +566,16 @@ const Dashboard: React.FC<DashboardProps> = ({
                     {indicator.label}
                   </td>
                   <td className="p-2 text-center font-black border border-slate-200 text-blue-600 bg-blue-50/20">
-                    {objValue !== 0 ? (isPPH ? objValue : `${objValue}%`) : '—'}
+                    {staticObj !== 0 ? (isPPH ? staticObj : `${staticObj}%`) : '—'}
                   </td>
                   {data.map(d => {
                     const rawVal = d.total[indicator.id];
                     const val = rawVal === '' ? null : Number(rawVal);
+                    const dynamicObj = getObjectiveForDate(indicator.objKey || indicator.id, d.key || d.label);
                     
                     let cellStyle = 'text-slate-300';
                     if (val !== null) {
-                      const isGood = isLowerBetter ? val <= objValue : val >= objValue;
+                      const isGood = isLowerBetter ? val <= dynamicObj : val >= dynamicObj;
                       cellStyle = isGood ? 'text-emerald-600 font-bold' : 'text-red-500 font-bold';
                     }
 
@@ -466,6 +583,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                       <td 
                         key={d.label} 
                         className={`p-2 text-center text-[12px] border border-slate-100 ${cellStyle}`}
+                        title={`Objetivo para esta fecha: ${dynamicObj}`}
                       >
                         {val !== null ? (isPPH ? val : `${val}%`) : '—'}
                       </td>
@@ -500,30 +618,30 @@ const Dashboard: React.FC<DashboardProps> = ({
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-1 shrink-0">
         <div className="bg-white p-1 rounded-lg border border-slate-100 shadow-sm flex items-center gap-1.5 px-2">
-          <span className="text-[9px] sm:text-[15px] font-black text-slate-400 uppercase tracking-tighter">Dispo</span>
-          <span className="text-[14px] sm:text-xs font-black text-slate-900 tracking-tighter">{stats.availability}{stats.availability !== '' ? '%' : ''}</span>
+          <span className="text-[9px] sm:text-[15px] font-black text-slate-400 uppercase tracking-tighter">Disponibilidad</span>
+          <span className="text-[14px] sm:text-xs font-black text-slate-900 tracking-tighter">{stats.disponibilidad}{stats.disponibilidad !== '' ? '%' : ''}</span>
         </div>
         <div className="bg-white p-1 rounded-lg border border-slate-100 shadow-sm flex items-center gap-1.5 px-2">
-          <span className="text-[9px] sm:text-[15px] font-black text-slate-400 uppercase tracking-tighter">Rend</span>
-          <span className="text-[14px] sm:text-xs font-black text-slate-900 tracking-tighter">{stats.performance}{stats.performance !== '' ? '%' : ''}</span>
+          <span className="text-[9px] sm:text-[15px] font-black text-slate-400 uppercase tracking-tighter">Rendimiento</span>
+          <span className="text-[14px] sm:text-xs font-black text-slate-900 tracking-tighter">{stats.rendimiento}{stats.rendimiento !== '' ? '%' : ''}</span>
         </div>
         <div className="bg-white p-1 rounded-lg border border-slate-100 shadow-sm flex items-center gap-1.5 px-2">
-          <span className="text-[9px] sm:text-[15px] font-black text-slate-400 uppercase tracking-tighter">Calid</span>
-          <span className="text-[14px] sm:text-xs font-black text-slate-900 tracking-tighter">{stats.quality}{stats.quality !== '' ? '%' : ''}</span>
+          <span className="text-[9px] sm:text-[15px] font-black text-slate-400 uppercase tracking-tighter">Calidad</span>
+          <span className="text-[14px] sm:text-xs font-black text-slate-900 tracking-tighter">{stats.calidad}{stats.calidad !== '' ? '%' : ''}</span>
         </div>
         <div className="bg-slate-900 p-1 rounded-lg border border-slate-800 shadow-md flex items-center gap-1.5 px-2">
           <span className="text-[9px] sm:text-[15px] font-black text-slate-400 uppercase tracking-tighter">Prod</span>
-          <span className="text-[14px] sm:text-xs font-black text-white tracking-tighter">{stats.oee}{stats.oee !== '' ? '%' : ''}</span>
+          <span className="text-[14px] sm:text-xs font-black text-white tracking-tighter">{stats.productividad}{stats.productividad !== '' ? '%' : ''}</span>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto pr-1 space-y-2 no-scrollbar pb-24">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
           {[
-            { label: 'Disponibilidad', val: stats.availability, obj: oeeObjectives.disponibilidad, color: 'blue', key: 'availability' },
-            { label: 'Rendimiento', val: stats.performance, obj: oeeObjectives.rendimiento, color: 'emerald', key: 'performance' },
-            { label: 'Calidad', val: stats.quality, obj: oeeObjectives.calidad, color: 'amber', key: 'quality' },
-            { label: 'OEE Global', val: stats.oee, obj: oeeObjectives.productividad, color: 'slate', isGlobal: true, key: 'oee' }
+            { label: 'Disponibilidad', val: stats.disponibilidad, obj: getObjectiveForDate('disponibilidad', selectedDate), color: 'blue', key: 'disponibilidad' },
+            { label: 'Rendimiento', val: stats.rendimiento, obj: getObjectiveForDate('rendimiento', selectedDate), color: 'emerald', key: 'rendimiento' },
+            { label: 'Calidad', val: stats.calidad, obj: getObjectiveForDate('calidad', selectedDate), color: 'amber', key: 'calidad' },
+            { label: 'OEE Global', val: stats.productividad, obj: getObjectiveForDate('productividad', selectedDate), color: 'slate', isGlobal: true, key: 'productividad' }
           ].map(kpi => (
             <div key={kpi.label} className={`${kpi.isGlobal ? 'bg-slate-900 text-white' : 'bg-white'} p-2 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-100 shadow-md relative overflow-hidden group hover:shadow-lg transition-all flex flex-col justify-between`}>
               <div>
@@ -580,9 +698,9 @@ const Dashboard: React.FC<DashboardProps> = ({
       {/* Pareto Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {[
-          { title: 'Pareto de Esperas', data: paretos.esperas, type: 'availability' as const, unit: 'min' },
-          { title: 'Pérdida Rendimiento', data: paretos.performance, type: 'performance' as const, unit: 'min' },
-          { title: 'Pérdida Calidad', data: paretos.quality, type: 'quality' as const, unit: isTimeBased ? 'min' : 'uds' }
+          { title: 'Pareto de Esperas', data: paretos.esperas, type: 'disponibilidad' as const, unit: 'min' },
+          { title: 'Pérdida Rendimiento', data: paretos.performance, type: 'rendimiento' as const, unit: 'min' },
+          { title: 'Pérdida Calidad', data: paretos.quality, type: 'calidad' as const, unit: isTimeBased ? 'min' : 'uds' }
         ].map(pareto => (
           <div key={pareto.title} className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-lg">
             <h3 className="text-slate-900 text-[15px] font-black uppercase tracking-widest mb-6 px-2">{pareto.title}</h3>
@@ -653,7 +771,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       {/* Records Modal */}
       {drillDownRecords && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[85vh]">
+          <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-blue-600 text-white">
               <div>
                 <h3 className="text-lg font-black uppercase tracking-tighter">Registros Detallados</h3>
@@ -673,36 +791,36 @@ const Dashboard: React.FC<DashboardProps> = ({
                     <th className="p-2 text-center border border-slate-200">Fin</th>
                     <th className="p-2 text-center border border-slate-200">Duración</th>
                     <th className="p-2 text-center border border-slate-200">Cant.</th>
-                    {drillDownRecords.type === 'performance' && (
+                    {drillDownRecords.type === 'rendimiento' && (
                       <>
                         <th className="p-2 text-center border border-slate-200">T. Teo (min)</th>
                         <th className="p-2 text-center border border-slate-200">T. Real (min)</th>
                         <th className="p-2 text-center border border-slate-200">Pérdida (min)</th>
                       </>
                     )}
-                    {drillDownRecords.type === 'quality' && <th className="p-2 text-center border border-slate-200">Reprocesado</th>}
+                    {drillDownRecords.type === 'calidad' && <th className="p-2 text-center border border-slate-200">Reprocesado</th>}
                     <th className="p-2 text-left border border-slate-200">Comentario</th>
                   </tr>
                 </thead>
                 <tbody>
                   {dayData.filter(a => {
-                    if (drillDownRecords.type === 'availability') {
+                    if (drillDownRecords.type === 'disponibilidad') {
                       return (a.tipoTarea === TaskType.ESPERAS || a.tipoTarea === TaskType.AVERIA) && a.formato === drillDownRecords.category;
                     }
-                    if (drillDownRecords.type === 'performance') {
+                    if (drillDownRecords.type === 'rendimiento') {
                       return a.tipoTarea === TaskType.PRODUCCION && a.formato === drillDownRecords.category;
                     }
                     return false;
                   }).length === 0 && (
                     <tr>
-                      <td colSpan={drillDownRecords.type === 'performance' ? 9 : 6} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">No se encontraron registros detallados</td>
+                      <td colSpan={drillDownRecords.type === 'rendimiento' ? 9 : 6} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">No se encontraron registros detallados</td>
                     </tr>
                   )}
                   {dayData.filter(a => {
-                    if (drillDownRecords.type === 'availability') {
+                    if (drillDownRecords.type === 'disponibilidad') {
                       return (a.tipoTarea === TaskType.ESPERAS || a.tipoTarea === TaskType.AVERIA) && a.formato === drillDownRecords.category;
                     }
-                    if (drillDownRecords.type === 'performance') {
+                    if (drillDownRecords.type === 'rendimiento') {
                       return a.tipoTarea === TaskType.PRODUCCION && a.formato === drillDownRecords.category;
                     }
                     return false;
@@ -719,7 +837,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                         <td className="p-2 border border-slate-200 text-center">{rec.horaFin}</td>
                         <td className="p-2 border border-slate-200 text-center font-black">{rec.duracionMin} min</td>
                         <td className="p-2 border border-slate-200 text-center">{rec.cantidad || 0}</td>
-                        {drillDownRecords.type === 'performance' && (
+                        {drillDownRecords.type === 'rendimiento' && (
                           <>
                             <td className="p-2 border border-slate-200 text-center text-blue-600 font-bold">{theoreticalTotal.toFixed(1)}</td>
                             <td className="p-2 border border-slate-200 text-center text-slate-600 font-bold">{realTime}</td>

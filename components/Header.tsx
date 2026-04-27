@@ -104,40 +104,40 @@ const Header: React.FC<HeaderProps> = ({
   return (
     <header className="bg-white border-b border-slate-100 sticky top-0 z-30 shadow-sm">
       {/* Banner Rojo Superior */}
-      <div className="bg-joselito-red text-white py-1.5 px-4 text-center">
+      <div className="bg-joselito-red text-white py-1.5 px-4 text-center hidden sm:block">
         <p className="text-[10px] sm:text-xs font-medium tracking-wide">
           SISTEMA DE GESTIÓN DE PRODUCCIÓN • JOSELITO • DECLARADO EL MEJOR JAMÓN DEL MUNDO
         </p>
       </div>
 
-      <div className="container mx-auto px-4 py-3">
+      <div className="container mx-auto px-4 py-2 sm:py-3">
         <div className="flex items-center justify-between">
           {/* IZQUIERDA: Botones de navegación */}
-          <div className="flex items-center gap-2 w-1/3">
+          <div className="flex items-center gap-1 sm:gap-2 w-1/3">
             <button 
               onClick={onBack}
-              className="p-2 rounded-full hover:bg-slate-50 text-slate-400 hover:text-slate-900 transition-colors"
+              className="p-1.5 sm:p-2 rounded-full hover:bg-slate-50 text-slate-400 hover:text-slate-900 transition-colors"
               title="Atrás"
             >
-              <ChevronLeft className="w-5 h-5" />
+              <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
             <button 
               onClick={onGoHome}
-              className="p-2 rounded-full hover:bg-slate-50 text-slate-400 hover:text-slate-900 transition-colors"
+              className="p-1.5 sm:p-2 rounded-full hover:bg-slate-50 text-slate-400 hover:text-slate-900 transition-colors"
               title="Inicio"
             >
-              <Home className="w-5 h-5" />
+              <Home className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
 
           {/* CENTRO: Logo Joselito */}
-          <div className="flex justify-center w-1/3">
+          <div className="hidden sm:flex justify-center w-1/3">
             <div className="cursor-pointer" onClick={onGoHome}>
               {JOSELITO_LOGO ? (
                 <img 
                   src={JOSELITO_LOGO} 
                   alt="JOSELITO" 
-                  className="h-10 sm:h-14 w-auto object-contain"
+                  className="h-8 sm:h-14 w-auto object-contain"
                   referrerPolicy="no-referrer"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
@@ -146,11 +146,11 @@ const Header: React.FC<HeaderProps> = ({
                   }}
                 />
               ) : (
-                <h1 className="text-2xl font-serif font-black tracking-tighter text-slate-900 uppercase">
+                <h1 className="text-xl sm:text-2xl font-serif font-black tracking-tighter text-slate-900 uppercase">
                   JOSELITO
                 </h1>
               )}
-              <h1 className="logo-fallback text-2xl font-serif font-black tracking-tighter text-slate-900 uppercase hidden">
+              <h1 className="logo-fallback text-xl sm:text-2xl font-serif font-black tracking-tighter text-slate-900 uppercase hidden">
                 JOSELITO
               </h1>
             </div>

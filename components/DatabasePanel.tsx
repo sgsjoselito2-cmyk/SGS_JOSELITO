@@ -401,8 +401,8 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
     <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500 pb-24">
       {/* MODAL PIN */}
       {showPassModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-[320px] rounded-[2rem] shadow-2xl overflow-hidden border-4 border-slate-800 animate-in zoom-in duration-200">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-[320px] rounded-[2rem] shadow-2xl overflow-y-auto border-4 border-slate-800 animate-in zoom-in duration-200 max-h-[90vh]">
             <div className="bg-slate-900 p-6 text-center">
               <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center mx-auto mb-3">
                 <Lock className="w-6 h-6 text-white" />
@@ -428,8 +428,8 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
 
       {/* MODAL AÑADIR REGISTRO */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-emerald-900/90 backdrop-blur-xl z-[8000] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300 border-[12px] border-emerald-50">
+        <div className="fixed inset-0 bg-emerald-900/90 backdrop-blur-xl z-[8000] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-y-auto animate-in zoom-in duration-300 border-[12px] border-emerald-50 max-h-[90vh]">
             <div className="bg-emerald-700 p-8 text-center text-white">
               <h3 className="font-black text-sm uppercase tracking-[0.2em]">Añadir Registro Manual</h3>
               <p className="text-[14px] opacity-70 mt-1 uppercase">Nuevo Registro</p>
@@ -868,8 +868,8 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
 
       {/* MODAL ACCIÓN GENERAL */}
       {actionConfirm && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in border-4 border-slate-100">
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-y-auto animate-in zoom-in border-4 border-slate-100 max-h-[90vh]">
             <div className={`${actionConfirm.type === 'danger' ? 'bg-red-600' : 'bg-amber-500'} p-6 text-center text-white`}>
               <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Lock className="w-6 h-6 text-white" />
@@ -895,8 +895,8 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
 
       {/* MODAL CONFIRM DELETE */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in border-4 border-red-50">
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-y-auto animate-in zoom-in border-4 border-red-50 max-h-[90vh]">
             <div className="bg-red-600 p-6 text-center text-white">
               <Trash2 className="w-12 h-12 mx-auto mb-4 opacity-50" />
               <h3 className="font-black text-lg uppercase tracking-widest">¿Eliminar Registro?</h3>

@@ -39,14 +39,14 @@ export const AREA_NAMES: Record<string, string> = {
   'TOP 5': 'GAPs TOP 5',
   'TOP 15': 'GAPs TOP 15',
   'TOP 60': 'TOP 60',
-  'sb-preparacion': 'Preparación',
-  'sb-loncheado': 'Loncheado',
-  'sb-empaquetado-loncheado': 'Empaquetado loncheado',
-  'sb-empaquetado-deshuesado': 'Empaquetado deshuesado',
+  'sb-preparacion': 'DESHUESADO/PRENSADO',
+  'sb-loncheado': 'LONCHEADO',
+  'sb-empaquetado-loncheado': 'EMP. LONCHEADO',
+  'sb-empaquetado-deshuesado': 'EMP. DESHUESADO',
   'env-envasado': 'ENVASADO',
-  'env-empaquetado': 'EMPAQUETADO (ENVASADO)',
+  'env-empaquetado': 'EMPAQUETADO',
   'expedicion': 'EXPEDICIONES',
-  'preparacion-exp': 'PREPARACIÓN EXPEDICIONES',
+  'preparacion-exp': 'PREPARACIÓN',
   'movimiento-jamones': 'MOVIMIENTOS'
 };
 
@@ -77,7 +77,7 @@ export const INITIAL_OEE_OBJECTIVES: OEEObjectives = {
   productividad: 62.37,
   objetivo: 0,
   area: '',
-  validFrom: new Date().toISOString().split('T')[0]
+  valid_from: new Date().toISOString().split('T')[0]
 };
 
 export const WORKSHOP_HELP_CONTENT: Record<string, { usage: string; indicators: string }> = {
@@ -85,14 +85,14 @@ export const WORKSHOP_HELP_CONTENT: Record<string, { usage: string; indicators: 
     usage: "Selecciona tu nombre, elige el formato y pulsa 'INICIAR TAREA'. Al terminar introduce la cantidad fabricada.",
     indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = 100% (No se computa pérdida de calidad)\nT.teórico = Tiempo unitario x Cantidad"
   },
-  'sb-preparacion': { usage: "Selecciona tu nombre, elige el formato de preparación y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = 100%" },
+  'sb-preparacion': { usage: "Selecciona tu nombre, elige el formato de deshuesado/prensado y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = 100%" },
   'sb-loncheado': { usage: "Selecciona tu nombre, elige el formato de loncheado y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = 100%" },
   'sb-empaquetado-loncheado': { usage: "Selecciona tu nombre, elige el formato de empaquetado loncheado y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = 100%" },
   'sb-empaquetado-deshuesado': { usage: "Selecciona tu nombre, elige el formato de empaquetado deshuesado y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = 100%" },
   'env-envasado': { usage: "Selecciona tu nombre, elige el formato de envasado y pulsa 'INICIAR TAREA'. Al finalizar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = 100%" },
   'env-empaquetado': { usage: "Selecciona tu nombre, elige el formato de empaquetado y pulsa 'INICIAR TAREA'. Al finalizar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = 100%" },
   'expedicion': { usage: "Selecciona tu nombre, elige el formato de expedición y pulsa 'INICIAR TAREA'. Al finalizar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = 100%" },
-  'preparacion-exp': { usage: "Selecciona tu nombre, elige el formato de preparación expediciones y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = 100%" },
+  'preparacion-exp': { usage: "Selecciona tu nombre, elige el formato de prep. expediciones y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = 100%" },
   'movimiento-jamones': { usage: "Selecciona tu nombre, elige el tipo de movimiento y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = 100%" },
   'TOP 15': { usage: "Indicadores Diarios: Datos del día anterior. Evolución Semanal: Gráficos de tendencia. Análisis IA: Resumen bajo demanda.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nOEE = Dispo x Ren x Cali (100%)" },
   'TOP 60': { usage: "Registro de datos de RRHH, Seguridad y Calidad. Histórico mensual. Objetivos y Plan de Acción.", indicators: "Evolución mensual de KPIs. Plan Estratégico y Análisis de Desviaciones." }

@@ -125,7 +125,14 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
         if (isLaser) {
           theoreticalTimeSum += (teoManual > 0 ? (60 / teoManual) : 0);
         } else {
-          theoreticalTimeSum += (teoManual > 0 ? (60 / teoManual) : 0) * cant;
+          if (isLoncheadoArea) {
+            // teoManual is units/minute. Theoretical minutes = cant / teoManual
+            theoreticalTimeSum += (teoManual > 0 ? (cant / teoManual) : 0);
+          } else {
+            // teoManual is cycle time (minutes/unit). Theoretical minutes = teoManual * cant
+            // Note: Fixed the previous math (60/teoManual)*cant which was likely incorrect
+            theoreticalTimeSum += teoManual * cant;
+          }
         }
       }
 
@@ -169,10 +176,10 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
     const hasData = activities.length > 0;
 
     return {
-      availability: hasData ? finalAvailability.toFixed(1) : '',
-      performance: hasData ? finalPerformance.toFixed(1) : '',
-      quality: hasData ? finalQuality.toFixed(1) : '',
-      oee: hasData ? oee.toFixed(1) : ''
+      disponibilidad: hasData ? finalAvailability.toFixed(1) : '',
+      rendimiento: hasData ? finalPerformance.toFixed(1) : '',
+      calidad: hasData ? finalQuality.toFixed(1) : '',
+      productividad: hasData ? oee.toFixed(1) : ''
     };
   }, [activities, currentTime, selectedArea]);
 
@@ -273,8 +280,14 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
   const calculatedTheoreticalTime = useMemo(() => {
     const speedRecord = masterSpeeds.find(ms => ms.formato === productionTask);
     const teo = speedRecord?.tiempoTeorico || 0;
-    return teo > 0 ? (60 / teo) : 0;
-  }, [productionTask, masterSpeeds]);
+    // For Loncheado, we want to store and show units/minute (teo / 60)
+    // For other areas, we continue using cycle time (60 / teo) for compatibility, 
+    // but the math in stats and table must be consistent with what's stored.
+    if (isLoncheadoArea) {
+      return teo > 0 ? Number((teo / 60).toFixed(4)) : 0;
+    }
+    return teo > 0 ? Number((60 / teo).toFixed(4)) : 0;
+  }, [productionTask, masterSpeeds, isLoncheadoArea]);
 
   useEffect(() => {
     if (pin.length === 4 && passwords) {
@@ -327,15 +340,12 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
   }, [showClosureModal, currentActivity]);
 
   const handleActionIntercept = (nextAction: 'add' | 'end', nextPayload?: any) => {
-    if (currentActivity) {
-      // Por petición de usuario: No pedir cantidad al finalizar actividades para talleres TOP 5
-      // Esta lógica se traslada al cierre de turno (Shift Closure Modal)
-      const closureData = { cantidad: 0, comentarios: '', idsToClose: [currentActivity.id] };
+    if (currentActivities.length > 0) {
+      const closureData = { cantidad: 0, comentarios: '', idsToClose: currentActivities.map(a => a.id) };
 
       if (nextAction === 'end') {
         onAddActivity({} as any, closureData);
       } else {
-        // nextAction === 'add' (Cambio de actividad)
         onAddActivity(nextPayload, closureData);
       }
     } else {
@@ -542,8 +552,8 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       const formats = Array.from(new Set(prodActivities.map(a => a.formato)));
       
       if (formats.length === 0) {
-        // No hay actividades de producción, procedemos directamente al PIN
-        executeFinalizeShift({});
+        // No hay actividades de producción, mostramos el modal de confirmación con selector de fecha
+        setShowShiftConfirmModal(true);
         return;
       }
 
@@ -661,26 +671,26 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
         </button>
         <div className="bg-white p-0.5 rounded-lg border border-slate-100 shadow-sm flex items-center gap-1 px-1.5">
           <span className="text-[7px] sm:text-[9px] font-black text-slate-400 uppercase tracking-tighter">Dispo</span>
-          <span className="text-[15px] sm:text-xs font-black text-slate-900 tracking-tighter">{stats.availability}{stats.availability !== '' ? '%' : ''}</span>
+          <span className="text-[15px] sm:text-xs font-black text-slate-900 tracking-tighter">{stats.disponibilidad}{stats.disponibilidad !== '' ? '%' : ''}</span>
         </div>
         <div className="bg-white p-0.5 rounded-lg border border-slate-100 shadow-sm flex items-center gap-1 px-1.5">
           <span className="text-[7px] sm:text-[9px] font-black text-slate-400 uppercase tracking-tighter">Rend</span>
-          <span className="text-[15px] sm:text-xs font-black text-slate-900 tracking-tighter">{stats.performance}{stats.performance !== '' ? '%' : ''}</span>
+          <span className="text-[15px] sm:text-xs font-black text-slate-900 tracking-tighter">{stats.rendimiento}{stats.rendimiento !== '' ? '%' : ''}</span>
         </div>
         <div className="bg-white p-0.5 rounded-lg border border-slate-100 shadow-sm flex items-center gap-1 px-1.5">
           <span className="text-[7px] sm:text-[9px] font-black text-slate-400 uppercase tracking-tighter">Calid</span>
-          <span className="text-[15px] sm:text-xs font-black text-slate-900 tracking-tighter">{stats.quality}{stats.quality !== '' ? '%' : ''}</span>
+          <span className="text-[15px] sm:text-xs font-black text-slate-900 tracking-tighter">{stats.calidad}{stats.calidad !== '' ? '%' : ''}</span>
         </div>
         <div className="bg-slate-900 p-0.5 rounded-lg border border-slate-800 shadow-md flex items-center gap-1 px-1.5">
           <span className="text-[7px] sm:text-[9px] font-black text-slate-400 uppercase tracking-tighter">Prod</span>
-          <span className="text-[15px] sm:text-xs font-black text-white tracking-tighter">{stats.oee}{stats.oee !== '' ? '%' : ''}</span>
+          <span className="text-[15px] sm:text-xs font-black text-white tracking-tighter">{stats.productividad}{stats.productividad !== '' ? '%' : ''}</span>
         </div>
       </div>
 
       {/* MODALES OMADOS... */}
       {showShiftConflictModal && (
-        <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-xl z-[9700] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden border-[12px] border-amber-50 animate-in zoom-in">
+        <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-xl z-[9700] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-y-auto max-h-[90vh] border-[12px] border-amber-50 animate-in zoom-in">
             <div className="bg-amber-500 p-8 text-center text-white">
               <h3 className="font-black text-xs uppercase tracking-widest">⚠️ Tareas aún abiertas</h3>
               <p className="text-amber-100 text-[13px] font-bold mt-2 uppercase">Hay operarios activos en el sistema</p>
@@ -701,12 +711,29 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       )}
 
       {showShiftClosureModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9000] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9000] p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="bg-slate-900 p-5">
               <h2 className="text-white font-black text-[15px] uppercase tracking-widest">Cerrar Turno</h2>
               <p className="text-slate-400 text-[11px] font-bold uppercase tracking-widest mt-0.5">Introduce las cantidades por formato</p>
             </div>
+            
+            <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+              <div>
+                <label className="block text-[9px] font-black text-slate-500 uppercase mb-0.5 tracking-widest">Fecha del Turno</label>
+                <input 
+                  type="date" 
+                  value={shiftDate}
+                  onChange={(e) => setShiftDate(e.target.value)}
+                  className="border-2 border-slate-200 p-1.5 rounded-lg font-bold text-[13px] focus:border-blue-500 outline-none bg-white shadow-sm"
+                />
+              </div>
+              <div className="text-right">
+                 <span className="text-[9px] font-black text-slate-400 uppercase block leading-none">Local</span>
+                 <span className="text-[11px] font-bold text-slate-500">{new Date().toLocaleDateString()}</span>
+              </div>
+            </div>
+
             <div className="max-h-[65vh] overflow-y-auto p-5 space-y-4">
               {Object.keys(shiftClosureData).map(formato => {
                 const d = shiftClosureData[formato];
@@ -816,8 +843,8 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       )}
 
       {showShiftConfirmModal && (
-        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-xl z-[9600] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-[3rem] border-[12px] border-blue-50 animate-in zoom-in shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-xl z-[9600] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-lg rounded-[3rem] border-[12px] border-blue-50 animate-in zoom-in shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className={`p-8 text-center text-white ${isForcingClosure ? 'bg-amber-600' : 'bg-blue-600'}`}>
               <h3 className="font-black text-xs uppercase tracking-[0.2em]">
                 {isForcingClosure ? 'Confirmar Cierre Forzado' : 'Cierre y Archivado'}
@@ -912,8 +939,14 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
               
               {productionTask && (
                 <div className="mt-2 p-2 bg-emerald-50 border border-emerald-100 rounded-lg flex items-center justify-between animate-in slide-in-from-bottom-2">
-                  <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Tiempo Teórico</span>
-                  <span className="text-xs font-black text-emerald-700">{calculatedTheoreticalTime} min</span>
+                  <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">
+                    {isLoncheadoArea ? 'Unid. Minuto Teóricas' : 'Tiempo Teórico'}
+                  </span>
+                  <span className="text-xs font-black text-emerald-700">
+                    {isLoncheadoArea 
+                      ? `${calculatedTheoreticalTime.toFixed(2)} U.M.`
+                      : `${calculatedTheoreticalTime.toFixed(2)} min`}
+                  </span>
                 </div>
               )}
             </div>
@@ -1006,7 +1039,11 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                         <td className="px-2 py-1.5 font-black uppercase text-[12px]">{act.operarios?.join(', ')}</td>
                         <td className="px-2 py-1.5">
                           <span className="font-black uppercase">{act.formato}</span> 
-                          {act.tiempoTeoricoManual !== undefined && <span className="text-[14px] text-emerald-600 block font-black uppercase tracking-tighter">U/H: {act.tiempoTeoricoManual}</span>}
+                          {act.tiempoTeoricoManual !== undefined && (
+                            <span className="text-[14px] text-emerald-600 block font-black uppercase tracking-tighter">
+                              {isLoncheadoArea ? `U.M.: ${act.tiempoTeoricoManual}` : `U/H: ${act.tiempoTeoricoManual > 0 ? Math.round(60 / act.tiempoTeoricoManual) : 0}`}
+                            </span>
+                          )}
                         </td>
                         <td className="px-2 py-1.5 text-center">
                           <div className="flex items-center justify-center gap-1">
@@ -1025,7 +1062,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                         {selectedArea !== 'sb-preparacion' && (
                           <td className="px-2 py-1.5 text-center font-black text-emerald-600">
                             {act.tipoTarea === TaskType.PRODUCCION && act.tiempoTeoricoManual !== undefined && act.cantidad > 0
-                              ? `${((act.tiempoTeoricoManual > 0 ? (60 / act.tiempoTeoricoManual) : 0) * act.cantidad).toFixed(1)}m` 
+                              ? `${(isLoncheadoArea ? (act.cantidad / act.tiempoTeoricoManual) : (act.tiempoTeoricoManual * act.cantidad)).toFixed(1)}m` 
                               : '-'}
                           </td>
                         )}
@@ -1054,8 +1091,8 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
 
       {/* MODAL SELECCIÓN MÁQUINAS MECANIZADO */}
       {showMachineSelectionModal && (
-        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[8000] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in border-8 border-blue-50">
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[8000] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl animate-in zoom-in border-8 border-blue-50 max-h-[90vh] overflow-y-auto">
             <div className="bg-blue-600 p-8 text-center text-white relative">
               <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-400 text-slate-900 px-6 py-2 rounded-full text-[12px] font-black uppercase tracking-widest shadow-xl animate-pulse z-10 border-2 border-white">
                 MARCA LAS QUE QUIERES CERRAR
@@ -1118,8 +1155,8 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
 
       {/* MODAL CIERRE DE ACTIVIDAD Y PIN... */}
       {showClosureModal && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[7000] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in border-8 border-slate-50">
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[7000] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl animate-in zoom-in border-8 border-slate-50 max-h-[90vh] overflow-y-auto">
             <div className="bg-slate-900 p-8 text-center text-white"><h3 className="font-black text-xs uppercase tracking-widest">Finalizar Actividad</h3><p className="text-blue-400 text-[14px] font-bold mt-2 uppercase">{currentActivity?.formato}</p></div>
             <div className="p-10 space-y-6">
               <div className="space-y-3">
@@ -1136,8 +1173,8 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       )}
 
       {showPassModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9000] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-[320px] rounded-[2rem] shadow-2xl overflow-hidden border-4 border-slate-800 animate-in zoom-in duration-200">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9000] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-[320px] rounded-[2rem] shadow-2xl border-4 border-slate-800 animate-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
             <div className="bg-slate-900 p-6 text-center text-white">
               <h3 className="font-black text-[16px] uppercase tracking-[0.3em]">Acceso Jefe de Turno</h3>
               <div className="flex justify-center gap-3 mt-6">
@@ -1158,8 +1195,8 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
 
       {/* MODAL MULTIPLE START (TRATAMIENTOS) */}
       {showMultipleStartModal && (
-        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[8000] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in border-8 border-blue-50">
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[8000] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl animate-in zoom-in border-8 border-blue-50 max-h-[90vh] overflow-y-auto">
             <div className="bg-blue-600 p-8 text-center text-white">
               <h3 className="font-black text-sm uppercase tracking-widest">¿Iniciar otra actividad?</h3>
               <p className="text-blue-100 text-[16px] font-bold mt-2 uppercase">Has seleccionado {pendingActivities.length} actividad(es)</p>
@@ -1191,8 +1228,8 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
 
       {/* MODAL MULTIPLE CLOSURE (TRATAMIENTOS / MECANIZADO) */}
       {showMultipleClosureModal && (
-        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[8000] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in border-8 border-indigo-50">
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[8000] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl animate-in zoom-in border-8 border-indigo-50 max-h-[90vh] overflow-y-auto">
             <div className="bg-indigo-600 p-8 text-center text-white relative">
               <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-400 text-slate-900 px-6 py-2 rounded-full text-[12px] font-black uppercase tracking-widest shadow-xl animate-pulse z-10 border-2 border-white">
                 MARCA LAS QUE QUIERES CERRAR
@@ -1239,8 +1276,8 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       )}
       {/* MODAL CONFIRM DELETE */}
       {deleteConfirmId && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in border-4 border-red-50">
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl animate-in zoom-in border-4 border-red-50 max-h-[90vh] overflow-y-auto">
             <div className="bg-red-600 p-6 text-center text-white">
               <Trash2 className="w-12 h-12 mx-auto mb-4 opacity-50" />
               <h3 className="font-black text-lg uppercase tracking-widest">¿Eliminar Registro?</h3>

@@ -1,6 +1,5 @@
 import "dotenv/config";
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import pkg from "pg";
@@ -82,13 +81,15 @@ app.get("/api/db-check-v2", async (req, res) => {
 // Vite middleware for development
 if (process.env.NODE_ENV !== "production") {
   console.log("Starting Vite in middleware mode...");
-  createViteServer({
-    server: { middlewareMode: true },
-    appType: "spa",
-    optimizeDeps: { force: true },
-  }).then(vite => {
-    app.use(vite.middlewares);
-    console.log("Vite middleware attached.");
+  import("vite").then(({ createServer: createViteServer }) => {
+    createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+      optimizeDeps: { force: true },
+    }).then(vite => {
+      app.use(vite.middlewares);
+      console.log("Vite middleware attached.");
+    });
   });
 } else {
   // Serve static files in production

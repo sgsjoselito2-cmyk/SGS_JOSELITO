@@ -19,6 +19,7 @@ interface ConnectionHelpModalProps {
   onClearSyncQueue?: () => void;
   onResetAllData?: () => void;
   onForceRefresh?: () => void;
+  onRetrySync?: () => void;
   onTestDirectConnection?: () => void;
   syncQueueLength?: number;
   syncQueue?: any[];
@@ -35,6 +36,7 @@ const ConnectionHelpModal: React.FC<ConnectionHelpModalProps> = ({
   onClearSyncQueue,
   onResetAllData,
   onForceRefresh,
+  onRetrySync,
   onTestDirectConnection,
   syncQueueLength = 0,
   syncQueue = []
@@ -142,6 +144,17 @@ const ConnectionHelpModal: React.FC<ConnectionHelpModalProps> = ({
                         className="mt-2 w-full py-2 bg-amber-100 text-amber-700 rounded-lg text-[14px] font-bold hover:bg-amber-200 transition-colors"
                       >
                         REINTENTAR CONEXIÓN (RECARGAR)
+                      </button>
+                    )}
+                    {syncQueueLength > 0 && onRetrySync && (
+                      <button 
+                        onClick={onRetrySync}
+                        className="mt-2 w-full py-3 bg-indigo-600 text-white rounded-2xl text-[14px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        REINTENTAR SINCRONIZACIÓN
                       </button>
                     )}
                     <div className="pt-2 space-y-2">

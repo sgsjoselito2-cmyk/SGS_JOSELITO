@@ -23,14 +23,15 @@ const TALLERES_POR_AREA = [
     talleres: [
       { id: 'sala-blanca', name: 'SALA BLANCA' },
       { id: 'movimiento-jamones', name: 'MOVIMIENTO JAMONES' },
-      { id: 'sb-preparacion', name: 'PREPARACIÓN SB' },
+      { id: 'sb-preparacion', name: 'PREP. EXPEDICIONES' },
       { id: 'sb-loncheado', name: 'LONCHEADO SB' },
       { id: 'sb-empaquetado-loncheado', name: 'EMP. LONCHEADO SB' },
       { id: 'sb-empaquetado-deshuesado', name: 'EMP. DESHUESADO SB' },
       { id: 'env-envasado', name: 'ENVASADO' },
       { id: 'env-empaquetado', name: 'EMPAQUETADO ENV' },
       { id: 'expedicion', name: 'EXPEDICIONES' },
-      { id: 'preparacion-exp', name: 'PREPARACIÓN EXP' }
+      { id: 'preparacion-exp', name: 'PREP. EXPEDICIONES' },
+      { id: 'movimientos-dashboard', name: 'DASHBOARD MOVIMIENTOS' }
     ]
   },
   {
@@ -102,13 +103,25 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
   }, [history]);
 
   useEffect(() => {
+    // Helper para parsear con seguridad
+    const safeParse = (key: string, defaultValue: any) => {
+      try {
+        const saved = localStorage.getItem(key);
+        if (!saved || saved === 'undefined' || saved === 'null') return defaultValue;
+        return JSON.parse(saved);
+      } catch (e) {
+        console.warn(`Error parsing ${key}:`, e);
+        return defaultValue;
+      }
+    };
+
     // Load data from LocalStorage
-    setSeguridadData(JSON.parse(localStorage.getItem('zitron_top60_seguridad') || '[]'));
-    setRrhhData(JSON.parse(localStorage.getItem('zitron_top60_rrhh') || '[]'));
-    setAusentismoData(JSON.parse(localStorage.getItem('zitron_top60_ausentismo') || '[]'));
-    setCalidadData(JSON.parse(localStorage.getItem('zitron_top60_calidad') || '[]'));
-    setIdmData(JSON.parse(localStorage.getItem('zitron_top60_idm') || '[]'));
-    setActionPlanData(JSON.parse(localStorage.getItem('zitron_top60_actionplan') || '[]'));
+    setSeguridadData(safeParse('zitron_top60_seguridad', []));
+    setRrhhData(safeParse('zitron_top60_rrhh', []));
+    setAusentismoData(safeParse('zitron_top60_ausentismo', []));
+    setCalidadData(safeParse('zitron_top60_calidad', []));
+    setIdmData(safeParse('zitron_top60_idm', []));
+    setActionPlanData(safeParse('zitron_top60_actionplan', []));
   }, []);
 
   const allData = useMemo(() => [...history, ...activities], [history, activities]);
@@ -147,7 +160,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
     });
     if (weekData.length === 0) return 0;
     const stats = calculateStats(weekData);
-    return Math.round(parseFloat(stats.oee) || 0);
+    return Math.round(parseFloat(stats.productividad) || 0);
   }, [history, selectedWeek, selectedYear]);
 
   const getWorkshopData = (wsId: string) => {
@@ -187,36 +200,75 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
       monthlyBuckets[monthKey].push(a);
     });
 
+    // Helper to get component objectives with priority
+    const getObjectivesAtDate = (dateStr: string) => {
+      const objs = [...getObjectivesForArea(wsId)].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+      
+      const getVal = (id: string) => {
+        // 1. Specific record for this indicator
+        const spec = objs.find(o => o.valid_from <= dateStr && o.indicator_id === id);
+        if (spec && spec.objetivo) return spec.objetivo;
+        
+        // 2. Master OEE record component
+        const master = objs.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id));
+        if (master) {
+          if (id === 'disponibilidad') return master.disponibilidad || 0;
+          if (id === 'rendimiento') return master.rendimiento || 0;
+          if (id === 'calidad') return master.calidad || 0;
+        }
+        return 0;
+      };
+
+      const disp = getVal('disponibilidad');
+      const rend = getVal('rendimiento');
+      const cal = getVal('calidad');
+
+      // Now for productivity (master goal)
+      const specProd = objs.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee'));
+      let prod = 0;
+      if (specProd && specProd.objetivo) {
+        prod = specProd.objetivo;
+      } else {
+        // Fallback: calculate from component objectives (which also follow priority)
+        prod = parseFloat(((disp * rend * cal) / 10000).toFixed(1));
+      }
+
+      return { disp, rend, cal, prod };
+    };
+
     const weeklyData = last15Weeks.map(w => {
       const weekKey = `${w.week}-${w.year}`;
       const data = weeklyBuckets[weekKey] || [];
       
+      // Use Sunday of the week for objective lookup (ensures objective set during the week applies)
       const date = new Date(w.year, 0, 1);
-      date.setDate(date.getDate() + (w.week - 1) * 7);
+      date.setDate(date.getDate() + (w.week * 7) - 1); 
       const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
       
-      const objs = [...getObjectivesForArea(wsId)].sort((a, b) => b.validFrom.localeCompare(a.validFrom));
-      const found = (Array.isArray(objs) ? objs.find(o => o.validFrom <= dateStr) : null) || { disponibilidad: 90, rendimiento: 75, calidad: 99, productividad: 62.4, objetivo: 62.4 };
-      
-      const objective = Math.round(found.productividad || found.objetivo);
+      const objsAtDate = getObjectivesAtDate(dateStr);
+      const objective = objsAtDate.prod;
 
       const hasProduction = data.some(a => a.tipoTarea === TaskType.PRODUCCION);
       
       if (!hasProduction) {
-        return { name: w.label, Disp: 0, Rto: 0, Cal: 0, Prod: 0, Obj: objective, ObjDisp: found.disponibilidad, ObjRto: found.rendimiento, ObjCal: found.calidad };
+        return { 
+          name: w.label, 
+          Disp: 0, Rto: 0, Cal: 0, Prod: 0, 
+          Obj: objective, ObjDisp: objsAtDate.disp, ObjRto: objsAtDate.rend, ObjCal: objsAtDate.cal 
+        };
       }
       
       const stats = calculateStats(data, wsId);
       return {
         name: w.label,
-        Disp: parseFloat(stats.availability) || 0,
-        Rto: parseFloat(stats.performance) || 0,
-        Cal: parseFloat(stats.quality) || 0,
-        Prod: parseFloat(stats.oee) || 0,
+        Disp: parseFloat(stats.disponibilidad) || 0,
+        Rto: parseFloat(stats.rendimiento) || 0,
+        Cal: parseFloat(stats.calidad) || 0,
+        Prod: parseFloat(stats.productividad) || 0,
         Obj: objective,
-        ObjDisp: found.disponibilidad,
-        ObjRto: found.rendimiento,
-        ObjCal: found.calidad
+        ObjDisp: objsAtDate.disp,
+        ObjRto: objsAtDate.rend,
+        ObjCal: objsAtDate.cal
       };
     });
 
@@ -224,30 +276,34 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
       const monthKey = `${m.month}-${m.year}`;
       const data = monthlyBuckets[monthKey] || [];
 
-      const date = new Date(m.year, m.month, 1);
+      // Use last day of month for objective lookup
+      const date = new Date(m.year, m.month + 1, 0);
       const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-      const objs = [...getObjectivesForArea(wsId)].sort((a, b) => b.validFrom.localeCompare(a.validFrom));
-      const found = (Array.isArray(objs) ? objs.find(o => o.validFrom <= dateStr) : null) || { disponibilidad: 90, rendimiento: 75, calidad: 99, productividad: 62.4, objetivo: 62.4 };
       
-      const objective = Math.round(found.productividad || found.objetivo);
+      const objsAtDate = getObjectivesAtDate(dateStr);
+      const objective = objsAtDate.prod;
 
       const hasProduction = data.some(a => a.tipoTarea === TaskType.PRODUCCION);
       
       if (!hasProduction) {
-        return { name: m.label, Disp: 0, Rto: 0, Cal: 0, Prod: 0, Obj: objective, ObjDisp: found.disponibilidad, ObjRto: found.rendimiento, ObjCal: found.calidad };
+        return { 
+          name: m.label, 
+          Disp: 0, Rto: 0, Cal: 0, Prod: 0, 
+          Obj: objective, ObjDisp: objsAtDate.disp, ObjRto: objsAtDate.rend, ObjCal: objsAtDate.cal 
+        };
       }
       
       const stats = calculateStats(data, wsId);
       return {
         name: m.label,
-        Disp: parseFloat(stats.availability) || 0,
-        Rto: parseFloat(stats.performance) || 0,
-        Cal: parseFloat(stats.quality) || 0,
-        Prod: parseFloat(stats.oee) || 0,
+        Disp: parseFloat(stats.disponibilidad) || 0,
+        Rto: parseFloat(stats.rendimiento) || 0,
+        Cal: parseFloat(stats.calidad) || 0,
+        Prod: parseFloat(stats.productividad) || 0,
         Obj: objective,
-        ObjDisp: found.disponibilidad,
-        ObjRto: found.rendimiento,
-        ObjCal: found.calidad
+        ObjDisp: objsAtDate.disp,
+        ObjRto: objsAtDate.rend,
+        ObjCal: objsAtDate.cal
       };
     });
 
@@ -314,12 +370,12 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
           {/* Productividad como área en el fondo */}
           <Area type="monotone" dataKey="Prod" fill="#eab308" fillOpacity={0.1} stroke="none" legendType="none" isAnimationActive={false} />
           
-          <Bar dataKey="Disp" name="Disp." fill="#3b82f6" radius={[1, 1, 0, 0]} maxBarSize={15} isAnimationActive={false} />
-          <Bar dataKey="Rto" name="Rto." fill="#f97316" radius={[1, 1, 0, 0]} maxBarSize={15} isAnimationActive={false} />
-          <Bar dataKey="Cal" name="Cal." fill="#94a3b8" radius={[1, 1, 0, 0]} maxBarSize={15} isAnimationActive={false} />
+          <Bar dataKey="Disp" name="Disponibilidad" fill="#3b82f6" radius={[1, 1, 0, 0]} maxBarSize={15} isAnimationActive={false} />
+          <Bar dataKey="Rto" name="Rendimiento" fill="#f97316" radius={[1, 1, 0, 0]} maxBarSize={15} isAnimationActive={false} />
+          <Bar dataKey="Cal" name="Calidad" fill="#94a3b8" radius={[1, 1, 0, 0]} maxBarSize={15} isAnimationActive={false} />
           
           {/* Productividad como línea delante para mantener orden de leyenda y definición */}
-          <Line type="monotone" dataKey="Prod" name="Product." stroke="#eab308" strokeWidth={2} dot={{r: 1.5, strokeWidth: 1}} activeDot={{r: 3}} isAnimationActive={false}>
+          <Line type="monotone" dataKey="Prod" name="Productividad" stroke="#eab308" strokeWidth={2} dot={{r: 1.5, strokeWidth: 1}} activeDot={{r: 3}} isAnimationActive={false}>
             <LabelList dataKey="Prod" position="top" formatter={(val: number) => val > 0 ? `${val.toFixed(1)}%` : ''} style={{ fontSize: '6px', fontWeight: 'bold', fill: '#334155' }} />
           </Line>
           
@@ -343,20 +399,41 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
     );
   };
 
-  const getObjectiveForDate = (area: string, date: Date) => {
+  const getObjectiveForDate = (area: string, date: Date, indicatorId: string = 'productividad') => {
     const getObjectivesForArea = (areaId: string) => {
       if (allObjectives[areaId]) return allObjectives[areaId];
       const key = Object.keys(allObjectives).find(k => k.toLowerCase() === areaId.toLowerCase());
       return key ? allObjectives[key] : [];
     };
     
-    const objs = [...getObjectivesForArea(area)].sort((a, b) => b.validFrom.localeCompare(a.validFrom));
+    const objs = [...getObjectivesForArea(area)].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     
-    // objs is sorted by validFrom desc
-    const found = objs.find(o => o.validFrom <= dateStr);
-    const objective = found ? (found.productividad || found.objetivo || 0) : 0;
-    return objective;
+    // Exact match for indicator
+    const getVal = (id: string) => {
+      const spec = objs.find(o => o.valid_from <= dateStr && o.indicator_id === id);
+      if (spec && spec.objetivo) return spec.objetivo;
+      
+      const master = objs.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id));
+      if (master) {
+        if (id === 'disponibilidad') return master.disponibilidad || 0;
+        if (id === 'rendimiento') return master.rendimiento || 0;
+        if (id === 'calidad') return master.calidad || 0;
+      }
+      return 0;
+    };
+
+    if (indicatorId === 'productividad' || indicatorId === 'oee') {
+      const specProd = objs.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee'));
+      if (specProd && specProd.objetivo) return specProd.objetivo;
+      
+      const d = getVal('disponibilidad');
+      const r = getVal('rendimiento');
+      const c = getVal('calidad');
+      return parseFloat(((d * r * c) / 10000).toFixed(1));
+    }
+
+    return getVal(indicatorId);
   };
 
   const handleSendReport = async () => {
@@ -1340,10 +1417,10 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
           </div>
 
           {/* PAGES 6+: CMI WORKSHOPS (LANDSCAPE) */}
-          {TALLERES_POR_AREA.map((areaGroup, areaIdx) => {
+            {TALLERES_POR_AREA.map((areaGroup, areaIdx) => {
             const workshopChunks = chunkArray(areaGroup.talleres, 4); // 4 workshops per landscape page
             return workshopChunks.map((chunk, chunkIdx) => (
-              <div key={`${areaGroup.area}-${chunkIdx}`} data-report-page data-report-landscape className="flex flex-col min-h-[794px] w-[1122px] bg-white p-12 space-y-6 overflow-hidden">
+              <div key={`report-area-${areaGroup.area}-${chunkIdx}`} data-report-page data-report-landscape className="flex flex-col min-h-[794px] w-[1122px] bg-white p-12 space-y-6 overflow-hidden">
                 <div className="flex items-center justify-between border-b-4 border-indigo-600 pb-4">
                   <h2 className="text-3xl font-black uppercase tracking-tighter text-indigo-600">CMI - {areaGroup.area.toUpperCase()} {workshopChunks.length > 1 ? `(${chunkIdx + 1}/${workshopChunks.length})` : ''}</h2>
                   <div className="flex items-center gap-4">
@@ -1372,7 +1449,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
                   {chunk.map((ws, wsIdx) => {
                     const { weeklyData, monthlyData } = getWorkshopData(ws.id);
                     return (
-                      <div key={`${ws.id}-${wsIdx}`} className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 flex flex-col h-[280px]">
+                      <div key={`report-ws-${ws.id}-${wsIdx}`} className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 flex flex-col h-[280px]">
                         <h4 className="text-xs font-black text-slate-800 uppercase mb-4 border-b border-slate-200 pb-2">{ws.name}</h4>
                         <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
                           {renderChart(weeklyData, `SEMANAL`, ws.id, true)}
@@ -1421,7 +1498,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
           {(() => {
             const saved = localStorage.getItem('zitron_top60_actionplan');
             let items: ActionPlanItem[] = [];
-            if (saved) {
+            if (saved && saved !== 'undefined' && saved !== 'null') {
               try {
                 items = JSON.parse(saved);
               } catch (e) {}
@@ -1661,8 +1738,8 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
 
       {/* Modal Power BI */}
       {showPowerBI && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-6xl h-[90vh] rounded-[3rem] overflow-hidden shadow-2xl flex flex-col relative animate-in zoom-in duration-300">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-in fade-in duration-300 overflow-y-auto">
+          <div className="bg-white w-full max-w-6xl h-[90vh] rounded-[3rem] overflow-y-auto max-h-[90vh] shadow-2xl flex flex-col relative animate-in zoom-in duration-300">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-amber-200">
@@ -1721,7 +1798,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
       )}
 
       {fullscreenChart && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-xl flex flex-col p-10 animate-in fade-in zoom-in duration-300">
+        <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-xl flex flex-col p-10 animate-in fade-in zoom-in duration-300 overflow-y-auto">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-3xl font-black text-white uppercase tracking-tighter">{fullscreenChart.title}</h2>
             <button 

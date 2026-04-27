@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Activity, OEEObjectives } from '../types';
 import { calculateStats, getWeekNumber } from './Dashboard';
+import { INITIAL_OEE_OBJECTIVES } from '../constants';
 
 interface AreaConfig {
   id: string;
@@ -24,23 +25,63 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
   const allData = useMemo(() => [...history, ...activities], [history, activities]);
 
   // Helper to get objective for a workshop and indicator
-  const getObjectiveValue = (areaId: string, indicatorId: string, dateStr?: string) => {
+  const getObjectiveValue = (areaId: string, indicator_id: string, dateStr?: string) => {
     const objs = allObjectives[areaId] || [];
     const targetDate = dateStr || selectedDate;
-    const found = objs.find(o => o.validFrom <= targetDate && (o.indicatorId === indicatorId || (!o.indicatorId && indicatorId === 'oee')));
-    if (found) {
-      if (indicatorId === 'availability') return found.disponibilidad;
-      if (indicatorId === 'performance') return found.rendimiento;
-      if (indicatorId === 'quality') return found.calidad;
-      if (indicatorId === 'oee') return parseFloat(((found.disponibilidad * found.rendimiento * found.calidad) / 10000).toFixed(1));
-      return found.objetivo;
+    
+    const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+    
+    // Helper function for prioritized lookup
+    const getVal = (id: string) => {
+      const spec = sorted.find(o => o.valid_from <= targetDate && o.indicator_id === id);
+      if (spec && spec.objetivo) return spec.objetivo;
+      
+      const master = sorted.find(o => o.valid_from <= targetDate && (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id));
+      if (master) {
+        if (id === 'disponibilidad') return master.disponibilidad || 0;
+        if (id === 'rendimiento') return master.rendimiento || 0;
+        if (id === 'calidad') return master.calidad || 0;
+      }
+      return 0;
+    };
+
+    const isOEEPart = ['disponibilidad', 'rendimiento', 'calidad', 'productividad', 'oee'].includes(indicator_id);
+    if (isOEEPart) {
+      if (indicator_id === 'productividad' || indicator_id === 'oee') {
+        const specProd = sorted.find(o => o.valid_from <= targetDate && (o.indicator_id === 'productividad' || o.indicator_id === 'oee'));
+        if (specProd && specProd.objetivo) return specProd.objetivo;
+        
+        // If no explicit OEE goal, calculate from components (which also follow priority)
+        const d = getVal('disponibilidad');
+        const r = getVal('rendimiento');
+        const c = getVal('calidad');
+        return parseFloat(((d * r * c) / 10000).toFixed(1));
+      }
+      return getVal(indicator_id);
     }
-    // Fallbacks
-    if (indicatorId === 'availability' || indicatorId === 'performance' || indicatorId === 'quality') return 85;
-    if (indicatorId === 'oee') return 62;
-    if (indicatorId === 'merma1' || indicatorId === 'merma2') return 3;
-    if (indicatorId === 'subproducto') return 5;
-    return 0;
+
+    // Default fallbacks for non-OEE indicators
+    if (indicator_id.startsWith('pph')) {
+      const spec = sorted.find(o => o.valid_from <= targetDate && o.indicator_id === indicator_id) || 
+                   sorted.find(o => o.valid_from <= targetDate && o.indicator_id === 'pph');
+      return spec ? (spec.objetivo || (spec as any).pph || 0) : null;
+    }
+    if (indicator_id === 'merma1') {
+      const spec = sorted.find(o => o.valid_from <= targetDate && o.indicator_id === 'merma1');
+      return spec ? (spec.objetivo || spec.merma1 || 0) : 3;
+    }
+    if (indicator_id === 'merma2') {
+      const spec = sorted.find(o => o.valid_from <= targetDate && o.indicator_id === 'merma2');
+      return spec ? (spec.objetivo || spec.merma2 || 0) : 3;
+    }
+    if (indicator_id === 'subproducto') {
+      const spec = sorted.find(o => o.valid_from <= targetDate && o.indicator_id === 'subproducto');
+      return spec ? (spec.objetivo || spec.subproducto || 0) : 5;
+    }
+
+    const simpleMatch = sorted.find(o => o.valid_from <= targetDate && o.indicator_id === indicator_id);
+    if (simpleMatch) return simpleMatch.objetivo || (simpleMatch as any)[indicator_id] || 0;
+    return (INITIAL_OEE_OBJECTIVES as any)[indicator_id] || null;
   };
 
   const columns = useMemo(() => {
@@ -103,15 +144,44 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
       const areaData = allData.filter(a => a.area === area.id);
       
       // Determine indicators for this area
-      const areaIndicators = [
-        { id: 'availability', label: 'DISPO (%)', objKey: 'disponibilidad' as const },
-        { id: 'performance',  label: 'REND (%)',  objKey: 'rendimiento' as const },
-        { id: 'quality',      label: 'CALID (%)', objKey: 'calidad' as const },
-        { id: 'oee',          label: 'OEE (%)',   objKey: null } // OEE uses calculated obj
-      ];
+      let areaIndicators: any[] = [];
 
       if (area.id === 'sb-preparacion') {
-        areaIndicators.unshift({ id: 'pph', label: 'PPH', objKey: null });
+        areaIndicators = [
+          { id: 'pph', label: 'PPH PESAR', objKey: 'pph' }
+        ];
+      } else if (area.id === 'sb-loncheado') {
+        areaIndicators = [
+          { id: 'disponibilidad', label: 'DISPONIBILIDAD (%)', objKey: 'disponibilidad' as const },
+          { id: 'rendimiento',  label: 'RENDIMIENTO (%)',  objKey: 'rendimiento' as const },
+          { id: 'calidad',      label: 'CALIDAD (%)', objKey: 'calidad' as const },
+          { id: 'merma1',       label: '% MERMA 1',   objKey: 'merma' as const },
+          { id: 'merma2',       label: '% MERMA 2',   objKey: 'merma' as const },
+          { id: 'subproducto',  label: '% SUBPROD',   objKey: 'merma' as const }
+        ];
+      } else if (area.id === 'sb-empaquetado-loncheado') {
+        areaIndicators = [
+          { id: 'pph_blister', label: 'PPH - Envasado Blister', objKey: null },
+          { id: 'pph_sin_blister', label: 'PPH - Envasado Sin Blister', objKey: null }
+        ];
+      } else if (area.id === 'sb-empaquetado-deshuesado') {
+        areaIndicators = [
+          { id: 'pph', label: 'PPH', objKey: 'pph' }
+        ];
+      } else if (area.id === 'env-envasado' || area.id === 'env-empaquetado') {
+        areaIndicators = [
+          { id: 'disponibilidad', label: 'DISPONIBILIDAD (%)', objKey: 'disponibilidad' as const },
+          { id: 'rendimiento',  label: 'RENDIMIENTO (%)',  objKey: 'rendimiento' as const },
+          { id: 'calidad',      label: 'CALIDAD (%)', objKey: 'calidad' as const }
+        ];
+      } else {
+        // Default for other dashboards (Expediciones) that use GroupDashboard
+        areaIndicators = [
+          { id: 'disponibilidad', label: 'DISPONIBILIDAD (%)', objKey: 'disponibilidad' as const },
+          { id: 'rendimiento',  label: 'RENDIMIENTO (%)',  objKey: 'rendimiento' as const },
+          { id: 'calidad',      label: 'CALIDAD (%)', objKey: 'calidad' as const },
+          { id: 'productividad',    label: 'OEE (%)',   objKey: null } 
+        ];
       }
 
       const rowsForArea: any[] = [];
@@ -221,7 +291,7 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
                 const isFirstOfArea = idx === 0 || tableRows[idx - 1].area.id !== row.area.id;
                 
                 const currentObj = getObjectiveValue(row.area.id, row.indicator.id);
-                const isPPH = row.indicator.id === 'pph';
+                const isPPH = row.indicator.id.startsWith('pph');
 
                 return (
                   <tr key={`${row.area.id}-${row.indicator.id}`} className="hover:bg-slate-50 transition-colors">
@@ -238,7 +308,7 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
                       {row.indicator.label}
                     </td>
                     <td className="p-2 text-center font-black text-blue-600 bg-blue-50/30 border border-slate-200">
-                      {currentObj !== 0 ? (isPPH ? currentObj : `${currentObj}%`) : '—'}
+                      {currentObj && currentObj !== 0 ? (isPPH ? currentObj : `${currentObj}%`) : '—'}
                     </td>
                     {row.cols.map((col: any) => {
                       const val = col.value;
@@ -248,7 +318,9 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
                       if (numVal !== null) {
                         const colObj = getObjectiveValue(row.area.id, row.indicator.id, col.key.includes('-W') ? undefined : col.key);
                         
-                        if (row.indicator.id.startsWith('merma') || row.indicator.id === 'subproducto') {
+                        if (colObj === null || colObj === 0) {
+                          cellStyle = 'text-slate-500 font-bold';
+                        } else if (row.indicator.id.startsWith('merma') || row.indicator.id === 'subproducto') {
                           cellStyle = numVal <= colObj ? 'text-emerald-600 font-bold' : 'text-red-500 font-bold';
                         } else {
                           cellStyle = numVal >= colObj ? 'text-emerald-600 font-bold' : 'text-red-500 font-bold';
@@ -283,9 +355,9 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
 export const SalaBlancaDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'subtitle'>> = (props) => (
   <GroupDashboard {...props}
     title="Sala Blanca"
-    subtitle="Preparación · Loncheado · Emp. Loncheado · Emp. Deshuesado"
+    subtitle="Deshuesado/Prensado · Loncheado · Emp. Loncheado · Emp. Deshuesado"
     areas={[
-      { id: 'sb-preparacion',            name: 'PREPARACIÓN' },
+      { id: 'sb-preparacion',            name: 'DESHUESADO/PRENSADO' },
       { id: 'sb-loncheado',              name: 'LONCHEADO' },
       { id: 'sb-empaquetado-loncheado',  name: 'EMP. LONCHEADO' },
       { id: 'sb-empaquetado-deshuesado', name: 'EMP. DESHUESADO' },
@@ -308,10 +380,20 @@ export const EnvasadoDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'subtit
 export const ExpedicionesDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'subtitle'>> = (props) => (
   <GroupDashboard {...props}
     title="Expediciones"
-    subtitle="Expediciones · Preparación Expediciones"
+    subtitle="Expediciones · Prep. Expediciones"
     areas={[
       { id: 'expedicion',      name: 'EXPEDICIONES' },
-      { id: 'preparacion-exp', name: 'PREPARACIÓN EXP.' },
+      { id: 'preparacion-exp', name: 'PREP. EXPEDICIONES' },
+    ]}
+  />
+);
+
+export const MovimientosDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'subtitle'>> = (props) => (
+  <GroupDashboard {...props}
+    title="Movimientos"
+    subtitle="Logística Interna"
+    areas={[
+      { id: 'movimiento-jamones', name: 'MOVIMIENTOS' },
     ]}
   />
 );

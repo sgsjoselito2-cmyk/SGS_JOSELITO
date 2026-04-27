@@ -117,7 +117,7 @@ const UserManager: React.FC<UserManagerProps> = ({ onClose, currentUserLevel }) 
   if (currentUserLevel < 3) {
     return (
       <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center">
+        <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center max-h-[90vh] overflow-y-auto">
           <Shield className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-2xl font-black text-slate-900 mb-2 uppercase">Acceso Denegado</h2>
           <p className="text-slate-500 font-medium mb-6">Solo los usuarios de Nivel 3 (TOP 60) pueden gestionar usuarios.</p>
@@ -129,7 +129,7 @@ const UserManager: React.FC<UserManagerProps> = ({ onClose, currentUserLevel }) 
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl overflow-hidden animate-in zoom-in duration-300 my-8">
+      <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl animate-in zoom-in duration-300 my-8 max-h-[90vh] overflow-y-auto">
         <div className="bg-slate-900 p-6 flex justify-between items-center text-white">
           <div className="flex items-center gap-3">
             <UserIcon className="w-6 h-6 text-blue-400" />
@@ -157,7 +157,7 @@ const UserManager: React.FC<UserManagerProps> = ({ onClose, currentUserLevel }) 
                   onChange={e => setNewEmail(e.target.value)} 
                   required 
                   className="w-full p-4 rounded-xl bg-white border-2 border-slate-100 outline-none focus:border-blue-500 font-bold"
-                  placeholder="ejemplo@zitron.com"
+                  placeholder="ejemplo@email.com"
                 />
               </div>
               <div className="space-y-1">

@@ -80,7 +80,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
       Object.entries(allObjectives).forEach(([area, objs]) => {
         if (Array.isArray(objs) && objs.length > 0) {
           objs.forEach(obj => {
-            const key = obj.indicatorId ? `${area}_${obj.indicatorId}` : area;
+            const key = obj.indicator_id ? `${area}_${obj.indicator_id}` : area;
             latest[key] = obj;
           });
         }
@@ -349,27 +349,40 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
 
   const workshopIndicators: Record<string, {id: string, name: string}[]> = {
     'sb-loncheado': [
-      { id: 'oee', name: 'OEE / KPIs' },
+      { id: 'disponibilidad', name: 'Disponibilidad' },
+      { id: 'rendimiento', name: 'Rendimiento' },
+      { id: 'calidad', name: 'Calidad' },
       { id: 'merma1', name: 'Merma 1' },
       { id: 'merma2', name: 'Merma 2' },
       { id: 'subproducto', name: 'Subproducto' }
     ],
     'sb-preparacion': [
-      { id: 'oee', name: 'OEE / KPIs' },
       { id: 'pph', name: 'PPH' }
     ],
-    'default': [{ id: 'oee', name: 'OEE / KPIs' }]
+    'sb-empaquetado-loncheado': [
+      { id: 'pph_blister', name: 'PPH - Envasado Blister' },
+      { id: 'pph_sin_blister', name: 'PPH - Envasado Sin Blister' }
+    ],
+    'sb-empaquetado-deshuesado': [
+      { id: 'pph', name: 'PPH' }
+    ],
+    'default': [
+      { id: 'disponibilidad', name: 'Disponibilidad' },
+      { id: 'rendimiento', name: 'Rendimiento' },
+      { id: 'calidad', name: 'Calidad' },
+      { id: 'productividad', name: 'Productividad (OEE)' }
+    ]
   };
 
-  const handleUpdateMasterCell = (areaId: string, indicatorId: string, field: keyof OEEObjectives, value: number) => {
-    const key = `${areaId}_${indicatorId}`;
+  const handleUpdateMasterCell = (areaId: string, indicator_id: string, field: keyof OEEObjectives, value: number) => {
+    const key = `${areaId}_${indicator_id}`;
     const current = localMasterObjectives[key] || { 
-      disponibilidad: 0, rendimiento: 0, calidad: 0, productividad: 0, objetivo: 0, area: areaId, indicatorId: indicatorId, validFrom: objectiveValidFrom 
+      disponibilidad: 0, rendimiento: 0, calidad: 0, productividad: 0, objetivo: 0, area: areaId, indicator_id: indicator_id, valid_from: objectiveValidFrom 
     };
     const updated = { ...current, [field]: value };
     
     // Auto-calculate productivity if relevant
-    if (indicatorId === 'oee' && (field === 'disponibilidad' || field === 'rendimiento' || field === 'calidad')) {
+    if ((indicator_id === 'productividad' || indicator_id === 'oee') && (field === 'disponibilidad' || field === 'rendimiento' || field === 'calidad')) {
       updated.productividad = parseFloat(((updated.disponibilidad * updated.rendimiento * updated.calidad) / 10000).toFixed(1));
     }
     
@@ -393,26 +406,26 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500 pb-24">
       {/* MODAL PIN */}
       {showPassModal && (
-        <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-xl z-[9999] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-[3rem] shadow-2xl overflow-hidden border-8 border-slate-800">
-            <div className="bg-slate-900 p-8 text-center">
-              <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
+        <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-xl z-[9999] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-[320px] rounded-[2.5rem] shadow-2xl overflow-y-auto border-[6px] border-slate-800 max-h-[90vh]">
+            <div className="bg-slate-900 p-6 text-center">
+              <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
               </div>
-              <h3 className="text-white font-black text-sm uppercase tracking-widest">Acceso Maestro</h3>
-              <div className="flex justify-center gap-4 mt-8">
+              <h3 className="text-white font-black text-xs uppercase tracking-widest">Acceso Maestro</h3>
+              <div className="flex justify-center gap-3 mt-6">
                 {[0, 1, 2, 3].map((i) => (
-                  <div key={i} className={`w-4 h-4 rounded-full border-2 transition-all ${pin.length > i ? 'bg-blue-500 border-blue-500 scale-125' : 'bg-transparent border-slate-700'}`}></div>
+                  <div key={i} className={`w-3 h-3 rounded-full border-2 transition-all ${pin.length > i ? 'bg-blue-500 border-blue-500 scale-125' : 'bg-transparent border-slate-700'}`}></div>
                 ))}
               </div>
             </div>
-            <div className="p-8 bg-slate-50">
-              <div className="grid grid-cols-3 gap-4">
+            <div className="p-6 bg-slate-50">
+              <div className="grid grid-cols-3 gap-3">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 'ESC', 0, 'DEL'].map((num) => (
-                  <button key={num} type="button" onClick={() => num === 'ESC' ? setShowPassModal(false) : num === 'DEL' ? setPin(pin.slice(0, -1)) : pin.length < 4 && setPin(pin + num)} className="h-16 rounded-2xl bg-white border-b-4 border-slate-200 text-xl font-black text-slate-700 active:scale-90 transition-all">{num}</button>
+                  <button key={num} type="button" onClick={() => num === 'ESC' ? setShowPassModal(false) : num === 'DEL' ? setPin(pin.slice(0, -1)) : pin.length < 4 && setPin(pin + num)} className="h-14 rounded-xl bg-white border-b-2 border-slate-200 text-lg font-black text-slate-700 active:scale-90 transition-all">{num}</button>
                 ))}
               </div>
-              {pinError && <p className="text-center text-red-500 font-black text-[15px] uppercase mt-4 animate-bounce">❌ PIN INCORRECTO</p>}
+              {pinError && <p className="text-center text-red-500 font-black text-[14px] uppercase mt-3 animate-bounce">❌ PIN INCORRECTO</p>}
             </div>
           </div>
         </div>
@@ -508,7 +521,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                       {indicators.map(ind => {
                         const key = `${wsId}_${ind.id}`;
                         const obj = localMasterObjectives[key] || { disponibilidad: 0, rendimiento: 0, calidad: 0, productividad: 0, objetivo: 0 };
-                        const isOEE = ind.id === 'oee';
+                        const isOEE = ind.id === 'productividad' || ind.id === 'oee';
                         return (
                           <tr key={key} className="hover:bg-slate-50 transition-colors">
                             <td className="p-4 pl-8 text-[13px] font-bold text-slate-500 uppercase tracking-tight border-r border-slate-100 italic">
@@ -736,84 +749,6 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
         </>
       )}
 
-      {/* SECCIÓN: OBJETIVOS KPI */}
-      <section className={`p-10 rounded-[4rem] border shadow-2xl flex flex-col transition-colors ${isAdminMode ? 'bg-purple-950/40 border-purple-800 text-white' : 'bg-white border-slate-100'}`}>
-         <div className="flex items-center gap-4 mb-8">
-            <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center shadow-inner">
-               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-            </div>
-            <div>
-               <h2 className="text-2xl font-black uppercase tracking-tighter text-purple-600">Objetivos KPI</h2>
-               <p className="text-[14px] font-black uppercase tracking-widest opacity-50">
-                 {selectedArea === 'TOP 60' ? 'Metas de rendimiento del taller' : 'Gestionados por la Tabla Maestra TOP 60'}
-               </p>
-            </div>
-         </div>
-
-         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-             <div className={`p-6 rounded-[2rem] border ${isAdminMode ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-100'}`}>
-               <label className="text-[13px] font-black uppercase tracking-widest opacity-60 mb-2 block">Disponibilidad (%)</label>
-               {isAdminMode && selectedArea === 'TOP 60' ? (
-                 <input 
-                   type="number" 
-                   value={oeeObjectives.disponibilidad} 
-                   onChange={(e) => {
-                     const val = parseFloat(e.target.value) || 0;
-                     const newObj = { ...oeeObjectives, disponibilidad: val };
-                     newObj.productividad = parseFloat(((newObj.disponibilidad * newObj.rendimiento * newObj.calidad) / 10000).toFixed(1));
-                     setOeeObjectives(newObj);
-                   }}
-                   className="w-full bg-white/10 border-2 border-white/20 rounded-xl px-4 py-3 text-lg font-black text-center outline-none focus:border-purple-500 transition-all"
-                 />
-               ) : (
-                 <div className="text-2xl font-black text-center">{oeeObjectives.disponibilidad}%</div>
-               )}
-            </div>
-            <div className={`p-6 rounded-[2rem] border ${isAdminMode ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-100'}`}>
-               <label className="text-[13px] font-black uppercase tracking-widest opacity-60 mb-2 block">Rendimiento (%)</label>
-               {isAdminMode && selectedArea === 'TOP 60' ? (
-                 <input 
-                   type="number" 
-                   value={oeeObjectives.rendimiento} 
-                   onChange={(e) => {
-                     const val = parseFloat(e.target.value) || 0;
-                     const newObj = { ...oeeObjectives, rendimiento: val };
-                     newObj.productividad = parseFloat(((newObj.disponibilidad * newObj.rendimiento * newObj.calidad) / 10000).toFixed(1));
-                     setOeeObjectives(newObj);
-                   }}
-                   className="w-full bg-white/10 border-2 border-white/20 rounded-xl px-4 py-3 text-lg font-black text-center outline-none focus:border-purple-500 transition-all"
-                 />
-               ) : (
-                 <div className="text-2xl font-black text-center">{oeeObjectives.rendimiento}%</div>
-               )}
-            </div>
-            <div className={`p-6 rounded-[2rem] border ${isAdminMode ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-100'}`}>
-               <label className="text-[13px] font-black uppercase tracking-widest opacity-60 mb-2 block">Calidad (%)</label>
-               {isAdminMode && selectedArea === 'TOP 60' ? (
-                 <input 
-                   type="number" 
-                   value={oeeObjectives.calidad} 
-                   onChange={(e) => {
-                     const val = parseFloat(e.target.value) || 0;
-                     const newObj = { ...oeeObjectives, calidad: val };
-                     newObj.productividad = parseFloat(((newObj.disponibilidad * newObj.rendimiento * newObj.calidad) / 10000).toFixed(1));
-                     setOeeObjectives(newObj);
-                   }}
-                   className="w-full bg-white/10 border-2 border-white/20 rounded-xl px-4 py-3 text-lg font-black text-center outline-none focus:border-purple-500 transition-all"
-                 />
-               ) : (
-                 <div className="text-2xl font-black text-center">{oeeObjectives.calidad}%</div>
-               )}
-            </div>
-            <div className={`p-6 rounded-[2rem] border bg-indigo-50/30 border-indigo-100/20`}>
-               <label className="text-[13px] font-black uppercase tracking-widest text-indigo-400 mb-2 block">Productividad (%)</label>
-               <div className="text-2xl font-black text-center text-indigo-600">
-                 {((oeeObjectives.disponibilidad * oeeObjectives.rendimiento * oeeObjectives.calidad) / 10000).toFixed(1)}%
-               </div>
-               <p className="text-[10px] font-bold text-indigo-300 uppercase text-center mt-1">Autocalculado (D x R x C)</p>
-            </div>
-         </div>
-      </section>
 
       {/* SECCIÓN: MAESTRO DE TAREAS */}
       <section className={`p-10 rounded-[4rem] border shadow-2xl flex flex-col min-h-[600px] transition-colors ${isAdminMode ? 'bg-slate-900 border-indigo-800 text-white' : 'bg-white border-slate-100'}`}>

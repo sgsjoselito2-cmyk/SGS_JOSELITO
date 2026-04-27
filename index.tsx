@@ -40,9 +40,9 @@ if (!rootElement) {
   const safetyTimeout = setTimeout(() => {
     if (rootElement.innerHTML.includes('Iniciando Joselito Cloud')) {
       console.error("Joselito App: Safety timeout hit.");
-      rootElement.innerHTML = `<div style="padding:50px; text-align:center; font-family:sans-serif; background:white; height:100vh;"><h1>TIEMPO DE ESPERA AGOTADO</h1><p>La aplicación tarda demasiado en cargar. Revisa la consola (F12).</p><button onclick="location.reload()">Reintentar</button></div>`;
+      rootElement.innerHTML = `<div style="padding:50px; text-align:center; font-family:sans-serif; background:white; height:100vh;"><h1>TIEMPO DE ESPERA AGOTADO</h1><p>La aplicación tarda demasiado en cargar. Reiva la conexión o refresca página.</p><button onclick="location.reload()">Reintentar</button></div>`;
     }
-  }, 8000);
+  }, 15000);
 
   try {
     const root = createRoot(rootElement);

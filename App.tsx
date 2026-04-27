@@ -15,7 +15,7 @@ import GlobalHelpModal from './components/GlobalHelpModal';
 import ConnectionHelpModal from './components/ConnectionHelpModal';
 import Login from './components/Login';
 import UserManager from './components/UserManager';
-import { SalaBlancaDashboard, EnvasadoDashboard, ExpedicionesDashboard } from './components/SalaBlancaDashboard';
+import { SalaBlancaDashboard, EnvasadoDashboard, ExpedicionesDashboard, MovimientosDashboard } from './components/SalaBlancaDashboard';
 import { 
   Home, 
   ChevronLeft, 
@@ -37,7 +37,7 @@ import { Activity, MasterSpeed, IncidenceMaster, TaskType, OEEObjectives, User }
 import { getInitialMasterSpeeds, getInitialOperarios, getInitialIncidenceMaster, INITIAL_OEE_OBJECTIVES, AREA_NAMES, INITIAL_ACTION_PLAN_TOP15, JOSELITO_LOGO } from './constants';
 import { supabase, isConfigured, debugConfig } from './lib/supabase';
 import { Session } from '@supabase/supabase-js';
-import { calcDuration } from './src/utils.ts';
+import { calcDuration } from './src/utils';
 
 interface Toast {
   id: string;
@@ -117,12 +117,14 @@ const App: React.FC = () => {
         // Si es histórico o cola de sincronización, podemos podarlo
         if (key.includes('history') || key === 'zitron_sync_queue') {
           try {
-            const data = JSON.parse(value);
-            if (Array.isArray(data)) {
-              // Mantener solo los últimos 100 elementos para liberar espacio
-              const pruned = data.slice(-100);
-              localStorage.setItem(key, JSON.stringify(pruned));
-              return true;
+            if (value && value !== 'undefined' && value !== 'null') {
+              const data = JSON.parse(value);
+              if (Array.isArray(data)) {
+                // Mantener solo los últimos 100 elementos para liberar espacio
+                const pruned = data.slice(-100);
+                localStorage.setItem(key, JSON.stringify(pruned));
+                return true;
+              }
             }
           } catch (e2) {
             console.error("Failed to prune data for localStorage:", e2);
@@ -148,6 +150,18 @@ const App: React.FC = () => {
       }
       console.error(`Error saving to localStorage [${key}]:`, e);
       return false;
+    }
+  }, []);
+
+  // Global safeParse helper
+  const safeParse = useCallback((key: string, defaultValue: any) => {
+    try {
+      const value = localStorage.getItem(key);
+      if (!value || value === 'undefined' || value === 'null') return defaultValue;
+      return JSON.parse(value);
+    } catch (e) {
+      console.warn(`Error parsing ${key}:`, e);
+      return defaultValue;
     }
   }, []);
   const [lastConnectionError, setLastConnectionError] = useState<string | null>(null);
@@ -176,14 +190,14 @@ const App: React.FC = () => {
     filter?: { column: string; value?: any };
     timestamp: number;
   }[]>(() => {
-    try {
-      const saved = localStorage.getItem('zitron_sync_queue');
-      if (saved) {
+    const saved = localStorage.getItem('zitron_sync_queue');
+    if (saved && saved !== 'undefined' && saved !== 'null') {
+      try {
         const parsed = JSON.parse(saved);
         return Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        console.warn("Error parsing sync queue:", e);
       }
-    } catch (e) {
-      console.warn("Error parsing sync queue:", e);
     }
     return [];
   });
@@ -244,7 +258,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     console.log("App: Supabase Config Status:", isConfigured ? "✅" : "❌");
-    console.log("App: Debug Config:", debugConfig);
   }, []);
 
   useEffect(() => {
@@ -679,7 +692,7 @@ const App: React.FC = () => {
             fetchAll(supabase.from('activities').select('*')),
             fetchAll(supabase.from('history').select('*').gte('fecha', requiredLimit).order('fecha', { ascending: false })),
             supabase.from('operarios').select('*').order('nombre'),
-            supabase.from('oee_objectives').select('*').order('validFrom', { ascending: false }),
+            supabase.from('oee_objectives').select('*').order('valid_from', { ascending: false }),
             fetchAll(supabase.from('top60_seguridad').select('*').gte('fecha', requiredLimit).order('fecha', { ascending: false })),
             fetchAll(supabase.from('top60_rrhh').select('*').gte('fecha', requiredLimit).order('fecha', { ascending: false })),
             fetchAll(supabase.from('top60_ausentismo').select('*').gte('fecha', requiredLimit).order('fecha', { ascending: false })),
@@ -711,7 +724,23 @@ const App: React.FC = () => {
           if (selectedArea === 'sb-loncheado') {
             try {
               const { data: mermasData } = await supabase.from('mermas').select('*').eq('area', 'sb-loncheado').order('fecha', { ascending: false });
-              if (mermasData) setMermas(mermasData);
+              if (mermasData) {
+                // Map snake_case to camelCase for the app
+                const mappedMermas = mermasData.map((m: any) => ({
+                  ...m,
+                  kgEntrada: m.kg_entrada,
+                  kgTacos: m.kg_tacos,
+                  kgPieles: m.kg_pieles,
+                  kgHueco: m.kg_hueco,
+                  mediaCombi: m.media_combi,
+                  nEnvases: m.n_envases,
+                  kgSalida: m.kg_salida,
+                  kgMerma: m.kg_merma,
+                  pctMerma1: m.pct_merma1,
+                  pctMerma2: m.pct_merma2
+                }));
+                setMermas(mappedMermas);
+              }
             } catch (e) { console.warn('mermas fetch failed', e); }
           }
 
@@ -758,7 +787,12 @@ const App: React.FC = () => {
             objsRes.value.data.forEach((o: any) => {
               if (o.area) {
                 if (!grouped[o.area]) grouped[o.area] = [];
-                grouped[o.area].push(o);
+                // Map snake_case to CamelCase if they come from old DB or new standardized
+                grouped[o.area].push({
+                  ...o,
+                  indicator_id: o.indicator_id || o.indicatorId,
+                  valid_from: o.valid_from || o.validFrom
+                });
               }
             });
             aggregatedObjectives = grouped;
@@ -812,34 +846,26 @@ const App: React.FC = () => {
         aggregatedHistory = [];
         
         // Load global users and objectives from localStorage if fetch failed
-        try {
-          const localGlobalUsers = JSON.parse(localStorage.getItem('zitron_global_users') || '[]');
-          const localTop15Users = JSON.parse(localStorage.getItem('zitron_top15_users') || '[]');
-          const localTop60Users = JSON.parse(localStorage.getItem('zitron_top60_users') || '[]');
-          if (localGlobalUsers.length > 0) currentGlobalUsers = localGlobalUsers;
-          if (localTop15Users.length > 0) currentTop15Users = localTop15Users;
-          if (localTop60Users.length > 0) currentTop60Users = localTop60Users;
-          
-          const localGlobalObjectives = JSON.parse(localStorage.getItem('zitron_global_objectives') || '{}');
-          if (Object.keys(localGlobalObjectives).length > 0) {
-            aggregatedObjectives = localGlobalObjectives;
-            globalObjectivesRef.current = localGlobalObjectives;
-            setAllObjectives(localGlobalObjectives);
-          }
-        } catch (e) {
-          console.warn("Error loading global fallbacks:", e);
+        const localGlobalUsers = safeParse('zitron_global_users', []);
+        const localTop15Users = safeParse('zitron_top15_users', []);
+        const localTop60Users = safeParse('zitron_top60_users', []);
+        if (localGlobalUsers.length > 0) currentGlobalUsers = localGlobalUsers;
+        if (localTop15Users.length > 0) currentTop15Users = localTop15Users;
+        if (localTop60Users.length > 0) currentTop60Users = localTop60Users;
+        
+        const localGlobalObjectives = safeParse('zitron_global_objectives', {});
+        if (Object.keys(localGlobalObjectives).length > 0) {
+          aggregatedObjectives = localGlobalObjectives;
+          globalObjectivesRef.current = localGlobalObjectives;
+          setAllObjectives(localGlobalObjectives);
         }
 
         allAreas.forEach(area => {
           const p = `zitron_${area}_`;
-          try {
-            const localActs = JSON.parse(localStorage.getItem(`${p}activities`) || '[]');
-            const localHist = JSON.parse(localStorage.getItem(`${p}history`) || '[]');
-            if (Array.isArray(localActs)) aggregatedActivities = [...aggregatedActivities, ...localActs];
-            if (Array.isArray(localHist)) aggregatedHistory = [...aggregatedHistory, ...localHist];
-          } catch (e) {
-            console.warn(`Error parsing local data for area ${area}:`, e);
-          }
+          const localActs = safeParse(`${p}activities`, []);
+          const localHist = safeParse(`${p}history`, []);
+          if (Array.isArray(localActs)) aggregatedActivities = [...aggregatedActivities, ...localActs];
+          if (Array.isArray(localHist)) aggregatedHistory = [...aggregatedHistory, ...localHist];
         });
       }
 
@@ -859,7 +885,7 @@ const App: React.FC = () => {
       // Combine global users assigned to this area with area-specific users
       const globalAssigned = Array.isArray(currentGlobalUsers) ? currentGlobalUsers.filter(u => u && u.areas?.includes(selectedArea)) : [];
 
-      if (selectedArea === 'TOP 15' || selectedArea === 'TOP 60') {
+      if (selectedArea === 'TOP 15' || selectedArea === 'TOP 60' || selectedArea === 'sala-blanca-dashboard' || selectedArea === 'envasado-dashboard' || selectedArea === 'expediciones-dashboard' || selectedArea === 'movimientos-dashboard') {
         localActivities = aggregatedActivities;
         localHistory = aggregatedHistory;
         console.log(`App: TOP view. Setting ${localHistory.length} records. Sample:`, localHistory.slice(0, 2));
@@ -875,29 +901,21 @@ const App: React.FC = () => {
         // But for safety, we can check if any user has area === selectedArea
         
         // Filter speeds and incidences
-        try {
-          const allSpeeds = JSON.parse(localStorage.getItem('zitron_all_speeds') || '[]');
-          localSpeeds = Array.isArray(allSpeeds) 
-            ? allSpeeds.filter((s: any) => s && s.area === selectedArea).map((s: any) => ({
-                ...s,
-                tiempoTeorico: s.tiempoTeorico !== undefined ? s.tiempoTeorico : s.tiempo_teorico
-              }))
-            : [];
-        } catch (e) {
-          localSpeeds = [];
-        }
+        const allSpeeds = safeParse('zitron_all_speeds', []);
+        localSpeeds = Array.isArray(allSpeeds) 
+          ? allSpeeds.filter((s: any) => s && s.area === selectedArea).map((s: any) => ({
+              ...s,
+              tiempoTeorico: s.tiempoTeorico !== undefined ? s.tiempoTeorico : s.tiempo_teorico
+            }))
+          : [];
 
-        try {
-          const allIncs = JSON.parse(localStorage.getItem('zitron_all_incidences') || '[]');
-          localIncidences = Array.isArray(allIncs) 
-            ? allIncs.filter((i: any) => i && i.area === selectedArea).map((i: any) => ({
-                ...i,
-                afectaCalidad: i.afectaCalidad !== undefined ? i.afectaCalidad : i.afecta_calidad
-              }))
-            : [];
-        } catch (e) {
-          localIncidences = [];
-        }
+        const allIncs = safeParse('zitron_all_incidences', []);
+        localIncidences = Array.isArray(allIncs) 
+          ? allIncs.filter((i: any) => i && i.area === selectedArea).map((i: any) => ({
+              ...i,
+              afectaCalidad: i.afectaCalidad !== undefined ? i.afectaCalidad : i.afecta_calidad
+            }))
+          : [];
       }
 
       // --- AREA SPECIFIC PATCHES ---
@@ -939,7 +957,11 @@ const App: React.FC = () => {
       const finalSpeeds = (Array.isArray(localSpeeds) && localSpeeds.length) ? localSpeeds : getInitialMasterSpeeds(selectedArea);
       const finalIncs = (Array.isArray(localIncidences) && localIncidences.length) ? localIncidences : getInitialIncidenceMaster(selectedArea);
       const finalOps = Array.isArray(localOperarios) ? localOperarios : [];
-      const finalObj = localObjectives.length > 0 ? localObjectives[0] : { ...INITIAL_OEE_OBJECTIVES, area: selectedArea };
+      
+      // Better selection of primary OEE objective: most recent 'productividad' record
+      const sortedObjs = [...localObjectives].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+      const masterObj = sortedObjs.find(o => o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id);
+      const finalObj = masterObj || sortedObjs[0] || { ...INITIAL_OEE_OBJECTIVES, area: selectedArea };
 
       if (loadDataRequestIdRef.current !== requestId) return;
 
@@ -1026,14 +1048,7 @@ const App: React.FC = () => {
   // Load global users
   useEffect(() => {
     const loadGlobalUsers = async () => {
-      let localGlobal: User[] = [];
-
-      try {
-        const g = JSON.parse(localStorage.getItem('zitron_global_users') || '[]');
-        if (Array.isArray(g)) localGlobal = g;
-      } catch (e) {
-        console.warn("Error parsing local users:", e);
-      }
+      let localGlobal: User[] = safeParse('zitron_global_users', []);
 
       if (isConfigured) {
         try {
@@ -1438,13 +1453,13 @@ const App: React.FC = () => {
     
     setAllObjectives(prev => {
       const current = prev[selectedArea] || [];
-      const idx = current.findIndex(o => o.validFrom === newObj.validFrom);
+      const idx = current.findIndex(o => o.valid_from === newObj.valid_from);
       let updated;
       if (idx >= 0) {
         updated = [...current];
         updated[idx] = newObj;
       } else {
-        updated = [newObj, ...current].sort((a, b) => b.validFrom.localeCompare(a.validFrom));
+        updated = [newObj, ...current].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
       }
       safeLocalStorageSetItem(`zitron_${selectedArea}_objectives`, JSON.stringify(updated));
       return { ...prev, [selectedArea]: updated };
@@ -1454,41 +1469,69 @@ const App: React.FC = () => {
     executeOrQueue({
       table: 'oee_objectives',
       type: 'upsert',
-      data: [{...objWithoutId, area: selectedArea}],
-      filter: { column: 'area,validFrom', value: null } // onConflict handled by upsert
+      data: [{
+        ...objWithoutId, 
+        area: selectedArea,
+        indicator_id: newObj.indicator_id,
+        valid_from: newObj.valid_from
+      }],
+      filter: { column: 'id', value: null } // onConflict handled by upsert
     });
   }, [selectedArea, executeOrQueue]);
 
-  const handleUpdateAllObjectives = useCallback(async (objectivesMap: Record<string, OEEObjectives>, validFrom: string) => {
+  const handleUpdateAllObjectives = useCallback(async (objectivesMap: Record<string, OEEObjectives>, valid_from: string) => {
     const toUpsert: any[] = [];
     
     setAllObjectives(prev => {
       const next = { ...prev };
-      Object.entries(objectivesMap).forEach(([area, obj]) => {
-        // Ensure numeric values
+      // Regroup objectives by their actual area ID (not the composite map key)
+      Object.values(objectivesMap).forEach((obj) => {
+        const areaId = obj.area;
+        if (!areaId) return;
+
+        // Ensure numeric values and proper keys
         const { id, ...rest } = obj;
-        const newObj = { 
-          ...rest, 
-          area, 
-          validFrom,
+        const newObj: OEEObjectives = { 
+          ...rest,
+          area: areaId,
+          valid_from,
           disponibilidad: parseFloat(String(obj.disponibilidad)) || 0,
           rendimiento: parseFloat(String(obj.rendimiento)) || 0,
           calidad: parseFloat(String(obj.calidad)) || 0,
           productividad: parseFloat(String(obj.productividad)) || 0,
           objetivo: parseFloat(String(obj.objetivo)) || 0
         };
-        const current = next[area] || [];
-        const idx = current.findIndex(o => o.validFrom === validFrom);
+
+        const current = next[areaId] || [];
+        // Unique check: same area, same indicator_id, same valid_from
+        const idx = current.findIndex(o => o.valid_from === valid_from && (o.indicator_id === obj.indicator_id));
+        
         let updated;
         if (idx >= 0) {
           updated = [...current];
           updated[idx] = newObj;
         } else {
-          updated = [newObj, ...current].sort((a, b) => b.validFrom.localeCompare(a.validFrom));
+          updated = [newObj, ...current].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
         }
-        next[area] = updated;
-        safeLocalStorageSetItem(`zitron_${area}_objectives`, JSON.stringify(updated));
-        toUpsert.push(newObj);
+        
+        next[areaId] = updated;
+        safeLocalStorageSetItem(`zitron_${areaId}_objectives`, JSON.stringify(updated));
+        
+        // Prepare for DB upsert - MUST be snake_case
+        toUpsert.push({
+          area: areaId,
+          valid_from: valid_from,
+          indicator_id: obj.indicator_id || null,
+          disponibilidad: newObj.disponibilidad,
+          rendimiento: newObj.rendimiento,
+          calidad: newObj.calidad,
+          productividad: newObj.productividad,
+          objetivo: newObj.objetivo,
+          merma1: obj.merma1 || 0,
+          merma2: obj.merma2 || 0,
+          subproducto: obj.subproducto || 0,
+          pph: obj.pph || 0
+        });
       });
       return next;
     });
@@ -1497,7 +1540,7 @@ const App: React.FC = () => {
       table: 'oee_objectives',
       type: 'upsert',
       data: toUpsert,
-      filter: { column: 'area,validFrom' }
+      filter: { column: 'id' }
     }).then(success => {
       if (success) addToast("OBJETIVOS GUARDADOS EN LA NUBE", "success");
       else addToast("OBJETIVOS GUARDADOS LOCALMENTE (PENDIENTE SUBIR)", "info");
@@ -1507,7 +1550,8 @@ const App: React.FC = () => {
       setOeeObjectives({ 
         ...objectivesMap[selectedArea], 
         area: selectedArea, 
-        validFrom,
+        valid_from,
+        indicator_id: objectivesMap[selectedArea].indicator_id,
         disponibilidad: parseFloat(String(objectivesMap[selectedArea].disponibilidad)) || 0,
         rendimiento: parseFloat(String(objectivesMap[selectedArea].rendimiento)) || 0,
         calidad: parseFloat(String(objectivesMap[selectedArea].calidad)) || 0,
@@ -1528,9 +1572,15 @@ const App: React.FC = () => {
 
     try {
       const updatedActs = activities.map(openAct => {
-        const shouldClose = cierre && (
-          (!cierre.idsToClose && act.operarios.some(u => openAct.operarios?.includes(u)) && !openAct.horaFin) ||
-          (cierre.idsToClose && cierre.idsToClose.includes(openAct.id))
+        const selectedOperarios = act.operarios || [];
+        const overlaps = selectedOperarios.some((u: string) => (openAct.operarios || []).includes(u));
+        const shouldClose = !openAct.horaFin && (
+          (cierre && (
+            (!cierre.idsToClose && overlaps) ||
+            (cierre.idsToClose && cierre.idsToClose.includes(openAct.id))
+          )) ||
+          (act.formato && overlaps) || // Auto-close on new start
+          (cierre && !cierre.idsToClose && overlaps) // Close on "Parar" click
         );
 
         if (shouldClose) {
@@ -1572,37 +1622,39 @@ const App: React.FC = () => {
 
       let finalActs = [...updatedActs];
       if (act.formato) {
-        const newAct = {
-          id: `act-${selectedArea}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-          operarios: act.operarios,
-          formato: act.formato,
-          tipoTarea: act.tipoTarea,
-          horaInicio: timeStr,
-          fecha: dateStr,
-          area: selectedArea,
-          afectaCalidad: act.afectaCalidad,
-          tiempoTeoricoManual: act.tiempoTeoricoManual
-        };
-        finalActs.push(newAct);
-        // Only send fields that exist in the DB table
-        const newActForDB = {
-          id: newAct.id,
-          operarios: newAct.operarios || [],
-          formato: newAct.formato || '',
-          tipoTarea: newAct.tipoTarea || '',
-          horaInicio: newAct.horaInicio || '',
-          horaFin: null,
-          duracionMin: null,
-          cantidad: 0,
-          comentarios: '',
-          fecha: newAct.fecha || '',
-          area: newAct.area,
-          tiempoTeoricoManual: newAct.tiempoTeoricoManual || 0
-        };
-        executeOrQueue({
-          table: 'activities',
-          type: 'insert',
-          data: newActForDB
+        (act.operarios || []).forEach((op: string) => {
+          const newAct = {
+            id: `act-${selectedArea}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            operarios: [op],
+            formato: act.formato,
+            tipoTarea: act.tipoTarea,
+            horaInicio: timeStr,
+            fecha: dateStr,
+            area: selectedArea,
+            afectaCalidad: act.afectaCalidad,
+            tiempoTeoricoManual: act.tiempoTeoricoManual
+          };
+          finalActs.push(newAct);
+          // Only send fields that exist in the DB table
+          const newActForDB = {
+            id: newAct.id,
+            operarios: newAct.operarios || [],
+            formato: newAct.formato || '',
+            tipoTarea: newAct.tipoTarea || '',
+            horaInicio: newAct.horaInicio || '',
+            horaFin: null,
+            duracionMin: null,
+            cantidad: 0,
+            comentarios: '',
+            fecha: newAct.fecha || '',
+            area: newAct.area,
+            tiempoTeoricoManual: newAct.tiempoTeoricoManual || 0
+          };
+          executeOrQueue({
+            table: 'activities',
+            type: 'insert',
+            data: newActForDB
+          });
         });
       }
 
@@ -1688,17 +1740,22 @@ const App: React.FC = () => {
 
       // Add new activities
       if (newActs && newActs.length > 0) {
-        const toInsert = newActs.map((act, index) => ({
-          id: `act-${selectedArea}-${Date.now()}-${index}-${Math.random().toString(36).substring(2, 9)}`,
-          operarios: act.operarios,
-          formato: act.formato,
-          tipoTarea: act.tipoTarea,
-          horaInicio: timeStr,
-          fecha: dateStr,
-          area: selectedArea,
-          afectaCalidad: act.afectaCalidad,
-          tiempoTeoricoManual: act.tiempoTeoricoManual
-        }));
+        const toInsert: any[] = [];
+        newActs.forEach((act, actIdx) => {
+          (act.operarios || []).forEach((op: string, opIdx: number) => {
+            toInsert.push({
+              id: `act-${selectedArea}-${Date.now()}-${actIdx}-${opIdx}-${Math.random().toString(36).substring(2, 9)}`,
+              operarios: [op],
+              formato: act.formato,
+              tipoTarea: act.tipoTarea,
+              horaInicio: timeStr,
+              fecha: dateStr,
+              area: selectedArea,
+              afectaCalidad: act.afectaCalidad,
+              tiempoTeoricoManual: act.tiempoTeoricoManual
+            });
+          });
+        });
         
         finalActs = [...finalActs, ...toInsert];
         const toInsertForDB = toInsert.map((newAct) => ({
@@ -2308,7 +2365,10 @@ const App: React.FC = () => {
             {activeTab === 'work' && selectedArea === 'expediciones-dashboard' && (
               <ExpedicionesDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} />
             )}
-            {activeTab === 'work' && selectedArea !== 'sala-blanca-dashboard' && selectedArea !== 'envasado-dashboard' && selectedArea !== 'expediciones-dashboard' && (
+            {activeTab === 'work' && selectedArea === 'movimientos-dashboard' && (
+              <MovimientosDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} />
+            )}
+            {activeTab === 'work' && selectedArea !== 'sala-blanca-dashboard' && selectedArea !== 'envasado-dashboard' && selectedArea !== 'expediciones-dashboard' && selectedArea !== 'movimientos-dashboard' && (
               <>
                 {selectedArea === 'TOP 15' && (
                   <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4 sm:mb-8 animate-in slide-in-from-top-4 duration-500">
@@ -2527,8 +2587,12 @@ const App: React.FC = () => {
         }}
         onForceRefresh={() => {
           loadData(true);
+          processSyncQueue();
           setIsConnectionHelpOpen(false);
-          addToast("ACTUALIZANDO DATOS DESDE LA NUBE...", "info");
+          addToast("ACTUALIZANDO TODA LA SINCRONIZACIÓN...", "info");
+        }}
+        onRetrySync={() => {
+          processSyncQueue();
         }}
         onTestDirectConnection={async () => {
           try {
@@ -2572,25 +2636,25 @@ const App: React.FC = () => {
 
       {/* PIN Modal for Global User Config */}
       {showGlobalPinModal && (
-        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
-          <div className={`bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm border-8 ${globalPinError ? 'border-red-100 animate-shake' : 'border-indigo-50'}`}>
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Users className="w-8 h-8" />
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[10000] flex items-center justify-center p-4 overflow-y-auto">
+          <div className={`bg-white p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl w-full max-w-sm border-[6px] sm:border-8 ${globalPinError ? 'border-red-100 animate-shake' : 'border-indigo-50'} max-h-[90vh] overflow-y-auto`}>
+            <div className="text-center mb-6 sm:mb-8">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Users className="w-7 h-7 sm:w-8 sm:h-8" />
               </div>
               <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Gestión de Personas</h3>
-              <p className="text-[14px] font-bold text-slate-400 uppercase tracking-widest mt-1">Introduce PIN de Jefe Taller o Superior</p>
+              <p className="text-[13px] sm:text-[14px] font-bold text-slate-400 uppercase tracking-widest mt-1">Introduce PIN de Jefe Taller o Superior</p>
             </div>
             
-            <div className="flex justify-center gap-3 mb-8">
+            <div className="flex justify-center gap-2 sm:gap-3 mb-6 sm:mb-8">
               {[0, 1, 2, 3].map((i) => (
-                <div key={i} className={`w-12 h-16 rounded-2xl border-4 flex items-center justify-center text-2xl font-black transition-all ${globalPin.length > i ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-slate-100 bg-slate-50 text-slate-300'}`}>
+                <div key={i} className={`w-10 h-14 sm:w-12 sm:h-16 rounded-xl sm:rounded-2xl border-4 flex items-center justify-center text-xl sm:text-2xl font-black transition-all ${globalPin.length > i ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-slate-100 bg-slate-50 text-slate-300'}`}>
                   {globalPin.length > i ? '●' : ''}
                 </div>
               ))}
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 'C', 0, 'X'].map((num) => (
                 <button
                   key={num}
@@ -2599,7 +2663,7 @@ const App: React.FC = () => {
                     else if (num === 'X') setShowGlobalPinModal(false);
                     else if (globalPin.length < 4) setGlobalPin(prev => prev + num);
                   }}
-                  className={`h-16 rounded-2xl font-black text-lg transition-all ${num === 'X' ? 'bg-red-50 text-red-500 hover:bg-red-100' : num === 'C' ? 'bg-slate-100 text-slate-500 hover:bg-slate-200' : 'bg-slate-50 text-slate-700 hover:bg-slate-100 active:scale-95'}`}
+                  className={`h-14 sm:h-16 rounded-xl sm:rounded-2xl font-black text-lg transition-all ${num === 'X' ? 'bg-red-50 text-red-500 hover:bg-red-100' : num === 'C' ? 'bg-slate-100 text-slate-500 hover:bg-slate-200' : 'bg-slate-50 text-slate-700 hover:bg-slate-100 active:scale-95'}`}
                 >
                   {num}
                 </button>
@@ -2611,25 +2675,25 @@ const App: React.FC = () => {
 
       {/* PIN Modal for TOP 60 Preparacion */}
       {showTop60PinModal && (
-        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
-          <div className={`bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm border-8 ${top60PinError ? 'border-red-100 animate-shake' : 'border-blue-50'}`}>
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Lock className="w-8 h-8" />
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[10000] flex items-center justify-center p-4 overflow-y-auto">
+          <div className={`bg-white p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl w-full max-w-sm border-[6px] sm:border-8 ${top60PinError ? 'border-red-100 animate-shake' : 'border-blue-50'} max-h-[90vh] overflow-y-auto`}>
+            <div className="text-center mb-6 sm:mb-8">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Lock className="w-7 h-7 sm:w-8 sm:h-8" />
               </div>
               <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Acceso TOP 60</h3>
-              <p className="text-[14px] font-bold text-slate-400 uppercase tracking-widest mt-1">Introduce el PIN de Director Operaciones</p>
+              <p className="text-[13px] sm:text-[14px] font-bold text-slate-400 uppercase tracking-widest mt-1">Introduce el PIN de Director Operaciones</p>
             </div>
             
-            <div className="flex justify-center gap-3 mb-8">
+            <div className="flex justify-center gap-2 sm:gap-3 mb-6 sm:mb-8">
               {[0, 1, 2, 3].map((i) => (
-                <div key={i} className={`w-12 h-16 rounded-2xl border-4 flex items-center justify-center text-2xl font-black transition-all ${top60Pin.length > i ? 'border-blue-600 bg-blue-50 text-blue-600' : 'border-slate-100 bg-slate-50 text-slate-300'}`}>
+                <div key={i} className={`w-10 h-14 sm:w-12 sm:h-16 rounded-xl sm:rounded-2xl border-4 flex items-center justify-center text-xl sm:text-2xl font-black transition-all ${top60Pin.length > i ? 'border-blue-600 bg-blue-50 text-blue-600' : 'border-slate-100 bg-slate-50 text-slate-300'}`}>
                   {top60Pin.length > i ? '●' : ''}
                 </div>
               ))}
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 'C', 0, 'X'].map((num) => (
                 <button
                   key={num}
@@ -2638,7 +2702,7 @@ const App: React.FC = () => {
                     else if (num === 'X') setShowTop60PinModal(false);
                     else if (top60Pin.length < 4) setTop60Pin(prev => prev + num);
                   }}
-                  className={`h-16 rounded-2xl font-black text-lg transition-all ${num === 'X' ? 'bg-red-50 text-red-500 hover:bg-red-100' : num === 'C' ? 'bg-slate-100 text-slate-500 hover:bg-slate-200' : 'bg-slate-50 text-slate-700 hover:bg-slate-100 active:scale-95'}`}
+                  className={`h-14 sm:h-16 rounded-xl sm:rounded-2xl font-black text-lg transition-all ${num === 'X' ? 'bg-red-50 text-red-500 hover:bg-red-100' : num === 'C' ? 'bg-slate-100 text-slate-500 hover:bg-slate-200' : 'bg-slate-50 text-slate-700 hover:bg-slate-100 active:scale-95'}`}
                 >
                   {num}
                 </button>

@@ -62,7 +62,12 @@ CREATE TABLE IF NOT EXISTS oee_objectives (
     calidad NUMERIC NOT NULL,
     productividad NUMERIC NOT NULL,
     objetivo NUMERIC DEFAULT 0,
-    validFrom DATE NOT NULL,
+    merma1 NUMERIC DEFAULT 0,
+    merma2 NUMERIC DEFAULT 0,
+    subproducto NUMERIC DEFAULT 0,
+    pph NUMERIC DEFAULT 0,
+    indicator_id TEXT,
+    valid_from DATE NOT NULL,
     lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -131,6 +136,8 @@ CREATE TABLE IF NOT EXISTS master_speeds (
     area TEXT NOT NULL,
     formato TEXT NOT NULL,
     tiempoTeorico INTEGER NOT NULL,
+    peso NUMERIC DEFAULT 0,
+    unidad TEXT DEFAULT 'unidades',
     lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -157,8 +164,12 @@ BEGIN
         ALTER TABLE incidence_master RENAME COLUMN requiere_maquina TO requiereMaquina;
     END IF;
 
-    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='oee_objectives' AND column_name='valid_from') THEN
-        ALTER TABLE oee_objectives RENAME COLUMN valid_from TO validFrom;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='oee_objectives' AND column_name='validFrom') THEN
+        ALTER TABLE oee_objectives RENAME COLUMN validFrom TO valid_from;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='oee_objectives' AND column_name='indicatorId') THEN
+        ALTER TABLE oee_objectives RENAME COLUMN indicatorId TO indicator_id;
     END IF;
 
     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='top60_seguridad' AND column_name='fecha_lanzamiento') THEN
@@ -225,6 +236,25 @@ CREATE TABLE IF NOT EXISTS authorized_users (
 -- Insert default authorized user
 INSERT INTO authorized_users (email) VALUES ('sgsjoselito2@gmail.com') ON CONFLICT (email) DO NOTHING;
 
+-- 20. Mermas Table
+CREATE TABLE IF NOT EXISTS mermas (
+    id TEXT PRIMARY KEY,
+    fecha DATE NOT NULL,
+    area TEXT NOT NULL,
+    formato TEXT NOT NULL,
+    kg_entrada NUMERIC DEFAULT 0,
+    kg_tacos NUMERIC DEFAULT 0,
+    kg_pieles NUMERIC DEFAULT 0,
+    kg_hueco NUMERIC DEFAULT 0,
+    media_combi NUMERIC DEFAULT 0,
+    n_envases NUMERIC DEFAULT 0,
+    kg_salida NUMERIC DEFAULT 0,
+    kg_merma NUMERIC DEFAULT 0,
+    pct_merma1 NUMERIC DEFAULT 0,
+    pct_merma2 NUMERIC DEFAULT 0,
+    lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Disable Row Level Security (RLS) for all tables
 ALTER TABLE activities DISABLE ROW LEVEL SECURITY;
 ALTER TABLE history DISABLE ROW LEVEL SECURITY;
@@ -241,6 +271,7 @@ ALTER TABLE app_passwords DISABLE ROW LEVEL SECURITY;
 ALTER TABLE top60_actionplan DISABLE ROW LEVEL SECURITY;
 ALTER TABLE top15_actionplan DISABLE ROW LEVEL SECURITY;
 ALTER TABLE authorized_users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE mermas DISABLE ROW LEVEL SECURITY;
 
 -- Grant all privileges to anon and authenticated roles
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon;

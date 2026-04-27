@@ -47,8 +47,8 @@ export interface OEEObjectives {
   subproducto?: number;
   pph?: number;
   area: string;
-  indicatorId?: string; // To distinguish between OEE, Merma, etc.
-  validFrom: string; // ISO Date string (YYYY-MM-DD)
+  indicator_id?: string; // Standardized to snake_case
+  valid_from: string; // ISO Date string (YYYY-MM-DD)
 }
 
 export interface KPIStats {
