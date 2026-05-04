@@ -106,37 +106,7 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
     return [yr - 1, yr].map(y => ({ label: y.toString(), key: y.toString() }));
   }, [selectedDate, view]);
 
-  // Merma stats - só para loncheado
-  const calcMermaStats = (records: any[]) => {
-    if (!records || records.length === 0) return { pctMerma1: '', pctMerma2: '' };
-    const valid = records.filter(r => r.kgEntrada > 0);
-    if (valid.length === 0) return { pctMerma1: '', pctMerma2: '' };
-    const avg1 = valid.reduce((s: number, r: any) => s + Number(r.pctMerma1 || 0), 0) / valid.length;
-    const valid2 = records.filter((r: any) => (r.kgMerma + r.kgTacos + r.kgPieles + r.kgHueco + r.kgSalida) > 0);
-    const avg2 = valid2.length > 0 ? valid2.reduce((s: number, r: any) => s + Number(r.pctMerma2 || 0), 0) / valid2.length : 0;
-    return { pctMerma1: avg1.toFixed(1), pctMerma2: avg2.toFixed(1) };
-  };
-
   const hasLoncheado = areas.some(a => a.id === 'sb-loncheado');
-
-  const mermaScorecard = useMemo(() => {
-    if (!hasLoncheado) return null;
-    const today = new Date(selectedDate);
-
-    const cols = columns.map(col => {
-      let data: any[];
-      if (view === 'daily') {
-        data = mermas.filter(m => m.fecha === col.key);
-      } else if (view === 'weekly') {
-        const [yr, w] = col.key.split('-W').map(Number);
-        data = mermas.filter(m => { if (!m.fecha) return false; const d = new Date(m.fecha); return d.getFullYear() === yr && getWeekNumber(d) === w; });
-      } else {
-        data = mermas.filter(m => m.fecha?.startsWith(col.key));
-      }
-      return { ...col, stats: calcMermaStats(data) };
-    });
-    return cols;
-  }, [mermas, columns, view, hasLoncheado]);
 
   const tableRows = useMemo(() => {
     const rows: any[] = [];
@@ -154,10 +124,7 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
         areaIndicators = [
           { id: 'disponibilidad', label: 'DISPONIBILIDAD (%)', objKey: 'disponibilidad' as const },
           { id: 'rendimiento',  label: 'RENDIMIENTO (%)',  objKey: 'rendimiento' as const },
-          { id: 'calidad',      label: 'CALIDAD (%)', objKey: 'calidad' as const },
-          { id: 'merma1',       label: '% MERMA 1',   objKey: 'merma' as const },
-          { id: 'merma2',       label: '% MERMA 2',   objKey: 'merma' as const },
-          { id: 'subproducto',  label: '% SUBPROD',   objKey: 'merma' as const }
+          { id: 'calidad',      label: 'CALIDAD (%)', objKey: 'calidad' as const }
         ];
       } else if (area.id === 'sb-empaquetado-loncheado') {
         areaIndicators = [
@@ -168,8 +135,24 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
         areaIndicators = [
           { id: 'pph', label: 'PPH', objKey: 'pph' }
         ];
-      } else if (area.id === 'env-envasado' || area.id === 'env-empaquetado') {
+      } else if (area.id === 'env-envasado') {
         areaIndicators = [
+          { id: 'pph', label: 'PPH ENVASADO', objKey: 'pph' as const },
+          { id: 'disponibilidad', label: 'DISPONIBILIDAD (%)', objKey: 'disponibilidad' as const },
+          { id: 'rendimiento',  label: 'RENDIMIENTO (%)',  objKey: 'rendimiento' as const },
+          { id: 'calidad',      label: 'CALIDAD (%)', objKey: 'calidad' as const }
+        ];
+      } else if (area.id === 'env-empaquetado') {
+        areaIndicators = [
+          { id: 'pph', label: 'PPH EMPAQUETADO', objKey: 'pph' as const },
+          { id: 'disponibilidad', label: 'DISPONIBILIDAD (%)', objKey: 'disponibilidad' as const },
+          { id: 'rendimiento',  label: 'RENDIMIENTO (%)',  objKey: 'rendimiento' as const },
+          { id: 'calidad',      label: 'CALIDAD (%)', objKey: 'calidad' as const }
+        ];
+      } else if (area.id === 'movimiento-jamones') {
+        areaIndicators = [
+          { id: 'pph_jamones', label: 'PPH JAMONES', objKey: 'pph_jamones' },
+          { id: 'pph_paletas', label: 'PPH PALETAS', objKey: 'pph_paletas' },
           { id: 'disponibilidad', label: 'DISPONIBILIDAD (%)', objKey: 'disponibilidad' as const },
           { id: 'rendimiento',  label: 'RENDIMIENTO (%)',  objKey: 'rendimiento' as const },
           { id: 'calidad',      label: 'CALIDAD (%)', objKey: 'calidad' as const }
@@ -179,8 +162,7 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
         areaIndicators = [
           { id: 'disponibilidad', label: 'DISPONIBILIDAD (%)', objKey: 'disponibilidad' as const },
           { id: 'rendimiento',  label: 'RENDIMIENTO (%)',  objKey: 'rendimiento' as const },
-          { id: 'calidad',      label: 'CALIDAD (%)', objKey: 'calidad' as const },
-          { id: 'productividad',    label: 'OEE (%)',   objKey: null } 
+          { id: 'calidad',      label: 'CALIDAD (%)', objKey: 'calidad' as const }
         ];
       }
 
@@ -218,12 +200,24 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
           const rowCols = columns.map(col => {
             let data: any[];
             if (view === 'daily') {
-              data = mermas.filter(m => m.fecha === col.key && m.area === area.id);
+              data = mermas.filter(m => {
+                const mFecha = typeof m.fecha === 'string' ? m.fecha.substring(0, 10) : '';
+                const mArea = (m.area || '').toLowerCase();
+                return mFecha === col.key && mArea === area.id.toLowerCase();
+              });
             } else if (view === 'weekly') {
               const [yr, w] = col.key.split('-W').map(Number);
-              data = mermas.filter(m => { if (!m.fecha || m.area !== area.id) return false; const d = new Date(m.fecha); return d.getFullYear() === yr && getWeekNumber(d) === w; });
+              data = mermas.filter(m => { 
+                const mArea = (m.area || '').toLowerCase();
+                if (!m.fecha || mArea !== area.id.toLowerCase()) return false; 
+                const d = new Date(m.fecha); 
+                return d.getFullYear() === yr && getWeekNumber(d) === w; 
+              });
             } else {
-              data = mermas.filter(m => m.fecha?.startsWith(col.key) && m.area === area.id);
+              data = mermas.filter(m => {
+                const mArea = (m.area || '').toLowerCase();
+                return m.fecha && m.fecha.startsWith(col.key) && mArea === area.id.toLowerCase();
+              });
             }
             
             // Calculate merma specifically for this col

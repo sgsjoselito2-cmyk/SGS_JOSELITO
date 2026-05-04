@@ -46,6 +46,10 @@ export interface OEEObjectives {
   merma2?: number;
   subproducto?: number;
   pph?: number;
+  pph_jamones?: number;
+  pph_paletas?: number;
+  pph_blister?: number;
+  pph_sin_blister?: number;
   area: string;
   indicator_id?: string; // Standardized to snake_case
   valid_from: string; // ISO Date string (YYYY-MM-DD)

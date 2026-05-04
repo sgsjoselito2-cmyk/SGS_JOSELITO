@@ -78,6 +78,20 @@ app.get("/api/db-check-v2", async (req, res) => {
   }
 });
 
+// Catch all for /api to return JSON 404 instead of HTML
+app.all("/api/*", (req, res) => {
+  res.status(404).json({ error: "API route not found" });
+});
+
+// Avoid returning HTML for Supabase-like routes that might be misdirected
+app.all(["/auth/v1/*", "/rest/v1/*", "/storage/v1/*"], (req, res) => {
+  res.status(404).json({ 
+    error: "Supabase route intercepted by backend", 
+    message: "Check your VITE_SUPABASE_URL configuration. It should not point to the application itself.",
+    receivedUrl: req.originalUrl
+  });
+});
+
 // Vite middleware for development
 if (process.env.NODE_ENV !== "production") {
   console.log("Starting Vite in middleware mode...");

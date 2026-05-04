@@ -60,6 +60,30 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Helper para parsear números de forma segura, eliminando separadores de miles
+  const safeParse = (val: string | number | undefined): number => {
+    if (val === undefined || val === null || val === '') return 0;
+    if (typeof val === 'number') return val;
+    // Eliminar separadores de miles (punto o coma seguidos de exactamente 3 dígitos)
+    // 2.000 -> 2000, 2,000 -> 2000
+    // También manejar el caso de 2.000,50 -> 2000.50 y luego normalizar la coma decimal
+    const str = val.toString().trim();
+    // 1. Eliminar cualquier espacio en blanco intermedio (ej: "2 000" -> "2000")
+    let clean = str.replace(/\s/g, '');
+    // 2. Manejar separadores de miles: si hay un punto o coma seguido de exactamente 3 dígitos al final o antes de otro no-dígito
+    // Ej: "2.000" -> "2000", "2,000" -> "2000", "2.000,50" -> "2000,50"
+    clean = clean.replace(/(\d)[.,](\d{3}($|\D))/g, '$1$2');
+    // 3. Normalizar la coma decimal a punto
+    clean = clean.replace(',', '.');
+    // 4. Si después de lo anterior queda más de un punto, probablemente el primero era de miles no detectado
+    if ((clean.match(/\./g) || []).length > 1) {
+      const parts = clean.split('.');
+      const last = parts.pop();
+      clean = parts.join('') + '.' + last;
+    }
+    return parseFloat(clean) || 0;
+  };
   
   // Estado para modales de parada/cierre múltiple
   const [showMultipleClosureModal, setShowMultipleClosureModal] = useState(false);
@@ -354,7 +378,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
   };
 
   const confirmClosure = () => {
-    const rawQty = parseFloat(closureQty) || 0;
+    const rawQty = safeParse(closureQty) || 0;
     const qty = Math.max(0, rawQty);
     const closureData = { cantidad: qty, comentarios: closureComments };
     if (pendingAction?.type === 'add') onAddActivity(pendingAction.payload, closureData);
@@ -589,39 +613,56 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       setValidationError('⚠️ Por favor, rellene todas las cantidades.');
       return;
     }
+
+    const totalQty = Object.values(shiftClosureData).reduce((sum, d) => sum + (safeParse(d.cantidad) || 0), 0);
+    if (totalQty === 0) {
+      setValidationError('⚠️ La cantidad tiene que ser diferente de 0');
+      return;
+    }
+
     const aggregated: Record<string, { cantidad: number, cantidadNok?: number }> = {};
     const mermasToSave: any[] = [];
     const fecha = shiftDate || new Date().toISOString().split('T')[0];
 
-    Object.entries(shiftClosureData).forEach(([formato, data]) => {
+    Object.entries(shiftClosureData).forEach(([formato, data], idx) => {
       aggregated[formato] = { 
-        cantidad: parseFloat(data.cantidad) || 0,
-        cantidadNok: parseFloat(data.cantidadNok || '0') || 0
+        cantidad: safeParse(data.cantidad) || 0,
+        cantidadNok: safeParse(data.cantidadNok || '0') || 0
       };
       // Guardar merma se loncheado e produção
-        if (selectedArea === 'sb-loncheado' && data.esProduccion && data.kgEntrada !== undefined) {
+        if (selectedArea === 'sb-loncheado' && data.esProduccion && data.kgEntrada !== undefined && data.kgEntrada !== '') {
           const formatInfo = masterSpeeds.find(ms => ms.formato === formato);
           const formatPeso = formatInfo?.peso || 0;
-          const cantOk = parseFloat(data.cantidad || '0') || 0;
-          const cantNok = parseFloat(data.cantidadNok || '0') || 0;
+          const cantOk = safeParse(data.cantidad || '0') || 0;
+          const cantNok = safeParse(data.cantidadNok || '0') || 0;
 
-          const kgEntrada = parseFloat(data.kgEntrada || '0') || 0;
-          const kgTacos = parseFloat(data.kgTacos || '0') || 0;
-          const kgPieles = parseFloat(data.kgPieles || '0') || 0;
-          const kgHueco = parseFloat(data.kgHueco || '0') || 0;
+          const kgEntrada = safeParse(data.kgEntrada || '0') || 0;
+          const kgTacos = safeParse(data.kgTacos || '0') || 0;
+          const kgPieles = safeParse(data.kgPieles || '0') || 0;
+          const kgHueco = safeParse(data.kgHueco || '0') || 0;
           const mediaCombi = formatPeso;
           const nEnvases = cantOk + cantNok;
           const kgSalida = nEnvases * mediaCombi;
           const kgMerma = kgEntrada - kgTacos - kgPieles - kgHueco - kgSalida;
           const pctMerma1 = kgEntrada > 0 ? (kgMerma / kgEntrada) * 100 : 0;
           const pctMerma2 = kgEntrada > 0 ? ((kgMerma + kgTacos + kgPieles + kgHueco) / kgEntrada) * 100 : 0;
+          
           mermasToSave.push({
-          id: `merma-${Date.now()}-${formato}`,
-          fecha, area: selectedArea, formato,
-          kgEntrada, kgTacos, kgPieles, kgHueco,
-          mediaCombi, nEnvases, kgSalida,
-          kgMerma, pctMerma1, pctMerma2
-        });
+            id: `merma-${Date.now()}-${idx}-${formato.replace(/\s+/g, '_')}`,
+            fecha, 
+            area: selectedArea, 
+            formato,
+            kgEntrada, 
+            kgTacos, 
+            kgPieles, 
+            kgHueco,
+            mediaCombi, 
+            nEnvases, 
+            kgSalida,
+            kgMerma, 
+            pctMerma1, 
+            pctMerma2
+          });
       }
     });
     executeFinalizeShift(aggregated, mermasToSave);
@@ -738,15 +779,15 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
               {Object.keys(shiftClosureData).map(formato => {
                 const d = shiftClosureData[formato];
                 const showMerma = isLoncheadoArea && d.esProduccion;
-                const kgEntrada = parseFloat(d.kgEntrada || '0') || 0;
-                const kgTacos = parseFloat(d.kgTacos || '0') || 0;
-                const kgPieles = parseFloat(d.kgPieles || '0') || 0;
-                const kgHueco = parseFloat(d.kgHueco || '0') || 0;
+                const kgEntrada = safeParse(d.kgEntrada || '0') || 0;
+                const kgTacos = safeParse(d.kgTacos || '0') || 0;
+                const kgPieles = safeParse(d.kgPieles || '0') || 0;
+                const kgHueco = safeParse(d.kgHueco || '0') || 0;
                 
                 const formatInfo = masterSpeeds.find(ms => ms.formato === formato);
                 const formatPeso = formatInfo?.peso || 0;
-                const cantOk = parseFloat(d.cantidad || '0') || 0;
-                const cantNok = parseFloat(d.cantidadNok || '0') || 0;
+                const cantOk = safeParse(d.cantidad || '0') || 0;
+                const cantNok = safeParse(d.cantidadNok || '0') || 0;
 
                 const mediaCombi = formatPeso;
                 const nEnvases = cantOk + cantNok;
@@ -761,13 +802,13 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                     <div className="mb-3 grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Cantidad OK</label>
-                        <input type="number" value={d.cantidad}
+                        <input type="text" inputMode="decimal" value={d.cantidad}
                           onChange={(e) => setShiftClosureData(prev => ({ ...prev, [formato]: { ...prev[formato], cantidad: e.target.value } }))}
                           className="w-full border-2 border-slate-200 p-2 rounded-xl font-bold text-[14px] focus:border-slate-900 outline-none" placeholder="0" />
                       </div>
                       <div>
                         <label className="block text-[10px] font-black text-red-500 uppercase mb-1">CANTIDAD A REPROCESAR</label>
-                        <input type="number" value={d.cantidadNok || ''}
+                        <input type="text" inputMode="decimal" value={d.cantidadNok || ''}
                           onChange={(e) => setShiftClosureData(prev => ({ ...prev, [formato]: { ...prev[formato], cantidadNok: e.target.value } }))}
                           className="w-full border-2 border-red-50 p-2 rounded-xl font-bold text-[14px] focus:border-red-400 outline-none text-red-600" placeholder="0" />
                       </div>
@@ -785,7 +826,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                           ].map(({ label, key }) => (
                             <div key={key}>
                               <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">{label}</label>
-                              <input type="number" step="0.01" min="0"
+                              <input type="text" inputMode="decimal"
                                 value={(d as any)[key] || ''}
                                 onChange={(e) => setShiftClosureData(prev => ({ ...prev, [formato]: { ...prev[formato], [key]: e.target.value } }))}
                                 className="w-full border-2 border-slate-200 p-1.5 rounded-lg font-bold text-[13px] focus:border-amber-400 outline-none"
@@ -991,7 +1032,8 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
             <table className="w-full text-left text-[14px] border-collapse">
               <thead className={`font-black uppercase tracking-wider border-b sticky top-0 z-10 ${isAdminMode ? 'text-blue-300 bg-blue-900' : 'text-slate-500 bg-slate-50'}`}>
                 <tr>
-             <th className="px-2 py-2">OPERARIOS</th>
+                  <th className="px-2 py-2">FECHA</th>
+                  <th className="px-2 py-2">OPERARIOS</th>
                   <th className="px-2 py-2">FORMATO</th>
                   <th className="px-2 py-2 text-center">INTERVALO</th>
                   <th className="px-2 py-2 text-center">T. REAL</th>
@@ -1005,13 +1047,14 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                   <tr key={`${act.id}-${idx}`}>
                     {editingId === act.id ? (
                       <>
+                        <td className="px-2 py-1.5"><input type="date" value={editForm.fecha || ''} onChange={e => setEditForm({...editForm, fecha: e.target.value})} className="w-full p-1 text-[14px] border rounded bg-white text-slate-900 font-bold" /></td>
                         <td className="px-2 py-1.5"><input type="text" value={act.operarios?.join(', ') || ''} readOnly className="w-full p-1 text-[14px] border rounded bg-slate-100 text-slate-500 font-bold uppercase" /></td>
                         <td className="px-2 py-1.5">
                           <div className="flex flex-col gap-1">
                             <input type="text" value={editForm.formato || ''} onChange={e => setEditForm({...editForm, formato: e.target.value})} className="w-full p-1 text-[14px] border rounded bg-white text-slate-900 font-bold uppercase" placeholder="FORMATO" />
                             <div className="flex items-center gap-1">
                               <span className="text-[10px] font-black text-emerald-600 uppercase">U/H:</span>
-                              <input type="number" step="0.1" value={editForm.tiempoTeoricoManual || 0} onChange={e => setEditForm({...editForm, tiempoTeoricoManual: parseFloat(e.target.value) || 0})} className="w-16 p-1 text-[12px] border rounded bg-white text-slate-900 font-bold" />
+                              <input type="number" step="0.1" value={editForm.tiempoTeoricoManual || 0} onChange={e => setEditForm({...editForm, tiempoTeoricoManual: safeParse(e.target.value) || 0})} className="w-16 p-1 text-[12px] border rounded bg-white text-slate-900 font-bold" />
                             </div>
                           </div>
                         </td>
@@ -1036,6 +1079,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                       </>
                     ) : (
                       <>
+                        <td className="px-2 py-1.5 font-bold text-[12px] whitespace-nowrap">{act.fecha}</td>
                         <td className="px-2 py-1.5 font-black uppercase text-[12px]">{act.operarios?.join(', ')}</td>
                         <td className="px-2 py-1.5">
                           <span className="font-black uppercase">{act.formato}</span> 

@@ -273,7 +273,29 @@ ALTER TABLE top15_actionplan DISABLE ROW LEVEL SECURITY;
 ALTER TABLE authorized_users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE mermas DISABLE ROW LEVEL SECURITY;
 
--- Grant all privileges to anon and authenticated roles
+-- Ensure mermas table exists and has correct columns (camelCase)
+CREATE TABLE IF NOT EXISTS mermas (
+    id TEXT PRIMARY KEY,
+    fecha DATE NOT NULL,
+    area TEXT NOT NULL,
+    formato TEXT NOT NULL,
+    kgEntrada NUMERIC DEFAULT 0,
+    kgTacos NUMERIC DEFAULT 0,
+    kgPieles NUMERIC DEFAULT 0,
+    kgHueco NUMERIC DEFAULT 0,
+    mediaCombi NUMERIC DEFAULT 0,
+    nEnvases NUMERIC DEFAULT 0,
+    kgSalida NUMERIC DEFAULT 0,
+    kgMerma NUMERIC DEFAULT 0,
+    pctMerma1 NUMERIC DEFAULT 0,
+    pctMerma2 NUMERIC DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Ensure RLS is disabled and permissions granted
+ALTER TABLE mermas DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON TABLE mermas TO anon;
+GRANT ALL ON TABLE mermas TO authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon;

@@ -44,6 +44,7 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
   let theoreticalTimeSum = 0;
 
   const aid = (areaId || '').toLowerCase();
+  const isLoncheado = (aid.includes('sb-loncheado') || aid.includes('loncheado'));
 
   const parseTime = (timeStr: string) => {
     if (!timeStr) return 0;
@@ -148,8 +149,8 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
   let merma1 = 0;
   let merma2 = 0;
   let subproducto = 0;
-  if (areaId === 'sb-loncheado' && mermas.length > 0) {
-    let totalKgSalida = 0;
+  if (isLoncheado && mermas && mermas.length > 0) {
+    let sumKgEntrada = 0;
     let sumKgMerma = 0;
     let sumKgTacos = 0;
     let sumKgPieles = 0;
@@ -157,19 +158,18 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
     let sumKgEnvasados = 0;
 
     mermas.forEach(m => {
-      sumKgMerma += (m.kgMerma || 0);
-      sumKgTacos += (m.kgTacos || 0);
-      sumKgPieles += (m.kgPieles || 0);
-      sumKgHueco += (m.kgHueco || 0);
-      sumKgEnvasados += (m.kgSalida || m.kgEnvasados || 0);
+      sumKgEntrada += Number(m.kgEntrada || 0);
+      sumKgMerma += Number(m.kgMerma || 0);
+      sumKgTacos += Number(m.kgTacos || 0);
+      sumKgPieles += Number(m.kgPieles || 0);
+      sumKgHueco += Number(m.kgHueco || 0);
+      sumKgEnvasados += Number(m.kgSalida || m.kgEnvasados || 0);
     });
 
-    totalKgSalida = sumKgEnvasados + sumKgTacos + sumKgPieles + sumKgHueco + sumKgMerma;
-    
-    if (totalKgSalida > 0) {
-      merma1 = (sumKgMerma / totalKgSalida) * 100;
-      merma2 = ((sumKgMerma + sumKgPieles + sumKgHueco) / totalKgSalida) * 100;
-      subproducto = (sumKgTacos / totalKgSalida) * 100;
+    if (sumKgEntrada > 0) {
+      merma1 = (sumKgMerma / sumKgEntrada) * 100;
+      merma2 = ((sumKgMerma + sumKgTacos + sumKgPieles + sumKgHueco) / sumKgEntrada) * 100;
+      subproducto = ((sumKgTacos + sumKgPieles + sumKgHueco) / sumKgEntrada) * 100;
     }
   }
 
@@ -177,6 +177,8 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
   let pph = 0;
   let pph_blister = 0;
   let pph_sin_blister = 0;
+  let pph_jamones = 0;
+  let pph_paletas = 0;
 
   // PPH helper: cantidad / horas-persona
   const calcPPH = (acts: typeof data) => {
@@ -197,7 +199,7 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
     pph = calcPPH(acts);
   }
 
-  if (areaId === 'sb-empaquetado-deshuesado') {
+  if (areaId === 'sb-empaquetado-deshuesado' || areaId === 'env-envasado' || areaId === 'env-empaquetado') {
     const acts = data.filter(a => a.tipoTarea === TaskType.PRODUCCION);
     pph = calcPPH(acts);
   }
@@ -209,12 +211,26 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
     pph_sin_blister = calcPPH(sinBlisterActs);
   }
 
+  if (areaId === 'movimiento-jamones') {
+    const jamonActs = data.filter(a => {
+      const f = a.formato?.toUpperCase() || '';
+      return a.tipoTarea === TaskType.PRODUCCION && (f.includes('JAMÓN') || f.includes('JAMON'));
+    });
+    const paletaActs = data.filter(a => {
+      const f = a.formato?.toUpperCase() || '';
+      return a.tipoTarea === TaskType.PRODUCCION && (f.includes('PALETA'));
+    });
+    pph_jamones = calcPPH(jamonActs);
+    pph_paletas = calcPPH(paletaActs);
+  }
+
   const finalAvailability = Math.min(100, availability > 0 ? availability : 0);
   const finalPerformance = Math.min(100, performance > 0 ? performance : 0);
   const finalQuality = Math.min(100, quality > 0 ? quality : 0);
   const oee = (finalAvailability * finalPerformance * finalQuality) / 10000;
 
   const hasData = data.length > 0;
+  const hasMermas = isLoncheado && mermas && mermas.length > 0;
 
   return {
     disponibilidad: hasData ? finalAvailability.toFixed(1) : '',
@@ -223,12 +239,14 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
     productividad: hasData ? oee.toFixed(1) : '',
     totalParts,
     downtime: (totalTime - timeP).toFixed(0),
-    merma1: hasData ? merma1.toFixed(2) : '',
-    merma2: hasData ? merma2.toFixed(2) : '',
-    subproducto: hasData ? subproducto.toFixed(2) : '',
+    merma1: (hasData || hasMermas) ? merma1.toFixed(2) : '',
+    merma2: (hasData || hasMermas) ? merma2.toFixed(2) : '',
+    subproducto: (hasData || hasMermas) ? subproducto.toFixed(2) : '',
     pph: hasData ? pph.toFixed(0) : '',
     pph_blister: hasData ? pph_blister.toFixed(0) : '',
-    pph_sin_blister: hasData ? pph_sin_blister.toFixed(0) : ''
+    pph_sin_blister: hasData ? pph_sin_blister.toFixed(0) : '',
+    pph_jamones: hasData ? pph_jamones.toFixed(0) : '',
+    pph_paletas: hasData ? pph_paletas.toFixed(0) : ''
   };
 };
 
@@ -358,9 +376,14 @@ const Dashboard: React.FC<DashboardProps> = ({
         const ad = new Date(a.fecha);
         return getWeekNumber(ad) === weekNum && ad.getFullYear() === year;
       });
+      const weekMermas = mermas.filter(m => {
+        if (!m.fecha) return false;
+        const md = new Date(m.fecha);
+        return getWeekNumber(md) === weekNum && md.getFullYear() === year;
+      });
       return { 
         label: `S${weekNum}`, 
-        total: calculateStats(data, selectedArea),
+        total: calculateStats(data, selectedArea, weekMermas),
       };
     });
 
@@ -369,6 +392,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     const prevYear = currentYear - 1;
     const currentYearData = allData.filter(a => a.fecha?.startsWith(currentYear.toString()));
     const prevYearData = allData.filter(a => a.fecha?.startsWith(prevYear.toString()));
+    const currentYearMermas = mermas.filter(m => m.fecha?.startsWith(currentYear.toString()));
+    const prevYearMermas = mermas.filter(m => m.fecha?.startsWith(prevYear.toString()));
 
     return {
       daily: last7Days,
@@ -376,49 +401,77 @@ const Dashboard: React.FC<DashboardProps> = ({
       annual: [
         { 
           label: prevYear.toString(), 
-          total: calculateStats(prevYearData, selectedArea),
+          total: calculateStats(prevYearData, selectedArea, prevYearMermas),
         },
         { 
           label: currentYear.toString(), 
-          total: calculateStats(currentYearData, selectedArea),
+          total: calculateStats(currentYearData, selectedArea, currentYearMermas),
         }
       ]
     };
-  }, [allData, selectedDate, selectedArea]);
+  }, [allData, selectedDate, selectedArea, mermas]);
 
   const isTimeBased = false;
 
   // Merma stats por período (só Loncheado)
   const calcMermaStats = (records: any[]) => {
-    if (!records || records.length === 0) return { pctMerma1: '', pctMerma2: '' };
-    const valid1 = records.filter(r => r.kgEntrada > 0);
-    const valid2 = records.filter(r => (r.kgMerma + r.kgTacos + r.kgPieles + r.kgHueco + r.kgSalida) > 0);
-    if (valid1.length === 0) return { pctMerma1: '', pctMerma2: '' };
-    const avg1 = valid1.reduce((s, r) => s + Number(r.pctMerma1 || 0), 0) / valid1.length;
-    const avg2 = valid2.length > 0 ? valid2.reduce((s, r) => s + Number(r.pctMerma2 || 0), 0) / valid2.length : 0;
-    return { pctMerma1: avg1.toFixed(1), pctMerma2: avg2.toFixed(1) };
+    if (!records || records.length === 0) return { merma1: '', merma2: '', subproducto: '' };
+    
+    let sumKgMerma = 0;
+    let sumKgTacos = 0;
+    let sumKgPieles = 0;
+    let sumKgHueco = 0;
+    let sumKgEnvasados = 0;
+
+    records.forEach(m => {
+      sumKgMerma += Number(m.kgMerma || 0);
+      sumKgTacos += Number(m.kgTacos || 0);
+      sumKgPieles += Number(m.kgPieles || 0);
+      sumKgHueco += Number(m.kgHueco || 0);
+      sumKgEnvasados += Number(m.kgSalida || m.kgEnvasados || 0);
+    });
+
+    const totalKgSalida = sumKgEnvasados + sumKgTacos + sumKgPieles + sumKgHueco + sumKgMerma;
+    
+    if (totalKgSalida > 0) {
+      const m1 = (sumKgMerma / totalKgSalida) * 100;
+      const m2 = ((sumKgMerma + sumKgPieles + sumKgHueco) / totalKgSalida) * 100;
+      const sub = (sumKgTacos / totalKgSalida) * 100;
+      return { 
+        merma1: m1.toFixed(2), 
+        merma2: m2.toFixed(2), 
+        subproducto: sub.toFixed(2) 
+      };
+    }
+    
+    return { merma1: '0.00', merma2: '0.00', subproducto: '0.00' };
   };
 
   const mermaScorecard = useMemo(() => {
     if (selectedArea !== 'sb-loncheado') return null;
     const today = new Date(selectedDate);
+    const lowercaseArea = selectedArea.toLowerCase();
 
     const daily = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(today); d.setDate(d.getDate() - (6 - i));
       const dateStr = d.toISOString().split('T')[0];
-      return { label: dateStr, total: calcMermaStats(mermas.filter(m => m.fecha === dateStr)) };
+      return { label: dateStr, total: calcMermaStats(mermas.filter(m => m.fecha === dateStr && (m.area || '').toLowerCase() === lowercaseArea)) };
     });
 
     const weekly = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(today); d.setDate(d.getDate() - (6 - i) * 7);
       const w = getWeekNumber(d); const yr = d.getFullYear();
-      return { label: `S${w}`, total: calcMermaStats(mermas.filter(m => { if (!m.fecha) return false; const md = new Date(m.fecha); return getWeekNumber(md) === w && md.getFullYear() === yr; })) };
+      return { label: `S${w}`, total: calcMermaStats(mermas.filter(m => { 
+        if (!m.fecha || (m.area || '').toLowerCase() !== lowercaseArea) return false; 
+        const md = new Date(m.fecha); 
+        return getWeekNumber(md) === w && md.getFullYear() === yr; 
+      })) };
     });
 
     const currentYear = today.getFullYear(); const prevYear = currentYear - 1;
     const annual = [
-      { label: prevYear.toString(), total: calcMermaStats(mermas.filter(m => m.fecha?.startsWith(prevYear.toString()))) },
-      { label: currentYear.toString(), total: calcMermaStats(mermas.filter(m => m.fecha?.startsWith(currentYear.toString()))) },
+      { label: prevYear.toString(), total: calcMermaStats(mermas.filter(m => m.fecha?.startsWith(prevYear.toString()) && (m.area || '').toLowerCase() === lowercaseArea)) },
+      { label: currentYear.toString(), total: calcMermaStats(mermas.filter(m => m.fecha?.startsWith(currentYear.toString()) && (m.area || '').toLowerCase() === lowercaseArea)) },
     ];
 
     return { daily, weekly, annual };
@@ -542,6 +595,18 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
     if (selectedArea === 'sb-empaquetado-deshuesado') {
       indicators.unshift({ id: 'pph', objKey: 'pph', label: 'PPH' });
+    }
+    if (selectedArea === 'env-envasado') {
+      indicators.unshift({ id: 'pph', objKey: 'pph', label: 'PPH ENVASADO' });
+    }
+    if (selectedArea === 'env-empaquetado') {
+      indicators.unshift({ id: 'pph', objKey: 'pph', label: 'PPH EMPAQUETADO' });
+    }
+    if (selectedArea === 'movimiento-jamones') {
+      indicators.unshift(
+        { id: 'pph_jamones', objKey: 'pph_jamones', label: 'PPH JAMONES' },
+        { id: 'pph_paletas', objKey: 'pph_paletas', label: 'PPH PALETAS' }
+      );
     }
 
     return (

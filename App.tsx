@@ -720,26 +720,12 @@ const App: React.FC = () => {
             setLastConnectionError(null);
           }
 
-          // Carregar mermas se área for loncheado
-          if (selectedArea === 'sb-loncheado') {
+          // Carregar mermas se área for loncheado ou dashboard de sala blanca
+          if (selectedArea === 'sb-loncheado' || selectedArea === 'sala-blanca-dashboard') {
             try {
               const { data: mermasData } = await supabase.from('mermas').select('*').eq('area', 'sb-loncheado').order('fecha', { ascending: false });
               if (mermasData) {
-                // Map snake_case to camelCase for the app
-                const mappedMermas = mermasData.map((m: any) => ({
-                  ...m,
-                  kgEntrada: m.kg_entrada,
-                  kgTacos: m.kg_tacos,
-                  kgPieles: m.kg_pieles,
-                  kgHueco: m.kg_hueco,
-                  mediaCombi: m.media_combi,
-                  nEnvases: m.n_envases,
-                  kgSalida: m.kg_salida,
-                  kgMerma: m.kg_merma,
-                  pctMerma1: m.pct_merma1,
-                  pctMerma2: m.pct_merma2
-                }));
-                setMermas(mappedMermas);
+                setMermas(mermasData);
               }
             } catch (e) { console.warn('mermas fetch failed', e); }
           }
@@ -2171,6 +2157,9 @@ const App: React.FC = () => {
           data: mermasToSave,
           filter: { column: 'id' }
         });
+        
+        // Actualizar estado local de mermas para reflejo inmediato en UI
+        setMermas(prev => [...mermasToSave, ...prev].slice(0, 500));
       }
 
       addToast("TURNO ARCHIVADO", "success");

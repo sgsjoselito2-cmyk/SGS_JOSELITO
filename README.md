@@ -1,4 +1,3 @@
-# deploy
 # Guía de Despliegue: Ecosistema Joselito
 
 Esta guía detalla los pasos para desplegar la aplicación en **Vercel** utilizando **Supabase** como base de datos persistente.
