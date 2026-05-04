@@ -1135,27 +1135,27 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
 
       {/* MODAL SELECCIÓN MÁQUINAS MECANIZADO */}
       {showMachineSelectionModal && (
-        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[8000] flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl animate-in zoom-in border-8 border-blue-50 max-h-[90vh] overflow-y-auto">
-            <div className="bg-blue-600 p-8 text-center text-white relative">
-              <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-400 text-slate-900 px-6 py-2 rounded-full text-[12px] font-black uppercase tracking-widest shadow-xl animate-pulse z-10 border-2 border-white">
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[8000] flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-lg rounded-2xl sm:rounded-[3rem] shadow-2xl animate-in zoom-in border-4 sm:border-8 border-blue-50 max-h-[95vh] overflow-y-auto">
+            <div className="bg-blue-600 p-4 sm:p-8 text-center text-white relative">
+              <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-400 text-slate-900 px-4 sm:px-6 py-1 sm:py-2 rounded-full text-[10px] sm:text-[12px] font-black uppercase tracking-widest shadow-xl animate-pulse z-10 border-2 border-white">
                 MARCA LAS QUE QUIERES CERRAR
               </div>
-              <h3 className="font-black text-xs uppercase tracking-widest mt-2">
+              <h3 className="font-black text-[10px] sm:text-xs uppercase tracking-widest mt-2">
                 {machineSelectionType === 'incidence' ? 'Aplicar Incidencia' : 
                  machineSelectionType === 'finish' ? 'Finalizar Tareas' : 
                  'Nueva Tarea Detectada'}
               </h3>
-              <p className="text-blue-100 text-[14px] font-bold mt-2 uppercase">
+              <p className="text-blue-100 text-[12px] sm:text-[14px] font-bold mt-1 sm:mt-2 uppercase">
                 {machineSelectionType === 'start_conflict' 
                   ? '¿Deseas cerrar alguno de los formatos actuales?' 
                   : 'Selecciona las máquinas afectadas'}
               </p>
             </div>
-            <div className="p-8">
-              <div className="space-y-2 mb-6 max-h-60 overflow-y-auto pr-2 no-scrollbar">
+            <div className="p-4 sm:p-8">
+              <div className="space-y-2 mb-4 sm:mb-6 max-h-60 overflow-y-auto pr-2 no-scrollbar">
                 {currentActivities.map((act, idx) => (
-                  <label key={`${act.id}-${idx}`} className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all cursor-pointer group ${selectedMachineIds.includes(act.id) ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-100 opacity-60'}`}>
+                  <label key={`${act.id}-${idx}`} className={`flex items-center gap-2 sm:gap-4 p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 transition-all cursor-pointer group ${selectedMachineIds.includes(act.id) ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-100 opacity-60'}`}>
                     <input 
                       type="checkbox" 
                       checked={selectedMachineIds.includes(act.id)}
@@ -1166,28 +1166,28 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                           setSelectedMachineIds(selectedMachineIds.filter(id => id !== act.id));
                         }
                       }}
-                      className="w-6 h-6 rounded-lg border-2 border-slate-300 text-blue-600 focus:ring-blue-500"
+                      className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg border-2 border-slate-300 text-blue-600 focus:ring-blue-500"
                     />
                     <div className="flex-1">
-                      <p className="text-slate-900 text-[16px] font-black uppercase">{act.formato}</p>
+                      <p className="text-slate-900 text-[14px] sm:text-[16px] font-black uppercase">{act.formato}</p>
                     </div>
                   </label>
                 ))}
               </div>
 
-              <div className="flex gap-4">
+              <div className="flex gap-2 sm:gap-4">
                 <button 
                   onClick={() => {
                     setShowMachineSelectionModal(false);
                     setPendingMecanizadoAction(null);
                   }} 
-                  className="flex-1 py-5 rounded-2xl bg-slate-100 text-slate-400 font-black uppercase text-[14px]"
+                  className="flex-1 py-3 sm:py-5 rounded-xl sm:rounded-2xl bg-slate-100 text-slate-400 font-black uppercase text-[12px] sm:text-[14px]"
                 >
                   Cancelar
                 </button>
                 <button 
                   onClick={confirmMecanizadoMachineSelection}
-                  className="flex-[2] py-5 rounded-2xl bg-blue-600 text-white font-black uppercase text-[14px] shadow-xl hover:bg-blue-700 transition-all active:scale-95"
+                  className="flex-[2] py-3 sm:py-5 rounded-xl sm:rounded-2xl bg-blue-600 text-white font-black uppercase text-[12px] sm:text-[14px] shadow-xl hover:bg-blue-700 transition-all active:scale-95"
                 >
                   Continuar
                 </button>
@@ -1199,17 +1199,17 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
 
       {/* MODAL CIERRE DE ACTIVIDAD Y PIN... */}
       {showClosureModal && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[7000] flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl animate-in zoom-in border-8 border-slate-50 max-h-[90vh] overflow-y-auto">
-            <div className="bg-slate-900 p-8 text-center text-white"><h3 className="font-black text-xs uppercase tracking-widest">Finalizar Actividad</h3><p className="text-blue-400 text-[14px] font-bold mt-2 uppercase">{currentActivity?.formato}</p></div>
-            <div className="p-10 space-y-6">
-              <div className="space-y-3">
-                <label className="text-[16px] font-black text-slate-400 uppercase tracking-widest ml-1">COMENTARIOS / OBSERVACIONES</label>
-                <textarea ref={commentsRef} value={closureComments} onChange={(e) => setClosureComments(e.target.value)} className="w-full bg-slate-50 border-4 border-slate-100 rounded-3xl p-5 text-base font-bold text-slate-700 outline-none focus:border-blue-500 min-h-[100px]" placeholder="Añade algún detalle..." />
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[7000] flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-lg rounded-2xl sm:rounded-[3rem] shadow-2xl animate-in zoom-in border-4 sm:border-8 border-slate-50 max-h-[95vh] overflow-y-auto">
+            <div className="bg-slate-900 p-4 sm:p-8 text-center text-white"><h3 className="font-black text-[10px] sm:text-xs uppercase tracking-widest">Finalizar Actividad</h3><p className="text-blue-400 text-[12px] sm:text-[14px] font-bold mt-1 sm:mt-2 uppercase">{currentActivity?.formato}</p></div>
+            <div className="p-4 sm:p-10 space-y-4 sm:space-y-6">
+              <div className="space-y-2 sm:space-y-3">
+                <label className="text-[12px] sm:text-[16px] font-black text-slate-400 uppercase tracking-widest ml-1">COMENTARIOS / OBSERVACIONES</label>
+                <textarea ref={commentsRef} value={closureComments} onChange={(e) => setClosureComments(e.target.value)} className="w-full bg-slate-50 border-2 sm:border-4 border-slate-100 rounded-xl sm:rounded-3xl p-3 sm:p-5 text-sm sm:text-base font-bold text-slate-700 outline-none focus:border-blue-500 min-h-[80px] sm:min-h-[100px]" placeholder="Añade algún detalle..." />
               </div>
-              <div className="flex gap-4">
-                <button onClick={() => setShowClosureModal(false)} className="flex-1 py-5 rounded-2xl bg-slate-100 text-slate-400 text-[16px] font-black uppercase">Cancelar</button>
-                <button onClick={confirmClosure} className="flex-[2] py-5 rounded-2xl bg-blue-600 text-white text-[16px] font-black uppercase shadow-xl hover:bg-blue-700">Confirmar Cierre</button>
+              <div className="flex gap-2 sm:gap-4">
+                <button onClick={() => setShowClosureModal(false)} className="flex-1 py-3 sm:py-5 rounded-xl sm:rounded-2xl bg-slate-100 text-slate-400 text-[14px] sm:text-[16px] font-black uppercase">Cancelar</button>
+                <button onClick={confirmClosure} className="flex-[2] py-3 sm:py-5 rounded-xl sm:rounded-2xl bg-blue-600 text-white text-[14px] sm:text-[16px] font-black uppercase shadow-xl hover:bg-blue-700">Confirmar Cierre</button>
               </div>
             </div>
           </div>
@@ -1272,37 +1272,37 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
 
       {/* MODAL MULTIPLE CLOSURE (TRATAMIENTOS / MECANIZADO) */}
       {showMultipleClosureModal && (
-        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[8000] flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl animate-in zoom-in border-8 border-indigo-50 max-h-[90vh] overflow-y-auto">
-            <div className="bg-indigo-600 p-8 text-center text-white relative">
-              <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-400 text-slate-900 px-6 py-2 rounded-full text-[12px] font-black uppercase tracking-widest shadow-xl animate-pulse z-10 border-2 border-white">
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[8000] flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-2xl rounded-2xl sm:rounded-[3rem] shadow-2xl animate-in zoom-in border-4 sm:border-8 border-indigo-50 max-h-[95vh] overflow-y-auto">
+            <div className="bg-indigo-600 p-4 sm:p-8 text-center text-white relative">
+              <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-400 text-slate-900 px-4 sm:px-6 py-1 sm:py-2 rounded-full text-[10px] sm:text-[12px] font-black uppercase tracking-widest shadow-xl animate-pulse z-10 border-2 border-white">
                 MARCA LAS QUE QUIERES CERRAR
               </div>
-              <h3 className="font-black text-xs uppercase tracking-widest mt-2">Cierre de Actividades Simultáneas</h3>
-              <p className="text-indigo-100 text-[14px] font-bold mt-2 uppercase">Selecciona las actividades a finalizar e indica su cantidad</p>
+              <h3 className="font-black text-[10px] sm:text-xs uppercase tracking-widest mt-2">Cierre de Actividades Simultáneas</h3>
+              <p className="text-indigo-100 text-[12px] sm:text-[14px] font-bold mt-1 sm:mt-2 uppercase">Selecciona las actividades a finalizar e indica su cantidad</p>
             </div>
-            <div className="p-8 space-y-6">
-              <div className="max-h-80 overflow-y-auto space-y-3 pr-2">
+            <div className="p-4 sm:p-8 space-y-4 sm:space-y-6">
+              <div className="max-h-80 overflow-y-auto space-y-2 sm:space-y-3 pr-2">
                 {currentActivities.map((act, idx) => (
-                  <div key={`${act.id}-${idx}`} className={`p-4 rounded-2xl border-2 transition-all flex items-center gap-4 ${closureDataMap[act.id]?.selected ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-100 opacity-50'}`}>
+                  <div key={`${act.id}-${idx}`} className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 transition-all flex items-center gap-3 sm:gap-4 ${closureDataMap[act.id]?.selected ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-100 opacity-50'}`}>
                     <input 
                       type="checkbox" 
                       checked={closureDataMap[act.id]?.selected || false} 
                       onChange={(e) => setClosureDataMap({...closureDataMap, [act.id]: {...closureDataMap[act.id], selected: e.target.checked}})}
-                      className="w-6 h-6 rounded-lg border-2 border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+                      className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg border-2 border-indigo-300 text-indigo-600 focus:ring-indigo-500"
                     />
                     <div className="flex-1 min-w-0">
-                      <span className="text-[16px] font-black text-slate-900 uppercase block leading-tight truncate">{act.formato}</span>
+                      <span className="text-[14px] sm:text-[16px] font-black text-slate-900 uppercase block leading-tight truncate">{act.formato}</span>
                     </div>
-                    <div className="flex gap-3 items-end flex-1">
+                    <div className="flex gap-2 sm:gap-3 items-end flex-1">
                       <div className="flex-1">
-                        <label className="text-[11px] font-black text-indigo-400 uppercase tracking-widest block mb-1">Comentario</label>
+                        <label className="text-[9px] sm:text-[11px] font-black text-indigo-400 uppercase tracking-widest block mb-0.5 sm:mb-1">Comentario</label>
                         <input 
                           type="text" 
                           placeholder="Opcional..."
                           value={closureDataMap[act.id]?.comentarios || ''} 
                           onChange={(e) => setClosureDataMap({...closureDataMap, [act.id]: {...closureDataMap[act.id], comentarios: e.target.value}})}
-                          className="w-full p-2 bg-white border-2 border-indigo-100 rounded-xl text-sm font-bold text-slate-600 outline-none focus:border-indigo-500"
+                          className="w-full p-1.5 sm:p-2 bg-white border-2 border-indigo-100 rounded-lg text-[12px] sm:text-sm font-bold text-slate-600 outline-none focus:border-indigo-500"
                           disabled={!closureDataMap[act.id]?.selected}
                         />
                       </div>
@@ -1310,9 +1310,9 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                   </div>
                 ))}
               </div>
-              <div className="flex gap-4">
-                <button onClick={() => { setShowMultipleClosureModal(false); setPendingAction(null); setPendingActivities([]); }} className="flex-1 py-5 rounded-2xl bg-slate-100 text-slate-400 text-[14px] font-black uppercase">Cancelar</button>
-                <button onClick={confirmMultipleClosure} className="flex-[2] py-5 rounded-2xl bg-indigo-600 text-white text-[14px] font-black uppercase shadow-xl hover:bg-indigo-700 transition-all">Continuar</button>
+              <div className="flex gap-2 sm:gap-4">
+                <button onClick={() => { setShowMultipleClosureModal(false); setPendingAction(null); setPendingActivities([]); }} className="flex-1 py-3 sm:py-5 rounded-xl sm:rounded-2xl bg-slate-100 text-slate-400 text-[12px] sm:text-[14px] font-black uppercase">Cancelar</button>
+                <button onClick={confirmMultipleClosure} className="flex-[2] py-3 sm:py-5 rounded-xl sm:rounded-2xl bg-indigo-600 text-white text-[12px] sm:text-[14px] font-black uppercase shadow-xl hover:bg-indigo-700 transition-all">Continuar</button>
               </div>
             </div>
           </div>

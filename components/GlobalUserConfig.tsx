@@ -92,19 +92,19 @@ const GlobalUserConfig: React.FC<GlobalUserConfigProps> = ({ users, onUpdateUser
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <div className="bg-white w-full max-w-[95vw] h-[90vh] rounded-3xl flex flex-col shadow-2xl overflow-hidden border-4 border-indigo-600">
         {/* Header */}
-        <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 p-6 flex justify-between items-center shrink-0">
+        <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 p-4 sm:p-6 flex justify-between items-center shrink-0">
           <div>
-            <h2 className="text-3xl font-black text-white uppercase tracking-tight">GESTIÓN DE PERSONAL Y POLIVALENCIA</h2>
-            <p className="text-white/70 text-[10px] font-black uppercase tracking-widest mt-1">GESTIONA PERMISOS POR TALLER</p>
+            <h2 className="text-lg sm:text-3xl font-black text-white uppercase tracking-tight">GESTIÓN DE PERSONAL Y POLIVALENCIA</h2>
+            <p className="text-white/70 text-[8px] sm:text-[10px] font-black uppercase tracking-widest mt-1">GESTIONA PERMISOS POR TALLER</p>
           </div>
-          <button onClick={onClose} className="w-10 h-10 bg-white/20 hover:bg-white/30 text-white rounded-xl flex items-center justify-center transition-all">
-            <span className="text-2xl font-bold">×</span>
+          <button onClick={onClose} className="w-8 h-8 sm:w-10 sm:h-10 bg-white/20 hover:bg-white/30 text-white rounded-lg sm:rounded-xl flex items-center justify-center transition-all">
+            <span className="text-xl sm:text-2xl font-bold">×</span>
           </button>
         </div>
 
         {/* New User Form */}
-        <div className="p-6 bg-slate-50 border-b border-slate-200 shrink-0">
-          <div className="flex gap-4 items-end max-w-6xl">
+        <div className="p-4 sm:p-6 bg-slate-50 border-b border-slate-200 shrink-0">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-end max-w-6xl">
             <div className="flex-1 space-y-1">
               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-2">
                 {editingUserId ? 'EDITAR OPERARIO' : 'NUEVO OPERARIO'}
@@ -114,31 +114,31 @@ const GlobalUserConfig: React.FC<GlobalUserConfigProps> = ({ users, onUpdateUser
                 value={nombre}
                 onChange={e => setNombre(e.target.value)}
                 placeholder="NOMBRE COMPLETO..."
-                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold uppercase focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full bg-white border border-slate-200 rounded-lg sm:rounded-xl px-4 py-2 sm:py-3 text-sm font-bold uppercase focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
-            <div className="w-64 space-y-1">
+            <div className="w-full sm:w-64 space-y-1">
               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-2">CORREO (OPCIONAL)</label>
               <input 
                 type="text" 
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="CORREO..."
-                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold uppercase focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full bg-white border border-slate-200 rounded-lg sm:rounded-xl px-4 py-2 sm:py-3 text-sm font-bold uppercase focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
             <div className="flex gap-2">
               {editingUserId && (
                 <button 
                   onClick={cancelEdit}
-                  className="bg-slate-200 hover:bg-slate-300 text-slate-600 px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all"
+                  className="flex-1 sm:flex-none bg-slate-200 hover:bg-slate-300 text-slate-600 px-4 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-widest transition-all"
                 >
                   CANCELAR
                 </button>
               )}
               <button 
                 onClick={handleAddOrUpdateUser}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-lg"
+                className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-8 py-2 sm:py-3 rounded-lg sm:rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-widest transition-all shadow-lg"
               >
                 {editingUserId ? 'GUARDAR' : 'AÑADIR'}
               </button>
@@ -232,13 +232,13 @@ const GlobalUserConfig: React.FC<GlobalUserConfigProps> = ({ users, onUpdateUser
         </div>
 
         {/* Footer */}
-        <div className="p-6 bg-slate-50 border-t border-slate-200 flex justify-between items-center shrink-0">
+        <div className="p-4 sm:p-6 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{users.length} OPERARIOS REGISTRADOS</p>
-          <div className="flex gap-4">
-            <button onClick={onClose} className="px-8 py-3 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl font-black text-xs uppercase tracking-widest text-slate-400 transition-all">
+          <div className="flex gap-2 sm:gap-4 w-full sm:w-auto">
+            <button onClick={onClose} className="flex-1 sm:flex-none px-4 sm:px-8 py-2 sm:py-3 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg sm:rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-widest text-slate-400 transition-all">
               CANCELAR
             </button>
-            <button onClick={onClose} className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-lg">
+            <button onClick={onClose} className="flex-1 sm:flex-none px-4 sm:px-8 py-2 sm:py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg sm:rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-widest transition-all shadow-lg">
               GUARDAR CAMBIOS
             </button>
           </div>

@@ -87,7 +87,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
             <button
               key={w.id}
               onClick={() => setSelectedWorkshop(w.id)}
-              className="group relative p-4 sm:p-5 rounded-2xl border-2 border-slate-100 bg-white text-left transition-all duration-700 hover:border-blue-500 hover:-translate-y-1 h-[240px] sm:h-[340px] flex flex-col justify-between overflow-hidden shadow-sm hover:shadow-xl hover:shadow-blue-50"
+              className="group relative p-4 sm:p-5 rounded-2xl border-2 border-slate-100 bg-white text-left transition-all duration-700 hover:border-blue-500 hover:-translate-y-1 min-h-[160px] sm:h-[340px] flex flex-col justify-between overflow-hidden shadow-sm hover:shadow-xl hover:shadow-blue-50"
             >
               <div className="absolute -right-8 -bottom-8 sm:-right-10 sm:-bottom-10 opacity-[0.03] group-hover:opacity-[0.08] group-hover:scale-125 group-hover:rotate-12 transition-all duration-1000 text-slate-900 pointer-events-none">
                  {React.isValidElement(w.icon) && React.cloneElement(w.icon as React.ReactElement<any>, { className: "w-24 h-24 sm:w-36 h-36" })}
@@ -131,7 +131,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
                 <button
                   key={dashboardId}
                   onClick={() => onSelectArea(dashboardId)}
-                  className="group relative p-4 rounded-2xl border-2 border-slate-800 bg-slate-900 text-left transition-all duration-700 overflow-hidden h-[240px] w-full sm:w-[300px] flex flex-col justify-between hover:border-blue-600 hover:-translate-y-1 shadow-xl hover:shadow-black/10"
+                  className="group relative p-4 rounded-2xl border-2 border-slate-800 bg-slate-900 text-left transition-all duration-700 overflow-hidden min-h-[180px] sm:h-[240px] w-full sm:w-[300px] flex flex-col justify-between hover:border-blue-600 hover:-translate-y-1 shadow-xl hover:shadow-black/10"
                 >
                   <div className="absolute -right-4 -bottom-4 opacity-[0.1] group-hover:opacity-[0.2] transition-all duration-1000 group-hover:scale-150 group-hover:rotate-[20deg] text-white pointer-events-none">
                     <svg className="w-24 h-24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2" /></svg>
@@ -164,7 +164,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
               <button
                 key={area.id}
                 onClick={() => onSelectArea(area.id)}
-                className="group relative p-4 rounded-2xl border-2 border-slate-100 bg-white text-left transition-all duration-700 overflow-hidden h-[240px] w-full sm:w-[300px] flex flex-col justify-between hover:border-blue-600 hover:-translate-y-1 shadow-sm hover:shadow-xl hover:shadow-blue-50"
+                className="group relative p-4 rounded-2xl border-2 border-slate-100 bg-white text-left transition-all duration-700 overflow-hidden min-h-[160px] sm:h-[240px] w-full sm:w-[300px] flex flex-col justify-between hover:border-blue-600 hover:-translate-y-1 shadow-sm hover:shadow-xl hover:shadow-blue-50"
               >
                 <div className="absolute -right-4 -bottom-4 opacity-[0.04] group-hover:opacity-[0.1] transition-all duration-1000 group-hover:scale-150 group-hover:rotate-[20deg] text-blue-900 pointer-events-none">
                    {React.isValidElement(area.icon) && React.cloneElement(area.icon as React.ReactElement<any>, { className: "w-24 h-24" })}
@@ -177,7 +177,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
                   <h3 className={`${area.name.length > 20 ? 'text-[13px]' : area.name.length > 12 ? 'text-base' : 'text-xl'} font-serif font-black text-slate-900 tracking-tight leading-tight mb-1 transition-all`}>
                     {area.name}
                   </h3>
-                  <p className="text-[16px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed max-w-[90%]">
+                  <p className="text-[12px] sm:text-[14px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed max-w-[90%]">
                     {area.sub}
                   </p>
                 </div>
@@ -197,7 +197,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
       )}
 
       <div className="mt-8 flex flex-col items-center opacity-80 transition-all hover:opacity-100">
-        <p className="text-[16px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2">Partner Tecnológico</p>
+        <p className="text-[12px] sm:text-[16px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2">Partner Tecnológico</p>
         <a 
           href="https://leansisproductividad.com/" 
           target="_blank" 

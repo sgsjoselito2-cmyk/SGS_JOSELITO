@@ -685,37 +685,37 @@ const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div className="flex flex-col gap-1 animate-in fade-in duration-500 h-full">
       {/* Date Selector */}
-      <div className="flex flex-row items-center justify-between gap-1 bg-white p-1 rounded-lg border border-slate-100 shadow-sm shrink-0">
+      <div className="flex flex-row items-center justify-between gap-1 bg-white p-2 rounded-xl border border-slate-100 shadow-sm shrink-0">
         <div>
-          <h2 className="text-[14px] sm:text-xs font-black text-slate-900 tracking-tighter uppercase leading-tight">CMI {workshopName && `- ${workshopName}`}</h2>
+          <h2 className="text-[12px] sm:text-sm font-black text-slate-900 tracking-tight uppercase leading-tight">CMI {workshopName && `- ${workshopName}`}</h2>
         </div>
         <div className="flex items-center gap-1">
           <input 
             type="date" 
             value={selectedDate} 
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="p-0.5 bg-slate-50 border border-slate-100 rounded-md font-black text-[14px] text-blue-600 outline-none"
+            className="p-1 bg-slate-50 border border-slate-100 rounded-md font-black text-[12px] sm:text-sm text-blue-600 outline-none"
           />
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-1 shrink-0">
-        <div className="bg-white p-1 rounded-lg border border-slate-100 shadow-sm flex items-center gap-1.5 px-2">
-          <span className="text-[9px] sm:text-[15px] font-black text-slate-400 uppercase tracking-tighter">Disponibilidad</span>
-          <span className="text-[14px] sm:text-xs font-black text-slate-900 tracking-tighter">{stats.disponibilidad}{stats.disponibilidad !== '' ? '%' : ''}</span>
+      <div className="grid grid-cols-4 gap-1 sm:gap-2 shrink-0">
+        <div className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center sm:gap-2 px-1 sm:px-3 text-center sm:text-left">
+          <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-tighter">Dispon.</span>
+          <span className="text-[12px] sm:text-base font-black text-slate-900 tracking-tighter leading-none">{stats.disponibilidad}{stats.disponibilidad !== '' ? '%' : ''}</span>
         </div>
-        <div className="bg-white p-1 rounded-lg border border-slate-100 shadow-sm flex items-center gap-1.5 px-2">
-          <span className="text-[9px] sm:text-[15px] font-black text-slate-400 uppercase tracking-tighter">Rendimiento</span>
-          <span className="text-[14px] sm:text-xs font-black text-slate-900 tracking-tighter">{stats.rendimiento}{stats.rendimiento !== '' ? '%' : ''}</span>
+        <div className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center sm:gap-2 px-1 sm:px-3 text-center sm:text-left">
+          <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-tighter">Rendim.</span>
+          <span className="text-[12px] sm:text-base font-black text-slate-900 tracking-tighter leading-none">{stats.rendimiento}{stats.rendimiento !== '' ? '%' : ''}</span>
         </div>
-        <div className="bg-white p-1 rounded-lg border border-slate-100 shadow-sm flex items-center gap-1.5 px-2">
-          <span className="text-[9px] sm:text-[15px] font-black text-slate-400 uppercase tracking-tighter">Calidad</span>
-          <span className="text-[14px] sm:text-xs font-black text-slate-900 tracking-tighter">{stats.calidad}{stats.calidad !== '' ? '%' : ''}</span>
+        <div className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center sm:gap-2 px-1 sm:px-3 text-center sm:text-left">
+          <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-tighter">Calidad</span>
+          <span className="text-[12px] sm:text-base font-black text-slate-900 tracking-tighter leading-none">{stats.calidad}{stats.calidad !== '' ? '%' : ''}</span>
         </div>
-        <div className="bg-slate-900 p-1 rounded-lg border border-slate-800 shadow-md flex items-center gap-1.5 px-2">
-          <span className="text-[9px] sm:text-[15px] font-black text-slate-400 uppercase tracking-tighter">Prod</span>
-          <span className="text-[14px] sm:text-xs font-black text-white tracking-tighter">{stats.productividad}{stats.productividad !== '' ? '%' : ''}</span>
+        <div className="bg-slate-900 p-2 rounded-xl border border-slate-800 shadow-md flex flex-col sm:flex-row items-center sm:gap-2 px-1 sm:px-3 text-center sm:text-left">
+          <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-tighter">OEE</span>
+          <span className="text-[12px] sm:text-base font-black text-white tracking-tighter leading-none">{stats.productividad}{stats.productividad !== '' ? '%' : ''}</span>
         </div>
       </div>
 
@@ -755,39 +755,39 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* Scorecard Section */}
-      <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-xl space-y-8">
-        <div className="flex items-center gap-4 mb-2">
-          <div className="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-black">M</div>
-          <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">CUADRO DE MANDO</h3>
+      <div className="bg-white p-4 sm:p-8 rounded-2xl sm:rounded-[3rem] border border-slate-100 shadow-xl space-y-4 sm:space-y-8">
+        <div className="flex items-center gap-3 sm:gap-4 mb-2">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-600 rounded-lg sm:rounded-2xl flex items-center justify-center text-white font-black text-sm sm:text-base">M</div>
+          <h3 className="text-lg sm:text-xl font-black text-slate-900 uppercase tracking-tighter">CUADRO DE MANDO</h3>
         </div>
         
-        <div className="space-y-8">
+        <div className="space-y-6 sm:space-y-8">
           <section>
-            <h4 className="text-[14px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4">Últimos 7 Días (Diario)</h4>
+            <h4 className="text-[11px] sm:text-[14px] font-black text-slate-400 uppercase tracking-[0.2em] sm:tracking-[0.3em] mb-2 sm:mb-4">Últimos 7 Días (Diario)</h4>
             {renderScorecardTable('Fecha', scorecardData.daily)}
           </section>
           
           <section>
-            <h4 className="text-[14px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4">Últimas 7 Semanas</h4>
+            <h4 className="text-[11px] sm:text-[14px] font-black text-slate-400 uppercase tracking-[0.2em] sm:tracking-[0.3em] mb-2 sm:mb-4">Últimas 7 Semanas</h4>
             {renderScorecardTable('Semana', scorecardData.weekly)}
           </section>
 
           <section>
-            <h4 className="text-[14px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4">Acumulado Anual</h4>
+            <h4 className="text-[11px] sm:text-[14px] font-black text-slate-400 uppercase tracking-[0.2em] sm:tracking-[0.3em] mb-2 sm:mb-4">Acumulado Anual</h4>
             {renderScorecardTable('Año', scorecardData.annual)}
           </section>
         </div>
       </div>
 
       {/* Pareto Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {[
           { title: 'Pareto de Esperas', data: paretos.esperas, type: 'disponibilidad' as const, unit: 'min' },
           { title: 'Pérdida Rendimiento', data: paretos.performance, type: 'rendimiento' as const, unit: 'min' },
           { title: 'Pérdida Calidad', data: paretos.quality, type: 'calidad' as const, unit: isTimeBased ? 'min' : 'uds' }
         ].map(pareto => (
-          <div key={pareto.title} className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-lg">
-            <h3 className="text-slate-900 text-[15px] font-black uppercase tracking-widest mb-6 px-2">{pareto.title}</h3>
+          <div key={pareto.title} className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-[2.5rem] border border-slate-100 shadow-lg">
+            <h3 className="text-slate-900 text-[13px] sm:text-[15px] font-black uppercase tracking-widest mb-4 sm:mb-6 px-2">{pareto.title}</h3>
             <div className="h-64 w-full relative">
               {pareto.data.length > 0 ? (
                 <div className="absolute inset-0">

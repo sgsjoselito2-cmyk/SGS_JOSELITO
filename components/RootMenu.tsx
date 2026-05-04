@@ -25,7 +25,7 @@ const RootMenu: React.FC<RootMenuProps> = ({ onSelectOption, onOpenConfig }) => 
             <button
               key={opt.id}
               onClick={() => onSelectOption(opt.id)}
-              className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 hover:shadow-xl transition-all duration-300 group text-left flex flex-col h-full"
+              className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-100 hover:shadow-xl transition-all duration-300 group text-left flex flex-col h-full"
             >
               <div className={`${opt.color} w-16 h-16 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform`}>
                 <opt.icon className="w-8 h-8 text-white" />
