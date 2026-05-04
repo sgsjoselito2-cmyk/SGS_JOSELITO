@@ -74,14 +74,19 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
       totalParts += cant;
       totalPartsNok += cantNok;
       
-      const isLaser = act.area === 'corte-laser' || aid === 'corte-laser';
+      const actArea = (act.area || aid).toLowerCase();
+      const actIsLoncheado = actArea.includes('loncheado');
+      const isLaser = actArea.includes('laser');
       const teoManual = Number(act.tiempoTeoricoManual ?? (act as any).tiempo_teorico ?? (act as any).theo_time ?? 0);
 
       if (isLaser) {
         theoreticalTimeSum += (teoManual > 0 ? (60 / teoManual) : 0);
+      } else if (actIsLoncheado) {
+        // Para Loncheado, teoManual es unidades/minuto. Theo minutes = cant / teoManual
+        theoreticalTimeSum += (teoManual > 0 ? (cant + cantNok) / teoManual : 0);
       } else {
-        const totalUnitsForTheo = aid.includes('loncheado') ? (cant + cantNok) : cant;
-        theoreticalTimeSum += (teoManual > 0 ? (60 / teoManual) : 0) * totalUnitsForTheo;
+        // Para el resto, teoManual es tiempo de ciclo (minutos/unidad). Theo minutes = teoManual * cant
+        theoreticalTimeSum += (teoManual * cant);
       }
     }
 
@@ -495,11 +500,20 @@ const Dashboard: React.FC<DashboardProps> = ({
         }
       }
       if (act.tipoTarea === TaskType.PRODUCCION) {
-        const isLaser = act.area === 'corte-laser' || selectedArea === 'corte-laser';
+        const actArea = (act.area || selectedArea || '').toLowerCase();
+        const actIsLoncheado = actArea.includes('loncheado');
+        const isLaser = actArea.includes('laser');
         const teo = act.tiempoTeoricoManual || 0;
-        const theoreticalTotal = isLaser 
-          ? (teo > 0 ? (60 / teo) : 0) 
-          : (teo > 0 ? (60 / teo) : 0) * (act.cantidad || 0);
+        
+        let theoreticalTotal = 0;
+        if (isLaser) {
+          theoreticalTotal = (teo > 0 ? (60 / teo) : 0);
+        } else if (actIsLoncheado) {
+          theoreticalTotal = (teo > 0 ? (act.cantidad || 0) / teo : 0);
+        } else {
+          theoreticalTotal = teo * (act.cantidad || 0);
+        }
+
         const loss = (act.duracionMin || 0) - theoreticalTotal;
         if (loss > 0) {
           performanceLoss[act.formato] = (performanceLoss[act.formato] || 0) + loss;
@@ -507,7 +521,12 @@ const Dashboard: React.FC<DashboardProps> = ({
         
         // Quality loss from NOK pieces
         if ((act.cantidadNok || 0) > 0) {
-          const nokLoss = (teo > 0 ? (60 / teo) : 0) * (act.cantidadNok || 0);
+          let nokLoss = 0;
+          if (actIsLoncheado) {
+            nokLoss = (teo > 0 ? (act.cantidadNok || 0) / teo : 0);
+          } else {
+            nokLoss = teo * (act.cantidadNok || 0);
+          }
           qualityLoss[act.formato] = (qualityLoss[act.formato] || 0) + nokLoss;
         }
       }

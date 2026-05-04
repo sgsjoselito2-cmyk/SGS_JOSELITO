@@ -142,21 +142,21 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
         timeP += duration;
         totalParts += (act.cantidad || 0);
         
-        const isLaser = selectedArea === 'corte-laser';
+        const actIsLoncheado = (act.area || selectedArea || '').toLowerCase().includes('loncheado');
+        const isLaser = (act.area || selectedArea || '').toLowerCase().includes('laser');
         const teoManual = Number(act.tiempoTeoricoManual || 0);
         const cant = Number(act.cantidad || 0);
+        const cantNok = Number(act.cantidadNok || 0);
 
         if (isLaser) {
+          // Para laser, teoManual es U/H
           theoreticalTimeSum += (teoManual > 0 ? (60 / teoManual) : 0);
+        } else if (actIsLoncheado) {
+          // Para Loncheado, teoManual es unidades/minuto. Theo minutes = (cant + cantNok) / teoManual
+          theoreticalTimeSum += (teoManual > 0 ? (cant + cantNok) / teoManual : 0);
         } else {
-          if (isLoncheadoArea) {
-            // teoManual is units/minute. Theoretical minutes = cant / teoManual
-            theoreticalTimeSum += (teoManual > 0 ? (cant / teoManual) : 0);
-          } else {
-            // teoManual is cycle time (minutes/unit). Theoretical minutes = teoManual * cant
-            // Note: Fixed the previous math (60/teoManual)*cant which was likely incorrect
-            theoreticalTimeSum += teoManual * cant;
-          }
+          // Para el resto, teoManual es tiempo de ciclo (minutos/unidad)
+          theoreticalTimeSum += (teoManual * cant);
         }
       }
 

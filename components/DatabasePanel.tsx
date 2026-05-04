@@ -119,6 +119,25 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
       ...history.map(h => ({ ...h, isHistory: true }))
     ];
 
+    // Filtrado por área según el contexto del Dashboard
+    const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
+    const envAreas = ['env-envasado', 'env-empaquetado'];
+    const expAreas = ['expedicion', 'preparacion-exp'];
+    const movAreas = ['movimiento-jamones'];
+
+    if (selectedArea === 'sala-blanca-dashboard') {
+      combined = combined.filter(r => sbAreas.includes(r.area));
+    } else if (selectedArea === 'envasado-dashboard') {
+      combined = combined.filter(r => envAreas.includes(r.area));
+    } else if (selectedArea === 'expediciones-dashboard') {
+      combined = combined.filter(r => expAreas.includes(r.area));
+    } else if (selectedArea === 'movimientos-dashboard') {
+      combined = combined.filter(r => movAreas.includes(r.area));
+    } else if (selectedArea && !['TOP 5', 'TOP 15', 'TOP 60', 'root-menu', 'menu'].includes(selectedArea)) {
+      // Si es un área individual específica
+      combined = combined.filter(r => r.area === selectedArea);
+    }
+
     // Deduplicar por ID y estado de historia para evitar errores de React keys
     const seen = new Set();
     combined = combined.filter(r => {
@@ -145,7 +164,26 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
       if (dateA !== dateB) return dateB.localeCompare(dateA);
       return (b.horaInicio || '').localeCompare(a.horaInicio || '');
     });
-  }, [activities, history, filterDate, filterTask, filterType]);
+  }, [activities, history, filterDate, filterTask, filterType, selectedArea]);
+
+  const areaTitleSuffix = useMemo(() => {
+    if (selectedArea === 'sala-blanca-dashboard') return ' - SALA BLANCA';
+    if (selectedArea === 'envasado-dashboard') return ' - ENVASADO';
+    if (selectedArea === 'expediciones-dashboard') return ' - EXPEDICIONES';
+    if (selectedArea === 'movimientos-dashboard') return ' - MOVIMIENTOS';
+    return '';
+  }, [selectedArea]);
+
+  const filteredMermas = useMemo(() => {
+    const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
+    if (selectedArea === 'sala-blanca-dashboard') {
+      return mermas.filter(m => sbAreas.includes(m.area));
+    }
+    if (selectedArea === 'sb-loncheado') {
+      return mermas.filter(m => m.area === 'sb-loncheado');
+    }
+    return [];
+  }, [mermas, selectedArea]);
 
   const handleExportCSV = () => {
     const csv = Papa.unparse(allRecords.map(r => ({
@@ -542,7 +580,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
       <div className={`p-4 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border-4 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4 sm:gap-6 transition-all ${isAdminMode ? 'bg-indigo-900 border-indigo-600 text-white' : 'bg-white border-slate-100 text-slate-900'}`}>
         <div className="text-center md:text-left">
           <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tighter text-indigo-600">
-            Histórico de Registros
+            Histórico de Registros{areaTitleSuffix}
           </h2>
           <p className="text-[15px] sm:text-[14px] font-black uppercase tracking-[0.3em] opacity-60">
             {isAdminMode ? '🔓 MODO ADMINISTRADOR ACTIVO' : '🔒 MODO CONSULTA (SOLO LECTURA)'}
@@ -823,12 +861,12 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
           </table>
         </div>
       </div>
-      {/* TABLA MERMAS - solo Loncheado */}
-      {selectedArea === 'sb-loncheado' && (
+      {/* TABLA MERMAS - solo Sala Blanca Dashboard o Loncheado individual */}
+      {filteredMermas.length > 0 && (
         <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden mt-6">
           <div className="bg-amber-600 px-5 py-4">
             <h3 className="text-white font-black text-[14px] uppercase tracking-widest">Registro de Mermas</h3>
-            <p className="text-amber-100 text-[11px] font-bold uppercase tracking-widest mt-0.5">Por día y formato</p>
+            <p className="text-amber-100 text-[11px] font-bold uppercase tracking-widest mt-0.5">Histórico filtrado</p>
           </div>
           <div className="overflow-x-auto no-scrollbar max-h-[50vh] overflow-y-auto">
             <table className="w-full text-left border-collapse text-[12px]">
@@ -840,7 +878,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {[...mermas].sort((a,b) => (b.fecha||'').localeCompare(a.fecha||'')).map((m, i) => (
+                {filteredMermas.sort((a,b) => (b.fecha||'').localeCompare(a.fecha||'')).map((m, i) => (
                   <tr key={m.id || i} className="hover:bg-amber-50 transition-colors">
                     <td className="p-3 font-bold text-slate-700">{m.fecha}</td>
                     <td className="p-3 font-black text-slate-900 uppercase">{m.formato}</td>

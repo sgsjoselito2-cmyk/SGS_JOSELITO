@@ -230,12 +230,14 @@ const Header: React.FC<HeaderProps> = ({
                 </button>
               </>
             )}
-            <button 
-              onClick={() => setActiveTab('config')} 
-              className={`py-2 text-[12px] font-black uppercase tracking-[0.2em] border-b-2 transition-all ${activeTab === 'config' ? 'border-joselito-red text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-            >
-              Config
-            </button>
+            {currentAreaId !== 'sala-blanca-dashboard' && (
+              <button 
+                onClick={() => setActiveTab('config')} 
+                className={`py-2 text-[12px] font-black uppercase tracking-[0.2em] border-b-2 transition-all ${activeTab === 'config' ? 'border-joselito-red text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+              >
+                Config
+              </button>
+            )}
           </div>
         </div>
       )}
