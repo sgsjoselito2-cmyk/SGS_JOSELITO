@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { TaskType, Activity, IncidenceMaster, MasterSpeed, OEEObjectives, User } from '../types';
 import { AREA_COLUMNS } from '../constants';
-import { calcDuration } from '../src/utils';
+import { calcDuration, calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals } from '../src/utils';
 import HelpModal from './HelpModal';
 import { Check, X, Edit2, Trash2 } from 'lucide-react';
 
@@ -118,83 +118,72 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
   const commentsRef = useRef<HTMLTextAreaElement>(null);
 
   const stats = useMemo(() => {
-    let totalTime = 0;
-    let timeP = 0;
-    let timeS = 0;
-    let timeA_Quality = 0;
-    let timeA_NoQuality = 0;
-    let timeE_Quality = 0;
-    let timeE_NoQuality = 0;
     let totalParts = 0;
     let theoreticalTimeSum = 0;
 
     const timeStr = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 
-    activities.forEach(act => {
-      let duration = act.duracionMin || 0;
-      if (!act.horaFin) {
-        duration = calcDuration(act.horaInicio, timeStr);
-      }
-      
-      totalTime += duration;
+    // Helper to extract intervals considering active tasks
+    const getInt = (acts: Activity[]) => acts.map(a => ({
+      start: a.horaInicio,
+      end: a.horaFin || timeStr
+    })).filter(i => i.start && i.end && i.start !== i.end);
 
+    const prodActs = activities.filter(a => a.tipoTarea === TaskType.PRODUCCION);
+    const sActs = activities.filter(a => a.tipoTarea === TaskType.SIN_TRABAJO);
+    const aActs = activities.filter(a => a.tipoTarea === TaskType.AVERIA);
+    const eActs = activities.filter(a => a.tipoTarea === TaskType.ESPERAS);
+
+    // Calculate theoreticalTimeSum and totalParts from records
+    activities.forEach(act => {
       if (act.tipoTarea === TaskType.PRODUCCION) {
-        timeP += duration;
-        totalParts += (act.cantidad || 0);
-        
-        const actIsLoncheado = (act.area || selectedArea || '').toLowerCase().includes('loncheado');
-        const isLaser = (act.area || selectedArea || '').toLowerCase().includes('laser');
-        const teoManual = Number(act.tiempoTeoricoManual || 0);
         const cant = Number(act.cantidad || 0);
         const cantNok = Number(act.cantidadNok || 0);
+        totalParts += cant;
+        
+        const actArea = (act.area || selectedArea || '').toLowerCase();
+        const actIsLoncheado = actArea.includes('loncheado');
+        const isLaser = actArea.includes('laser');
+        const teoManual = Number(act.tiempoTeoricoManual || 0);
 
         if (isLaser) {
-          // Para laser, teoManual es U/H
           theoreticalTimeSum += (teoManual > 0 ? (60 / teoManual) : 0);
         } else if (actIsLoncheado) {
-          // Para Loncheado, teoManual es unidades/minuto. Theo minutes = (cant + cantNok) / teoManual
           theoreticalTimeSum += (teoManual > 0 ? (cant + cantNok) / teoManual : 0);
         } else {
-          // Para el resto, teoManual es tiempo de ciclo (minutos/unidad)
-          theoreticalTimeSum += (teoManual * cant);
-        }
-      }
-
-      if (act.tipoTarea === TaskType.SIN_TRABAJO) {
-        timeS += duration;
-      }
-
-      if (act.tipoTarea === TaskType.AVERIA) {
-        if (act.afectaCalidad) {
-          timeA_Quality += duration;
-        } else {
-          timeA_NoQuality += duration;
-        }
-      }
-
-      if (act.tipoTarea === TaskType.ESPERAS) {
-        if (act.afectaCalidad) {
-          timeE_Quality += duration;
-        } else {
-          timeE_NoQuality += duration;
+          theoreticalTimeSum += (teoManual * (cant + cantNok));
         }
       }
     });
 
-    let availability = 0;
-    let quality = 100;
-    let performance = 0;
+    // Unique machine times using priorities: P > A > E
+    const pIntervals = mergeIntervals(getIntervalsInMinutes(getInt(prodActs)));
+    const aIntervalsRaw = mergeIntervals(getIntervalsInMinutes(getInt(aActs)));
+    const eIntervalsRaw = mergeIntervals(getIntervalsInMinutes(getInt(eActs)));
 
-    // Standard OEE logic
-    let downtimeSum = timeE_NoQuality + timeE_Quality + timeS;
-    availability = totalTime > 0 ? ((totalTime - downtimeSum) / totalTime) * 100 : 0;
-    quality = 100; // Calidad is 100 as we don't track NOK anymore according to request
-    const prodTime = totalTime - downtimeSum;
-    performance = prodTime > 0 ? (theoreticalTimeSum / prodTime) * 100 : 0;
+    // Machine is only stopped if NOT in Production
+    const machineAIntervals = subtractIntervals(aIntervalsRaw, pIntervals);
+    // Machine is only in Esperas if NOT in Production AND NOT in Averia
+    const machineEIntervals = subtractIntervals(subtractIntervals(eIntervalsRaw, pIntervals), machineAIntervals);
+
+    const uniqueTimeP = pIntervals.reduce((s, i) => s + (i.end - i.start), 0);
+    const uniqueTimeA = machineAIntervals.reduce((s, i) => s + (i.end - i.start), 0);
+    const uniqueTimeE = machineEIntervals.reduce((s, i) => s + (i.end - i.start), 0);
+
+    // Universal Formulas per User Request
+    // Availability = P / (P + E + A)
+    const availability = (uniqueTimeP + uniqueTimeE + uniqueTimeA) > 0 
+      ? (uniqueTimeP / (uniqueTimeP + uniqueTimeE + uniqueTimeA)) * 100 
+      : 0;
+
+    // Performance = Theoretical / Production
+    const performance = uniqueTimeP > 0 
+      ? (theoreticalTimeSum / uniqueTimeP) * 100 
+      : 0;
 
     const finalAvailability = Math.min(100, availability > 0 ? availability : 0);
     const finalPerformance = Math.min(100, performance > 0 ? performance : 0);
-    const finalQuality = Math.min(100, quality > 0 ? quality : 0);
+    const finalQuality = 100; // Calidad is 100 if we don't track NOK in stats
     const oee = (finalAvailability * finalPerformance * finalQuality) / 10000;
 
     const hasData = activities.length > 0;

@@ -7,6 +7,7 @@ import Markdown from 'react-markdown';
 import { GoogleGenAI } from "@google/genai";
 import { Activity, MasterSpeed, IncidenceMaster, OEEObjectives, TaskType } from '../types';
 import { generateContentWithRetry } from '../src/utils/aiUtils';
+import { calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals } from '../src/utils';
 import { X } from 'lucide-react';
 
 interface DashboardProps {
@@ -32,19 +33,13 @@ export const getWeekNumber = (d: Date) => {
 };
 
 export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] = []) => {
-  let totalTime = 0;
-  let timeP = 0;
-  let timeS = 0;
-  let timeA_Quality = 0;
-  let timeA_NoQuality = 0;
-  let timeE_Quality = 0;
-  let timeE_NoQuality = 0;
+  let totalPersonMinutes = 0;
   let totalParts = 0;
   let totalPartsNok = 0;
   let theoreticalTimeSum = 0;
 
   const aid = (areaId || '').toLowerCase();
-  const isLoncheado = (aid.includes('sb-loncheado') || aid.includes('loncheado'));
+  const isLoncheadoArea = aid.includes('sb-loncheado') || aid.includes('loncheado');
 
   const parseTime = (timeStr: string) => {
     if (!timeStr) return 0;
@@ -52,115 +47,93 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
     return (h || 0) * 60 + (m || 0);
   };
 
+  // Helper to get formatted intervals for calculateUniqueMinutes
+  const getIntervals = (acts: Activity[]) => acts
+    .filter(a => a.horaInicio && a.horaFin)
+    .map(a => ({ start: a.horaInicio, end: a.horaFin! }));
+
+  const prodActs = data.filter(act => {
+    const tipo = act.tipoTarea || (act as any).tipo_tarea;
+    return tipo === TaskType.PRODUCCION || tipo === 'P';
+  });
+
+  const sActs = data.filter(a => a.tipoTarea === TaskType.SIN_TRABAJO);
+  const averiaActs = data.filter(a => a.tipoTarea === TaskType.AVERIA);
+  const esperaActs = data.filter(a => a.tipoTarea === TaskType.ESPERAS);
+
+  // Calculations that depend on individual records (Pieces and Theoretical Time)
   data.forEach(act => {
-    // Robust field access for duration and quantity
     let duration = Number(act.duracionMin ?? (act as any).duration ?? (act as any).duracion_min ?? 0);
-    
-    // Fallback if duration is missing but times are present
     if (duration === 0 && act.horaInicio && act.horaFin) {
       const start = parseTime(act.horaInicio);
       const end = parseTime(act.horaFin);
       duration = end >= start ? (end - start) : (24 * 60 - start + end);
     }
     
-    totalTime += duration;
+    // Total person minutes for PPH (using operators count)
+    const nOps = Array.isArray(act.operarios) ? act.operarios.length : 1;
+    totalPersonMinutes += duration * nOps;
 
     const tipo = act.tipoTarea || (act as any).tipo_tarea;
-
     if (tipo === TaskType.PRODUCCION || tipo === 'P') {
-      timeP += duration;
       const cant = Number(act.cantidad ?? (act as any).quantity ?? (act as any).cantidad_ok ?? 0);
       const cantNok = Number(act.cantidadNok ?? (act as any).quantity_nok ?? (act as any).cantidad_nok ?? 0);
       totalParts += cant;
       totalPartsNok += cantNok;
       
-      const actArea = (act.area || aid).toLowerCase();
-      const actIsLoncheado = actArea.includes('loncheado');
-      const isLaser = actArea.includes('laser');
+      const actIsLoncheado = (act.area || aid).toLowerCase().includes('loncheado');
+      const isLaser = (act.area || aid).toLowerCase().includes('laser');
       const teoManual = Number(act.tiempoTeoricoManual ?? (act as any).tiempo_teorico ?? (act as any).theo_time ?? 0);
 
+      // Theoretical time per record (Σ Cantidad / Velocidad)
       if (isLaser) {
         theoreticalTimeSum += (teoManual > 0 ? (60 / teoManual) : 0);
       } else if (actIsLoncheado) {
-        // Para Loncheado, teoManual es unidades/minuto. Theo minutes = cant / teoManual
         theoreticalTimeSum += (teoManual > 0 ? (cant + cantNok) / teoManual : 0);
       } else {
-        // Para el resto, teoManual es tiempo de ciclo (minutos/unidad). Theo minutes = teoManual * cant
-        theoreticalTimeSum += (teoManual * cant);
-      }
-    }
-
-    if (act.tipoTarea === TaskType.SIN_TRABAJO) {
-      timeS += duration;
-    }
-
-    if (act.tipoTarea === TaskType.AVERIA) {
-      if (act.afectaCalidad) {
-        timeA_Quality += duration;
-      } else {
-        timeA_NoQuality += duration;
-      }
-    }
-
-    if (act.tipoTarea === TaskType.ESPERAS) {
-      if (act.afectaCalidad) {
-        timeE_Quality += duration;
-      } else {
-        timeE_NoQuality += duration;
+        theoreticalTimeSum += (teoManual * (cant + cantNok));
       }
     }
   });
 
-  let availability = 0;
-  let quality = 100;
-  let performance = 0;
+  // Unique machine times (Clock hours, not man-hours) using priorities: P > A > E
+  const pIntervals = mergeIntervals(getIntervalsInMinutes(getIntervals(prodActs)));
+  const aIntervalsRaw = mergeIntervals(getIntervalsInMinutes(getIntervals(averiaActs)));
+  const eIntervalsRaw = mergeIntervals(getIntervalsInMinutes(getIntervals(esperaActs)));
 
-  if (aid.includes('sb-preparacion')) {
-      // PPH = nº unidades / Tiempo trabajado en horas
-      // Usaremos el performance o calidad como base si es necesario, pero el usuario pide PPH.
-      // Lo calcularemos al final.
-      
-      // OEE Estándar para Preparación si no se indica otra cosa
-      let downtimeSum = timeS + timeA_NoQuality + timeA_Quality + timeE_NoQuality + timeE_Quality;
-      availability = totalTime > 0 ? ((totalTime - downtimeSum) / totalTime) * 100 : 0;
-      const prodTime = totalTime - downtimeSum;
-      performance = prodTime > 0 ? (theoreticalTimeSum / prodTime) * 100 : 0;
-      quality = (totalParts + totalPartsNok) > 0 ? (totalParts / (totalParts + totalPartsNok)) * 100 : 100;
-    } else if (aid.includes('sb-loncheado')) {
-      // Disponibilidad = Tiempo trabajando (P) / (Tiempo (P) + Esperas + Averías)
-      // downtimeSum ya incluye Esperas, Averías y Sin Trabajo.
-      const loncheadoDowntime = timeE_Quality + timeE_NoQuality + timeA_Quality + timeA_NoQuality;
-      availability = (timeP + loncheadoDowntime) > 0 ? (timeP / (timeP + loncheadoDowntime)) * 100 : 0;
-      
-      // Rendimiento = Tiempo teórico / tiempo real (timeP)
-      performance = timeP > 0 ? (theoreticalTimeSum / timeP) * 100 : 0;
-      
-      // Calidad = Cantidad OK / (Cantidad ok + Cantidad reprocesada)
-      quality = (totalParts + totalPartsNok) > 0 ? (totalParts / (totalParts + totalPartsNok)) * 100 : 100;
-    } else if (aid === 'corte-laser') {
-    const totalAverias = timeA_Quality + timeA_NoQuality;
-    availability = (timeP + timeE_NoQuality + totalAverias) > 0 ? (timeP / (timeP + timeE_NoQuality + totalAverias)) * 100 : 0;
-    quality = (totalParts + totalPartsNok) > 0 ? (totalParts / (totalParts + totalPartsNok)) * 100 : 100;
-    performance = timeP > 0 ? (theoreticalTimeSum / timeP) * 100 : 0;
-  } else {
-    let downtimeSum = timeS + timeA_NoQuality + timeA_Quality + timeE_NoQuality + timeE_Quality;
-    availability = totalTime > 0 ? ((totalTime - downtimeSum) / totalTime) * 100 : 0;
-    const prodTime = totalTime - downtimeSum;
-    performance = prodTime > 0 ? (theoreticalTimeSum / prodTime) * 100 : 0;
-    quality = (totalParts + totalPartsNok) > 0 ? (totalParts / (totalParts + totalPartsNok)) * 100 : 100;
-  }
+  // Machine is only stopped if NOT in Production
+  const machineAIntervals = subtractIntervals(aIntervalsRaw, pIntervals);
+  // Machine is only in Esperas if NOT in Production AND NOT in Averia
+  const machineEIntervals = subtractIntervals(subtractIntervals(eIntervalsRaw, pIntervals), machineAIntervals);
 
-  // Mermas Loncheado
+  const uniqueTimeP = pIntervals.reduce((s, i) => s + (i.end - i.start), 0);
+  const uniqueTimeA = machineAIntervals.reduce((s, i) => s + (i.end - i.start), 0);
+  const uniqueTimeE = machineEIntervals.reduce((s, i) => s + (i.end - i.start), 0);
+  const uniqueTotalTime = calculateUniqueMinutes(getIntervals(data));
+
+  // Universal Formulas per User Request
+  // Availability = P / (P + E + A)
+  const availability = (uniqueTimeP + uniqueTimeE + uniqueTimeA) > 0 
+    ? (uniqueTimeP / (uniqueTimeP + uniqueTimeE + uniqueTimeA)) * 100 
+    : 0;
+
+  // Performance = Theoretical / Production
+  const performance = uniqueTimeP > 0 
+    ? (theoreticalTimeSum / uniqueTimeP) * 100 
+    : 0;
+
+  const quality = (totalParts + totalPartsNok) > 0 ? (totalParts / (totalParts + totalPartsNok)) * 100 : 100;
+
+  // Merma logic
   let merma1 = 0;
   let merma2 = 0;
   let subproducto = 0;
-  if (isLoncheado && mermas && mermas.length > 0) {
+  if (isLoncheadoArea && mermas && mermas.length > 0) {
     let sumKgEntrada = 0;
     let sumKgMerma = 0;
     let sumKgTacos = 0;
     let sumKgPieles = 0;
     let sumKgHueco = 0;
-    let sumKgEnvasados = 0;
 
     mermas.forEach(m => {
       sumKgEntrada += Number(m.kgEntrada || 0);
@@ -168,7 +141,6 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
       sumKgTacos += Number(m.kgTacos || 0);
       sumKgPieles += Number(m.kgPieles || 0);
       sumKgHueco += Number(m.kgHueco || 0);
-      sumKgEnvasados += Number(m.kgSalida || m.kgEnvasados || 0);
     });
 
     if (sumKgEntrada > 0) {
@@ -179,63 +151,38 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
   }
 
   // PPH Calculations
-  let pph = 0;
-  let pph_blister = 0;
-  let pph_sin_blister = 0;
-  let pph_jamones = 0;
-  let pph_paletas = 0;
+  let pph = 0, pph_blister = 0, pph_sin_blister = 0, pph_jamones = 0, pph_paletas = 0;
+  const calcPPHFromMinutes = (m: number, qty: number) => m > 0 ? qty / (m / 60) : 0;
 
-  // PPH helper: cantidad / horas-persona
-  const calcPPH = (acts: typeof data) => {
-    const personMinutes = acts.reduce((sum, a) => {
-      const nOps = Array.isArray(a.operarios) ? a.operarios.length : 1;
-      return sum + (a.duracionMin || 0) * nOps;
-    }, 0);
-    const personHours = personMinutes / 60;
-    const totalQty = acts.reduce((sum, a) => sum + (a.cantidad || 0), 0);
-    return personHours > 0 ? totalQty / personHours : 0;
-  };
-
-  if (areaId === 'sb-preparacion') {
-    const acts = data.filter(a => 
-      a.tipoTarea === TaskType.PRODUCCION && 
-      a.formato?.toUpperCase().includes('PESAR')
-    );
-    pph = calcPPH(acts);
-  }
-
-  if (areaId === 'sb-empaquetado-deshuesado' || areaId === 'env-envasado' || areaId === 'env-empaquetado') {
+  if (aid.includes('sb-preparacion')) {
+    const acts = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && a.formato?.toUpperCase().includes('PESAR'));
+    const pmInput = acts.reduce((sum, a) => sum + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0);
+    const qtyInput = acts.reduce((sum, a) => sum + (a.cantidad || 0), 0);
+    pph = calcPPHFromMinutes(pmInput, qtyInput);
+  } else if (aid.includes('sb-empaquetado-deshuesado') || aid.includes('env-envasado') || aid.includes('env-empaquetado')) {
     const acts = data.filter(a => a.tipoTarea === TaskType.PRODUCCION);
-    pph = calcPPH(acts);
-  }
-
-  if (areaId === 'sb-empaquetado-loncheado') {
-    const blisterActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && (a.formato?.toUpperCase().includes('BLISTER') || a.formato?.toUpperCase().includes('BLÍSTER')));
-    const sinBlisterActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && !a.formato?.toUpperCase().includes('BLISTER') && !a.formato?.toUpperCase().includes('BLÍSTER'));
-    pph_blister = calcPPH(blisterActs);
-    pph_sin_blister = calcPPH(sinBlisterActs);
-  }
-
-  if (areaId === 'movimiento-jamones') {
-    const jamonActs = data.filter(a => {
-      const f = a.formato?.toUpperCase() || '';
-      return a.tipoTarea === TaskType.PRODUCCION && (f.includes('JAMÓN') || f.includes('JAMON'));
-    });
-    const paletaActs = data.filter(a => {
-      const f = a.formato?.toUpperCase() || '';
-      return a.tipoTarea === TaskType.PRODUCCION && (f.includes('PALETA'));
-    });
-    pph_jamones = calcPPH(jamonActs);
-    pph_paletas = calcPPH(paletaActs);
+    const pmInput = acts.reduce((sum, a) => sum + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0);
+    const qtyInput = acts.reduce((sum, a) => sum + (a.cantidad || 0), 0);
+    pph = calcPPHFromMinutes(pmInput, qtyInput);
+  } else if (aid.includes('sb-empaquetado-loncheado')) {
+    const bActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && (a.formato?.toUpperCase().includes('BLISTER') || a.formato?.toUpperCase().includes('BLÍSTER')));
+    const sBActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && !a.formato?.toUpperCase().includes('BLISTER') && !a.formato?.toUpperCase().includes('BLÍSTER'));
+    pph_blister = calcPPHFromMinutes(bActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), bActs.reduce((s, a) => s + (a.cantidad || 0), 0));
+    pph_sin_blister = calcPPHFromMinutes(sBActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), sBActs.reduce((s, a) => s + (a.cantidad || 0), 0));
+  } else if (aid.includes('movimiento-jamones')) {
+    const jActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && (a.formato?.toUpperCase().includes('JAMÓN') || a.formato?.toUpperCase().includes('JAMON')));
+    const pActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && a.formato?.toUpperCase().includes('PALETA'));
+    pph_jamones = calcPPHFromMinutes(jActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), jActs.reduce((s, a) => s + (a.cantidad || 0), 0));
+    pph_paletas = calcPPHFromMinutes(pActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), pActs.reduce((s, a) => s + (a.cantidad || 0), 0));
   }
 
   const finalAvailability = Math.min(100, availability > 0 ? availability : 0);
   const finalPerformance = Math.min(100, performance > 0 ? performance : 0);
-  const finalQuality = Math.min(100, quality > 0 ? quality : 0);
+  const finalQuality = Math.min(100, quality > 0 ? quality : 100);
   const oee = (finalAvailability * finalPerformance * finalQuality) / 10000;
 
   const hasData = data.length > 0;
-  const hasMermas = isLoncheado && mermas && mermas.length > 0;
+  const hasMermas = isLoncheadoArea && mermas && mermas.length > 0;
 
   return {
     disponibilidad: hasData ? finalAvailability.toFixed(1) : '',
@@ -243,7 +190,7 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
     calidad: hasData ? finalQuality.toFixed(1) : '',
     productividad: hasData ? oee.toFixed(1) : '',
     totalParts,
-    downtime: (totalTime - timeP).toFixed(0),
+    downtime: (uniqueTotalTime - uniqueTimeP).toFixed(0),
     merma1: (hasData || hasMermas) ? merma1.toFixed(2) : '',
     merma2: (hasData || hasMermas) ? merma2.toFixed(2) : '',
     subproducto: (hasData || hasMermas) ? subproducto.toFixed(2) : '',
