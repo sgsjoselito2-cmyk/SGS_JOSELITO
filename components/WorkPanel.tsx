@@ -3,7 +3,7 @@ import { TaskType, Activity, IncidenceMaster, MasterSpeed, OEEObjectives, User }
 import { AREA_COLUMNS } from '../constants';
 import { calcDuration, calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals } from '../src/utils';
 import HelpModal from './HelpModal';
-import { Check, X, Edit2, Trash2 } from 'lucide-react';
+import { Check, X, Edit2, Trash2, Calendar } from 'lucide-react';
 
 interface WorkPanelProps {
   selectedUsers: string[];
@@ -31,6 +31,8 @@ interface WorkPanelProps {
     directorOperaciones: string;
     asistenciaTecnica: string;
   };
+  selectedDate?: string;
+  setSelectedDate?: (d: string) => void;
 }
 
 const WorkPanel: React.FC<WorkPanelProps> = ({ 
@@ -49,8 +51,14 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
   onFinalizeShift,
   onRefresh,
   selectedArea,
-  passwords
+  passwords,
+  selectedDate: propDate,
+  setSelectedDate: propSetDate
 }) => {
+  const [localDate, setLocalDate] = useState(new Date().toISOString().split('T')[0]);
+  const selectedDate = propDate || localDate;
+  const setSelectedDate = propSetDate || setLocalDate;
+  
   const isLaserArea = selectedArea === 'corte-laser';
   const isLoncheadoArea = selectedArea === 'sb-loncheado';
   
@@ -689,6 +697,20 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
         onClose={() => setIsHelpModalOpen(false)} 
         areaId={selectedArea || 'default'} 
       />
+
+      {/* Selector de Fecha Global */}
+      <div className="bg-white p-2 rounded-lg border border-slate-100 shadow-sm flex items-center justify-between gap-2 mb-1 shrink-0">
+        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-blue-500" />
+          FECHA DE TRABAJO:
+        </label>
+        <input 
+          type="date" 
+          value={selectedDate}
+          onChange={(e) => setSelectedDate && setSelectedDate(e.target.value)}
+          className="bg-slate-50 border-none rounded-lg px-3 py-1 font-black text-[14px] text-blue-600 focus:ring-2 focus:ring-blue-500 uppercase outline-none"
+        />
+      </div>
 
       {/* KPI SUMMARY */}
       <div className="grid grid-cols-4 gap-0.5 sm:gap-1 mb-0.5 relative shrink-0">

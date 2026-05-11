@@ -20,6 +20,8 @@ interface DashboardProps {
   workshopName?: string;
   selectedArea?: string;
   mermas?: any[];
+  selectedDate?: string;
+  setSelectedDate?: (d: string) => void;
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
@@ -31,6 +33,11 @@ export const getWeekNumber = (d: Date) => {
   const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
   return weekNo;
 };
+
+// Helper to get formatted intervals for calculateUniqueMinutes
+const getIntervals = (acts: Activity[]) => acts
+  .filter(a => a.horaInicio && a.horaFin)
+  .map(a => ({ start: a.horaInicio, end: a.horaFin! }));
 
 export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] = []) => {
   let totalPersonMinutes = 0;
@@ -46,11 +53,6 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
     const [h, m] = timeStr.split(':').map(Number);
     return (h || 0) * 60 + (m || 0);
   };
-
-  // Helper to get formatted intervals for calculateUniqueMinutes
-  const getIntervals = (acts: Activity[]) => acts
-    .filter(a => a.horaInicio && a.horaFin)
-    .map(a => ({ start: a.horaInicio, end: a.horaFin! }));
 
   const prodActs = data.filter(act => {
     const tipo = act.tipoTarea || (act as any).tipo_tarea;
@@ -151,7 +153,7 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
   }
 
   // PPH Calculations
-  let pph = 0, pph_blister = 0, pph_sin_blister = 0, pph_jamones = 0, pph_paletas = 0;
+  let pph = 0, pph_blister = 0, pph_sin_blister = 0, pph_jamones = 0, pph_paletas = 0, pph_manteca = 0;
   const calcPPHFromMinutes = (m: number, qty: number) => m > 0 ? qty / (m / 60) : 0;
 
   if (aid.includes('sb-preparacion')) {
@@ -170,10 +172,12 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
     pph_blister = calcPPHFromMinutes(bActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), bActs.reduce((s, a) => s + (a.cantidad || 0), 0));
     pph_sin_blister = calcPPHFromMinutes(sBActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), sBActs.reduce((s, a) => s + (a.cantidad || 0), 0));
   } else if (aid.includes('movimiento-jamones')) {
-    const jActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && (a.formato?.toUpperCase().includes('JAMÓN') || a.formato?.toUpperCase().includes('JAMON')));
+    const jActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && (a.formato?.toUpperCase().includes('JAMÓN') || a.formato?.toUpperCase().includes('JAMON')) && !a.formato?.toUpperCase().includes('MANTECA'));
     const pActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && a.formato?.toUpperCase().includes('PALETA'));
+    const mActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && a.formato?.toUpperCase().includes('MANTECA'));
     pph_jamones = calcPPHFromMinutes(jActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), jActs.reduce((s, a) => s + (a.cantidad || 0), 0));
     pph_paletas = calcPPHFromMinutes(pActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), pActs.reduce((s, a) => s + (a.cantidad || 0), 0));
+    pph_manteca = calcPPHFromMinutes(mActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), mActs.reduce((s, a) => s + (a.cantidad || 0), 0));
   }
 
   const finalAvailability = Math.min(100, availability > 0 ? availability : 0);
@@ -198,7 +202,11 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
     pph_blister: hasData ? pph_blister.toFixed(0) : '',
     pph_sin_blister: hasData ? pph_sin_blister.toFixed(0) : '',
     pph_jamones: hasData ? pph_jamones.toFixed(0) : '',
-    pph_paletas: hasData ? pph_paletas.toFixed(0) : ''
+    pph_paletas: hasData ? pph_paletas.toFixed(0) : '',
+    pph_manteca: hasData ? pph_manteca.toFixed(0) : '',
+    tiempo_produccion_real: uniqueTimeP,
+    tiempo_esperas: uniqueTimeE,
+    tiempo_averias: uniqueTimeA
   };
 };
 
@@ -211,9 +219,14 @@ const Dashboard: React.FC<DashboardProps> = ({
   allObjectives = {},
   workshopName,
   selectedArea,
-  mermas = []
+  mermas = [],
+  selectedDate: propDate,
+  setSelectedDate: propSetDate
 }) => {
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [localDate, setLocalDate] = useState(new Date().toISOString().split('T')[0]);
+  const selectedDate = propDate || localDate;
+  const setSelectedDate = propSetDate || setLocalDate;
+  
   const [aiAnalysis, setAiAnalysis] = useState<string>('Analizando datos con IA...');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -537,11 +550,15 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [selectedDate, workshopName]);
 
   const renderScorecardTable = (title: string, data: any[]) => {
-    const indicators = [
+    let indicators = [
       { id: 'disponibilidad', objKey: 'disponibilidad', label: 'DISPONIBILIDAD (%)' },
       { id: 'rendimiento', objKey: 'rendimiento', label: 'RENDIMIENTO (%)' },
       { id: 'calidad', objKey: 'calidad', label: 'CALIDAD (%)' }
     ];
+
+    if (selectedArea === 'movimiento-jamones') {
+      indicators = indicators.filter(ind => ind.id !== 'rendimiento' && ind.id !== 'calidad');
+    }
 
     if (selectedArea === 'sb-loncheado') {
       indicators.push(
@@ -571,7 +588,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     if (selectedArea === 'movimiento-jamones') {
       indicators.unshift(
         { id: 'pph_jamones', objKey: 'pph_jamones', label: 'PPH JAMONES' },
-        { id: 'pph_paletas', objKey: 'pph_paletas', label: 'PPH PALETAS' }
+        { id: 'pph_paletas', objKey: 'pph_paletas', label: 'PPH PALETAS' },
+        { id: 'pph_manteca', objKey: 'pph_manteca', label: 'PPH JAMONES MANTECA' }
       );
     }
 
@@ -628,6 +646,59 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
     );
   };
+
+  const extraKPIs = useMemo(() => {
+    const kpis: any[] = [];
+    const aid = (selectedArea || '').toLowerCase();
+    
+    if (aid.includes('sb-preparacion')) {
+      kpis.push({ label: 'PPH PESAR', val: stats.pph, obj: getObjectiveForDate('pph', selectedDate), color: 'indigo', key: 'pph' });
+    }
+    if (aid.includes('sb-empaquetado-loncheado')) {
+      kpis.push({ label: 'PPH ENV. BLISTER', val: stats.pph_blister, obj: getObjectiveForDate('pph_blister', selectedDate), color: 'indigo', key: 'pph_blister' });
+      kpis.push({ label: 'PPH ENV. SIN BLISTER', val: stats.pph_sin_blister, obj: getObjectiveForDate('pph_sin_blister', selectedDate), color: 'indigo', key: 'pph_sin_blister' });
+    }
+    if (aid.includes('sb-empaquetado-deshuesado') || aid.includes('env-envasado') || aid.includes('env-empaquetado')) {
+      kpis.push({ label: 'PPH', val: stats.pph, obj: getObjectiveForDate('pph', selectedDate), color: 'indigo', key: 'pph' });
+    }
+    if (aid.includes('movimiento-jamones')) {
+      kpis.push({ label: 'PPH JAMONES', val: stats.pph_jamones, obj: getObjectiveForDate('pph_jamones', selectedDate), color: 'indigo', key: 'pph_jamones' });
+      kpis.push({ label: 'PPH PALETAS', val: stats.pph_paletas, obj: getObjectiveForDate('pph_paletas', selectedDate), color: 'indigo', key: 'pph_paletas' });
+      kpis.push({ label: 'PPH JAMONES MANTECA', val: stats.pph_manteca, obj: getObjectiveForDate('pph_manteca', selectedDate), color: 'indigo', key: 'pph_manteca' });
+    }
+    return kpis;
+  }, [selectedArea, stats, selectedDate]);
+
+  const formatDetailedStats = useMemo(() => {
+    const formats = Array.from(new Set(dayData.filter(a => a.formato).map(a => a.formato))).sort();
+    
+    return formats.map(f => {
+      const fData = dayData.filter(a => a.formato === f);
+      
+      const fProdActs = fData.filter(act => {
+        const tipo = act.tipoTarea || (act as any).tipo_tarea;
+        return tipo === TaskType.PRODUCCION || tipo === 'P';
+      });
+      const fAveriaActs = fData.filter(a => a.tipoTarea === TaskType.AVERIA);
+      const fEsperaActs = fData.filter(a => a.tipoTarea === TaskType.ESPERAS);
+
+      const pInts = mergeIntervals(getIntervalsInMinutes(getIntervals(fProdActs)));
+      const aIntsRaw = mergeIntervals(getIntervalsInMinutes(getIntervals(fAveriaActs)));
+      const eIntsRaw = mergeIntervals(getIntervalsInMinutes(getIntervals(fEsperaActs)));
+
+      const aInts = subtractIntervals(aIntsRaw, pInts);
+      const eInts = subtractIntervals(subtractIntervals(eIntsRaw, pInts), aInts);
+
+      return {
+        formato: f,
+        ok: fProdActs.reduce((sum, a) => sum + Number(a.cantidad || 0), 0),
+        nok: fProdActs.reduce((sum, a) => sum + Number(a.cantidadNok || 0), 0),
+        prod: pInts.reduce((sum, i) => sum + (i.end - i.start), 0),
+        averia: aInts.reduce((sum, i) => sum + (i.end - i.start), 0),
+        espera: eInts.reduce((sum, i) => sum + (i.end - i.start), 0),
+      };
+    }).sort((a, b) => b.prod - a.prod);
+  }, [dayData]);
 
   return (
     <div className="flex flex-col gap-1 animate-in fade-in duration-500 h-full">
@@ -694,6 +765,31 @@ const Dashboard: React.FC<DashboardProps> = ({
                 <div className={`text-[10px] sm:text-[15px] font-bold ${kpi.isGlobal ? 'text-slate-400' : `text-${kpi.color}-600`}`}>Obj: {kpi.obj}%</div>
                 <div className="w-full bg-slate-100 h-1 rounded-full mt-1 overflow-hidden">
                   <div className={`h-full rounded-full transition-all duration-1000 ${Number(kpi.val) >= kpi.obj ? 'bg-emerald-500' : 'bg-red-500'}`} style={{ width: `${Math.min(100, Number(kpi.val))}%` }}></div>
+                </div>
+              </div>
+            </div>
+          ))}
+          {extraKPIs.map(kpi => (
+            <div key={kpi.label} className="bg-white p-2 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-100 shadow-md relative overflow-hidden group hover:shadow-lg transition-all flex flex-col justify-between">
+              <div>
+                <h3 className="text-slate-400 text-[10px] sm:text-[13px] font-black uppercase tracking-widest mb-0.5">{kpi.label}</h3>
+                <div className="text-lg sm:text-2xl font-black tracking-tighter">
+                  {kpi.val}
+                </div>
+              </div>
+              
+              <div className="mt-1 sm:mt-2 grid grid-cols-1 gap-2 border-t border-slate-100 pt-1 sm:pt-2">
+                <div className="flex flex-col">
+                  <span className={`text-[10px] sm:text-[15px] font-bold ${Number(kpi.val) >= kpi.obj ? 'text-emerald-500' : 'text-red-500'}`}>
+                    {kpi.val}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-1">
+                <div className={`text-[10px] sm:text-[15px] font-bold text-${kpi.color}-600`}>Obj: {kpi.obj}</div>
+                <div className="w-full bg-slate-100 h-1 rounded-full mt-1 overflow-hidden">
+                  <div className={`h-full rounded-full transition-all duration-1000 ${Number(kpi.val) >= kpi.obj ? 'bg-emerald-500' : 'bg-red-500'}`} style={{ width: `${Math.min(100, (Number(kpi.val) / kpi.obj) * 100)}%` }}></div>
                 </div>
               </div>
             </div>
@@ -767,6 +863,47 @@ const Dashboard: React.FC<DashboardProps> = ({
             <p className="text-[15px] text-center text-slate-400 mt-2 font-bold uppercase tracking-widest">Doble clic en barra para ver registros</p>
           </div>
         ))}
+      </div>
+
+      {/* Breakdown by Format Table */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xl space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-black text-sm">D</div>
+          <h3 className="text-lg font-black text-slate-900 uppercase tracking-tighter">Detalle por Formato ({selectedDate.split('-').reverse().join('/')})</h3>
+        </div>
+        
+        <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+          <table className="w-full text-[13px] border-collapse">
+            <thead>
+              <tr className="bg-slate-900 text-white font-black text-[11px] uppercase tracking-widest">
+                <th className="p-3 text-left border border-slate-700">Formato</th>
+                <th className="p-3 text-center border border-slate-700">OK</th>
+                <th className="p-3 text-center border border-slate-700">NOK</th>
+                <th className="p-3 text-center border border-slate-700">T. Prod (min)</th>
+                <th className="p-3 text-center border border-slate-700">T. Avería (min)</th>
+                <th className="p-3 text-center border border-slate-700">T. Espera (min)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {formatDetailedStats.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">No hay datos para esta fecha</td>
+                </tr>
+              ) : (
+                formatDetailedStats.map((f, idx) => (
+                  <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+                    <td className="p-3 font-bold text-slate-700 border border-slate-100">{f.formato}</td>
+                    <td className="p-3 text-center border border-slate-100 font-black text-emerald-600">{f.ok}</td>
+                    <td className="p-3 text-center border border-slate-100 font-black text-red-500">{f.nok}</td>
+                    <td className="p-3 text-center border border-slate-100 font-black text-blue-600">{f.prod}</td>
+                    <td className="p-3 text-center border border-slate-100 text-slate-500">{f.averia}</td>
+                    <td className="p-3 text-center border border-slate-100 text-slate-500">{f.espera}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* AI Analysis Section */}

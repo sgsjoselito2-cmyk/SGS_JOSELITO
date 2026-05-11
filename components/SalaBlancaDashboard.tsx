@@ -1,7 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { Activity, OEEObjectives } from '../types';
+import { Activity, OEEObjectives, TaskType } from '../types';
 import { calculateStats, getWeekNumber } from './Dashboard';
+import { calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals } from '../src/utils';
 import { INITIAL_OEE_OBJECTIVES } from '../constants';
+
+// Helper to get formatted intervals for calculateUniqueMinutes
+const getIntervals = (acts: Activity[]) => acts
+  .filter(a => a.horaInicio && a.horaFin)
+  .map(a => ({ start: a.horaInicio, end: a.horaFin! }));
 
 interface AreaConfig {
   id: string;
@@ -16,10 +22,14 @@ interface Props {
   title: string;
   subtitle: string;
   mermas?: any[];
+  selectedDate?: string;
+  setSelectedDate?: (d: string) => void;
 }
 
-const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, areas, title, subtitle, mermas = [] }) => {
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, areas, title, subtitle, mermas = [], selectedDate: propDate, setSelectedDate: propSetDate }) => {
+  const [localDate, setLocalDate] = useState(new Date().toISOString().split('T')[0]);
+  const selectedDate = propDate || localDate;
+  const setSelectedDate = propSetDate || setLocalDate;
   const [view, setView] = useState<'daily' | 'weekly' | 'annual'>('daily');
 
   const allData = useMemo(() => [...history, ...activities], [history, activities]);
@@ -153,9 +163,8 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
         areaIndicators = [
           { id: 'pph_jamones', label: 'PPH JAMONES', objKey: 'pph_jamones' },
           { id: 'pph_paletas', label: 'PPH PALETAS', objKey: 'pph_paletas' },
-          { id: 'disponibilidad', label: 'DISPONIBILIDAD (%)', objKey: 'disponibilidad' as const },
-          { id: 'rendimiento',  label: 'RENDIMIENTO (%)',  objKey: 'rendimiento' as const },
-          { id: 'calidad',      label: 'CALIDAD (%)', objKey: 'calidad' as const }
+          { id: 'pph_manteca', label: 'PPH JAMONES MANTECA', objKey: 'pph_manteca' },
+          { id: 'disponibilidad', label: 'DISPONIBILIDAD (%)', objKey: 'disponibilidad' as const }
         ];
       } else {
         // Default for other dashboards (Expediciones) that use GroupDashboard
@@ -232,6 +241,49 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
     });
     return rows;
   }, [allData, columns, view, areas, mermas]);
+
+  const formatDetailedStats = useMemo(() => {
+    const dayData = allData.filter(a => a.fecha === selectedDate && areas.some(area => area.id === a.area));
+    const results: any[] = [];
+
+    areas.forEach(area => {
+      const areaData = dayData.filter(a => a.area === area.id);
+      const formats = Array.from(new Set(areaData.filter(a => a.formato).map(a => a.formato))).sort();
+
+      formats.forEach(f => {
+        const fData = areaData.filter(a => a.formato === f);
+        
+        const fProdActs = fData.filter(act => {
+          const tipo = act.tipoTarea || (act as any).tipo_tarea;
+          return tipo === TaskType.PRODUCCION || tipo === 'P';
+        });
+        const fAveriaActs = fData.filter(a => a.tipoTarea === TaskType.AVERIA);
+        const fEsperaActs = fData.filter(a => a.tipoTarea === TaskType.ESPERAS);
+
+        const pInts = mergeIntervals(getIntervalsInMinutes(getIntervals(fProdActs)));
+        const aIntsRaw = mergeIntervals(getIntervalsInMinutes(getIntervals(fAveriaActs)));
+        const eIntsRaw = mergeIntervals(getIntervalsInMinutes(getIntervals(fEsperaActs)));
+
+        const aInts = subtractIntervals(aIntsRaw, pInts);
+        const eInts = subtractIntervals(subtractIntervals(eIntsRaw, pInts), aInts);
+
+        results.push({
+          areaName: area.name,
+          formato: f,
+          ok: fProdActs.reduce((sum, a) => sum + Number(a.cantidad || 0), 0),
+          nok: fProdActs.reduce((sum, a) => sum + Number(a.cantidadNok || 0), 0),
+          prod: pInts.reduce((sum, i) => sum + (i.end - i.start), 0),
+          averia: aInts.reduce((sum, i) => sum + (i.end - i.start), 0),
+          espera: eInts.reduce((sum, i) => sum + (i.end - i.start), 0),
+        });
+      });
+    });
+    
+    return results.sort((a, b) => {
+      if (a.areaName !== b.areaName) return a.areaName.localeCompare(b.areaName);
+      return b.prod - a.prod;
+    });
+  }, [allData, selectedDate, areas]);
 
   return (
     <div className="p-4 space-y-6">
@@ -340,6 +392,62 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-emerald-50 border border-emerald-200"/><span>En Objetivo</span></div>
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-red-50 border border-red-200"/><span>Fuera de Objetivo</span></div>
         <div className="flex items-center gap-2"><span className="text-slate-300">—</span><span>Sin datos</span></div>
+      </div>
+
+      {/* Breakdown by Format Table */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xl space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-black text-sm">D</div>
+          <h3 className="text-lg font-black text-slate-900 uppercase tracking-tighter">Detalle por Formato ({selectedDate.split('-').reverse().join('/')})</h3>
+        </div>
+        
+        <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+          <table className="w-full text-[13px] border-collapse">
+            <thead>
+              <tr className="bg-slate-900 text-white font-black text-[11px] uppercase tracking-widest">
+                <th className="p-3 text-left border border-slate-700">Área</th>
+                <th className="p-3 text-left border border-slate-700">Formato</th>
+                <th className="p-3 text-center border border-slate-700">OK</th>
+                <th className="p-3 text-center border border-slate-700">NOK</th>
+                <th className="p-3 text-center border border-slate-700">T. Prod (min)</th>
+                <th className="p-3 text-center border border-slate-700">T. Avería (min)</th>
+                <th className="p-3 text-center border border-slate-700">T. Espera (min)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {formatDetailedStats.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">No hay datos para esta fecha</td>
+                </tr>
+              ) : (
+                formatDetailedStats.map((f, idx) => {
+                  const areaRows = formatDetailedStats.filter(r => r.areaName === f.areaName);
+                  const isFirstOfArea = idx === 0 || formatDetailedStats[idx - 1].areaName !== f.areaName;
+
+                  return (
+                    <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+                      {isFirstOfArea && (
+                        <td 
+                          rowSpan={areaRows.length}
+                          className="p-3 font-black text-slate-900 border border-slate-100 bg-slate-50/50 uppercase text-[11px]"
+                          style={{ verticalAlign: 'top' }}
+                        >
+                          {f.areaName}
+                        </td>
+                      )}
+                      <td className="p-3 font-bold text-slate-700 border border-slate-100">{f.formato}</td>
+                      <td className="p-3 text-center border border-slate-100 font-black text-emerald-600">{f.ok}</td>
+                      <td className="p-3 text-center border border-slate-100 font-black text-red-500">{f.nok}</td>
+                      <td className="p-3 text-center border border-slate-100 font-black text-blue-600">{f.prod}</td>
+                      <td className="p-3 text-center border border-slate-100 text-slate-500">{f.averia}</td>
+                      <td className="p-3 text-center border border-slate-100 text-slate-500">{f.espera}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

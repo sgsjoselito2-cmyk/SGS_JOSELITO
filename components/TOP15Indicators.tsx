@@ -21,6 +21,8 @@ interface TOP15IndicatorsProps {
   incidenceMaster: IncidenceMaster[];
   allObjectives: Record<string, OEEObjectives[]>;
   mermas?: any[];
+  selectedDate?: string;
+  setSelectedDate?: (d: string) => void;
 }
 
 const TALLERES = [
@@ -79,6 +81,12 @@ const TALLER_INDICATORS: Record<string, {id: string, name: string}[]> = {
     { id: 'calidad', name: 'CALIDAD (%)' },
     { id: 'productividad', name: 'OEE (%)' }
   ],
+  'movimiento-jamones': [
+    { id: 'pph_jamones', name: 'PPH JAMONES' },
+    { id: 'pph_paletas', name: 'PPH PALETAS' },
+    { id: 'pph_manteca', name: 'PPH JAMONES MANTECA' },
+    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' }
+  ],
   'default': [
     { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' },
     { id: 'rendimiento', name: 'RENDIMIENTO (%)' },
@@ -90,14 +98,22 @@ const TALLER_INDICATORS: Record<string, {id: string, name: string}[]> = {
 const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({ 
   activities, 
   history, 
+  masterSpeeds,
+  incidenceMaster,
   allObjectives,
-  mermas = []
+  mermas = [],
+  selectedDate: propDate,
+  setSelectedDate: propSetDate
 }) => {
-  const [selectedDate, setSelectedDate] = useState(() => {
+  const [localDate, setLocalDate] = useState(() => {
     const now = new Date();
     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     return yesterday.toISOString().split('T')[0];
   });
+  const selectedDate = propDate || localDate;
+  const setSelectedDate = propSetDate || setLocalDate;
+  const [selectedWorkshopForBreakdown, setSelectedWorkshopForBreakdown] = useState<string>(TALLERES[0].id);
+
   const [aiAnalysis, setAiAnalysis] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const lastAnalyzedDataRef = useRef<string>('');
@@ -189,6 +205,39 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
     const simpleMatch = objs.find(o => o.valid_from <= targetDate && o.indicator_id === indicator_id);
     return simpleMatch?.objetivo || 0;
   };
+
+  // Breakdown by format memo
+  const formatDetailedStats = useMemo(() => {
+    const dayData = allData.filter(a => a.fecha === selectedDate);
+    const results: any[] = [];
+
+    TALLERES.forEach(ws => {
+      const wsData = dayData.filter(a => a.area === ws.id);
+      if (wsData.length === 0) return;
+
+      const formats = Array.from(new Set(wsData.map(a => a.formato || 'Desconocido')));
+      
+      formats.forEach(f => {
+        const data = wsData.filter(a => a.formato === f);
+        const stats = calculateStats(data, ws.id);
+        
+        results.push({
+          workshopName: ws.name,
+          formato: f,
+          cantidadOk: data.filter(a => a.tipoTarea === TaskType.PRODUCCION).reduce((s, a) => s + (a.cantidad || 0), 0),
+          cantidadNok: data.reduce((s, a) => s + (a.cantidadNok || 0), 0),
+          tiempoProd: stats.tiempo_produccion_real,
+          tiempoEsperas: stats.tiempo_esperas,
+          tiempoAverias: stats.tiempo_averias
+        });
+      });
+    });
+
+    return results.sort((a, b) => {
+      if (a.workshopName !== b.workshopName) return a.workshopName.localeCompare(b.workshopName);
+      return b.tiempoProd - a.tiempoProd;
+    });
+  }, [allData, selectedDate]);
 
   const handlePrintA3 = async () => {
     if (isPrinting) return;
@@ -920,6 +969,63 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
                   </div>
                 ))}
             </div>
+          </div>
+        </div>
+
+        {/* Breakdown by Format Table */}
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xl space-y-4 break-inside-avoid">
+          <div>
+            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Desglose por Formato</h3>
+            <p className="text-[14px] font-bold text-slate-400 uppercase tracking-widest">Cantidades y Tiempos Detallados por Subárea</p>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-[14px] border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white shadow-lg">
+                  <th className="p-3 text-left first:rounded-tl-xl font-black uppercase tracking-widest text-[10px]">Subárea</th>
+                  <th className="p-3 text-left font-black uppercase tracking-widest text-[10px]">Formato</th>
+                  <th className="p-3 text-center font-black uppercase tracking-widest text-[10px]">Cant. OK</th>
+                  <th className="p-3 text-center font-black uppercase tracking-widest text-[10px]">Cant. NOK</th>
+                  <th className="p-3 text-center font-black uppercase tracking-widest text-[10px]">T. Prod (min)</th>
+                  <th className="p-3 text-center font-black uppercase tracking-widest text-[10px]">T. Esperas (min)</th>
+                  <th className="p-3 text-center last:rounded-tr-xl font-black uppercase tracking-widest text-[10px]">T. Averías (min)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {formatDetailedStats.map((row, idx) => {
+                  const workshopRows = formatDetailedStats.filter(r => r.workshopName === row.workshopName);
+                  const isFirstOfWorkshop = idx === 0 || formatDetailedStats[idx - 1].workshopName !== row.workshopName;
+
+                  return (
+                    <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                      {isFirstOfWorkshop && (
+                        <td 
+                          rowSpan={workshopRows.length}
+                          className="p-3 font-black text-slate-900 bg-slate-50/50 uppercase text-[11px] border-r border-slate-100"
+                          style={{ verticalAlign: 'top' }}
+                        >
+                          {row.workshopName}
+                        </td>
+                      )}
+                      <td className="p-3 font-bold text-slate-700">{row.formato}</td>
+                      <td className="p-3 text-center font-black text-emerald-600">{row.cantidadOk}</td>
+                      <td className="p-3 text-center font-black text-red-500">{row.cantidadNok}</td>
+                      <td className="p-3 text-center font-black text-slate-900">{row.tiempoProd}</td>
+                      <td className="p-3 text-center font-black text-amber-500">{row.tiempoEsperas}</td>
+                      <td className="p-3 text-center font-black text-rose-500">{row.tiempoAverias}</td>
+                    </tr>
+                  );
+                })}
+                {formatDetailedStats.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-slate-300 font-black uppercase tracking-widest italic">
+                      No hay datos registrados el día {selectedDate.split('-').reverse().join('/')}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

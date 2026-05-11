@@ -5,6 +5,7 @@ import ConfigPanel from './components/ConfigPanel';
 import MainMenu from './components/MainMenu';
 import RootMenu from './components/RootMenu';
 import ActionPlanPanel from './components/ActionPlanPanel';
+import Dashboard from './components/Dashboard';
 import TOP15Indicators from './components/TOP15Indicators';
 import TOP60Dashboard from './components/TOP60Dashboard';
 import TOP60Preparacion from './components/TOP60Preparacion';
@@ -52,7 +53,8 @@ const App: React.FC = () => {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [selectedWorkshop, setSelectedWorkshop] = useState<number | null>(null);
   const [selectedArea, setSelectedArea] = useState<string | undefined>(undefined);
-  const [activeTab, setActiveTab] = useState<'work' | 'config' | 'database'>('work');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [activeTab, setActiveTab] = useState<'work' | 'config' | 'database' | 'dashboard'>('work');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [history, setHistory] = useState<Activity[]>([]);
@@ -2345,162 +2347,192 @@ const App: React.FC = () => {
           </div>
         ) : (
           <>
-            {activeTab === 'work' && selectedArea === 'sala-blanca-dashboard' && (
-              <SalaBlancaDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} />
-            )}
-            {activeTab === 'work' && selectedArea === 'envasado-dashboard' && (
-              <EnvasadoDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} />
-            )}
-            {activeTab === 'work' && selectedArea === 'expediciones-dashboard' && (
-              <ExpedicionesDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} />
-            )}
-            {activeTab === 'work' && selectedArea === 'movimientos-dashboard' && (
-              <MovimientosDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} />
-            )}
-            {activeTab === 'work' && selectedArea !== 'sala-blanca-dashboard' && selectedArea !== 'envasado-dashboard' && selectedArea !== 'expediciones-dashboard' && selectedArea !== 'movimientos-dashboard' && (
+            {/* Dashboard View */}
+            {(activeTab === 'dashboard' || (selectedArea && selectedArea.includes('dashboard'))) && selectedArea && selectedArea !== 'TOP 15' && selectedArea !== 'TOP 60' && (
               <>
-                {selectedArea === 'TOP 15' && (
-                  <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4 sm:mb-8 animate-in slide-in-from-top-4 duration-500">
-                    <div className="flex items-center gap-3 sm:gap-4">
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-emerald-50 text-emerald-600 rounded-xl sm:rounded-2xl flex items-center justify-center">
-                        <Calendar className="w-5 h-5 sm:w-6 sm:h-6" />
-                      </div>
-                      <div>
-                        <h2 className="text-2xl sm:text-3xl font-black text-slate-900 uppercase tracking-tighter">TOP 15</h2>
-                        <p className="text-[15px] sm:text-[14px] font-black text-emerald-600 uppercase tracking-widest">Mandos Intermedios</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 sm:gap-4 w-full sm:w-auto">
-                      <button 
-                        onClick={() => setTop15SubView('indicators')}
-                        className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-2xl text-[13px] sm:text-[14px] font-black uppercase tracking-widest transition-all shadow-lg ${top15SubView === 'indicators' ? 'bg-emerald-600 text-white shadow-emerald-200 scale-105' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
-                      >
-                        Indicadores
-                      </button>
-                      <button 
-                        onClick={() => setTop15SubView('plan')}
-                        className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-2xl text-[13px] sm:text-[14px] font-black uppercase tracking-widest transition-all shadow-lg ${top15SubView === 'plan' ? 'bg-emerald-600 text-white shadow-emerald-200 scale-105' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
-                      >
-                        Plan de Acción
-                      </button>
-                    </div>
-                  </div>
+                {/* Individual Area Dashboard */}
+                {!selectedArea.includes('dashboard') && (
+                  <Dashboard 
+                    activities={activities} 
+                    history={history} 
+                    masterSpeeds={masterSpeeds} 
+                    incidenceMaster={incidenceMaster} 
+                    oeeObjectives={oeeObjectives}
+                    allObjectives={allObjectives}
+                    workshopName={AREA_NAMES[selectedArea] || selectedArea.replace('-', ' ').toUpperCase()}
+                    selectedArea={selectedArea}
+                    mermas={mermas}
+                    selectedDate={selectedDate}
+                    setSelectedDate={setSelectedDate}
+                  />
                 )}
-
-                {selectedArea === 'TOP 60' && top60Access === null && (
-                  <div className="flex flex-col items-center gap-8 py-12 animate-in fade-in zoom-in duration-500">
-                    <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-8">Gestión Estratégica TOP 60</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl w-full">
-                      <button 
-                        onClick={() => setTop60Access('cmi')}
-                        className="group p-8 rounded-[3rem] bg-white border-4 border-slate-100 hover:border-indigo-600 hover:shadow-2xl transition-all duration-500 text-left relative overflow-hidden"
-                      >
-                        <div className="relative z-10">
-                          <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                            <BarChart3 className="w-7 h-7" />
-                          </div>
-                          <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-1">CMI TOP 60</h3>
-                          <p className="text-slate-500 text-xs font-medium">Cuadro de Mando Integral y Plan de Acción Estratégico.</p>
-                        </div>
-                      </button>
-                      <button 
-                        onClick={() => setTop60Access('preparacion')}
-                        className="group p-8 rounded-[3rem] bg-white border-4 border-slate-100 hover:border-blue-600 hover:shadow-2xl transition-all duration-500 text-left relative overflow-hidden"
-                      >
-                        <div className="relative z-10">
-                          <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                            <Settings className="w-7 h-7" />
-                          </div>
-                          <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-1">Preparación TOP 60</h3>
-                          <p className="text-slate-500 text-xs font-medium">Módulo de preparación y pre-análisis para reuniones estratégicas.</p>
-                        </div>
-                      </button>
-                    </div>
-                  </div>
+                
+                {/* Group Dashboards */}
+                {selectedArea === 'sala-blanca-dashboard' && (
+                  <SalaBlancaDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} selectedDate={selectedDate} setSelectedDate={setSelectedDate} />
                 )}
-
-                {selectedArea === 'TOP 60' && top60Access === 'cmi' && (
-                  <div className="flex justify-end items-center mb-6 animate-in slide-in-from-top-4 duration-500">
-                    <div className="flex gap-4">
-                      <button 
-                        onClick={() => setTop60SubView('dashboard')}
-                        className={`px-6 py-3 rounded-2xl text-[14px] font-black uppercase tracking-widest transition-all shadow-lg ${top60SubView === 'dashboard' ? 'bg-indigo-600 text-white shadow-indigo-200 scale-105' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
-                      >
-                        Cuadro de Mando
-                      </button>
-                      <button 
-                        onClick={() => setTop60SubView('plan')}
-                        className={`px-6 py-3 rounded-2xl text-[14px] font-black uppercase tracking-widest transition-all shadow-lg ${top60SubView === 'plan' ? 'bg-indigo-600 text-white shadow-indigo-200 scale-105' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
-                      >
-                        Plan de Acción
-                      </button>
-                    </div>
-                  </div>
+                {selectedArea === 'envasado-dashboard' && (
+                  <EnvasadoDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} selectedDate={selectedDate} setSelectedDate={setSelectedDate} />
                 )}
-
-                {selectedArea === 'TOP 60' && top60Access === 'preparacion' && (
-                  <div className="animate-in fade-in zoom-in duration-500">
-                    <TOP60Preparacion operarios={filteredOperarios} passwords={passwords} />
-                  </div>
+                {selectedArea === 'expediciones-dashboard' && (
+                  <ExpedicionesDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} selectedDate={selectedDate} setSelectedDate={setSelectedDate} />
                 )}
+                {selectedArea === 'movimientos-dashboard' && (
+                  <MovimientosDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} selectedDate={selectedDate} setSelectedDate={setSelectedDate} />
+                )}
+              </>
+            )}
 
+            {(activeTab === 'work' || activeTab === 'dashboard') && selectedArea && !selectedArea.includes('dashboard') && (
+              <>
                 {selectedArea === 'TOP 15' ? (
-                  top15SubView === 'plan' ? (
-                    <ActionPlanPanel 
-                      storageKey="zitron_top15_actionplan"
-                      title="Plan de Acción Táctico TOP 15"
-                      initialData={INITIAL_ACTION_PLAN_TOP15}
-                      responsibles={responsibles.length > 0 ? responsibles : filteredOperarios.map(o => o.nombre)}
-                      dbTable="action_plan_top15"
-                      passwords={passwords}
-                      requiredLevel={2}
-                    />
-                  ) : (
-                    <TOP15Indicators 
-                      activities={activities}
-                      history={history}
-                      masterSpeeds={masterSpeeds}
-                      incidenceMaster={incidenceMaster}
-                      allObjectives={allObjectives}
-                      mermas={mermas}
-                    />
-                  )
-                ) : selectedArea === 'TOP 60' ? (
-                  top60Access === 'cmi' ? (
-                    top60SubView === 'plan' ? (
+                  <>
+                    <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4 sm:mb-8 animate-in slide-in-from-top-4 duration-500">
+                      <div className="flex items-center gap-3 sm:gap-4">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-emerald-50 text-emerald-600 rounded-xl sm:rounded-2xl flex items-center justify-center">
+                          <Calendar className="w-5 h-5 sm:w-6 sm:h-6" />
+                        </div>
+                        <div>
+                          <h2 className="text-2xl sm:text-3xl font-black text-slate-900 uppercase tracking-tighter">TOP 15</h2>
+                          <p className="text-[15px] sm:text-[14px] font-black text-emerald-600 uppercase tracking-widest">Mandos Intermedios</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 sm:gap-4 w-full sm:w-auto">
+                        <button 
+                          onClick={() => setTop15SubView('indicators')}
+                          className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-2xl text-[13px] sm:text-[14px] font-black uppercase tracking-widest transition-all shadow-lg ${top15SubView === 'indicators' ? 'bg-emerald-600 text-white shadow-emerald-200 scale-105' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+                        >
+                          Indicadores
+                        </button>
+                        <button 
+                          onClick={() => setTop15SubView('plan')}
+                          className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-2xl text-[13px] sm:text-[14px] font-black uppercase tracking-widest transition-all shadow-lg ${top15SubView === 'plan' ? 'bg-emerald-600 text-white shadow-emerald-200 scale-105' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+                        >
+                          Plan de Acción
+                        </button>
+                      </div>
+                    </div>
+                    {top15SubView === 'plan' ? (
                       <ActionPlanPanel 
-                        storageKey="zitron_top60_actionplan"
-                        title="Plan de Acción Estratégico TOP 60"
+                        storageKey="zitron_top15_actionplan"
+                        title="Plan de Acción Táctico TOP 15"
+                        initialData={INITIAL_ACTION_PLAN_TOP15}
                         responsibles={responsibles.length > 0 ? responsibles : filteredOperarios.map(o => o.nombre)}
-                        dbTable="action_plan_top60"
+                        dbTable="action_plan_top15"
                         passwords={passwords}
-                        requiredLevel={3}
+                        requiredLevel={2}
                       />
                     ) : (
-                      <TOP60Dashboard 
-                        activities={activities} 
-                        history={history} 
+                      <TOP15Indicators 
+                        activities={activities}
+                        history={history}
+                        masterSpeeds={masterSpeeds}
+                        incidenceMaster={incidenceMaster}
                         allObjectives={allObjectives}
-                        operarios={operarios}
+                        mermas={mermas}
+                        selectedDate={selectedDate}
+                        setSelectedDate={setSelectedDate}
                       />
-                    )
-                  ) : null
+                    )}
+                  </>
+                ) : selectedArea === 'TOP 60' ? (
+                  <>
+                    {top60Access === null && (
+                      <div className="flex flex-col items-center gap-8 py-12 animate-in fade-in zoom-in duration-500">
+                        <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-8">Gestión Estratégica TOP 60</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl w-full">
+                          <button 
+                            onClick={() => setTop60Access('cmi')}
+                            className="group p-8 rounded-[3rem] bg-white border-4 border-slate-100 hover:border-indigo-600 hover:shadow-2xl transition-all duration-500 text-left relative overflow-hidden"
+                          >
+                            <div className="relative z-10">
+                              <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                <BarChart3 className="w-7 h-7" />
+                              </div>
+                              <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-1">CMI TOP 60</h3>
+                              <p className="text-slate-500 text-xs font-medium">Cuadro de Mando Integral y Plan de Acción Estratégico.</p>
+                            </div>
+                          </button>
+                          <button 
+                            onClick={() => setTop60Access('preparacion')}
+                            className="group p-8 rounded-[3rem] bg-white border-4 border-slate-100 hover:border-blue-600 hover:shadow-2xl transition-all duration-500 text-left relative overflow-hidden"
+                          >
+                            <div className="relative z-10">
+                              <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                <Settings className="w-7 h-7" />
+                              </div>
+                              <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-1">Preparación TOP 60</h3>
+                              <p className="text-slate-500 text-xs font-medium">Módulo de preparación y pre-análisis para reuniones estratégicas.</p>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {top60Access === 'cmi' && (
+                      <div className="flex justify-end items-center mb-6 animate-in slide-in-from-top-4 duration-500">
+                        <div className="flex gap-4">
+                          <button 
+                            onClick={() => setTop60SubView('dashboard')}
+                            className={`px-6 py-3 rounded-2xl text-[14px] font-black uppercase tracking-widest transition-all shadow-lg ${top60SubView === 'dashboard' ? 'bg-indigo-600 text-white shadow-indigo-200 scale-105' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+                          >
+                            Cuadro de Mando
+                          </button>
+                          <button 
+                            onClick={() => setTop60SubView('plan')}
+                            className={`px-6 py-3 rounded-2xl text-[14px] font-black uppercase tracking-widest transition-all shadow-lg ${top60SubView === 'plan' ? 'bg-indigo-600 text-white shadow-indigo-200 scale-105' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+                          >
+                            Plan de Acción
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {top60Access === 'preparacion' && (
+                      <div className="animate-in fade-in zoom-in duration-500">
+                        <TOP60Preparacion operarios={filteredOperarios} passwords={passwords} />
+                      </div>
+                    )}
+
+                    {top60Access === 'cmi' && (
+                      top60SubView === 'plan' ? (
+                        <ActionPlanPanel 
+                          storageKey="zitron_top60_actionplan"
+                          title="Plan de Acción Estratégico TOP 60"
+                          responsibles={responsibles.length > 0 ? responsibles : filteredOperarios.map(o => o.nombre)}
+                          dbTable="action_plan_top60"
+                          passwords={passwords}
+                          requiredLevel={3}
+                        />
+                      ) : (
+                        <TOP60Dashboard 
+                          activities={activities} 
+                          history={history} 
+                          allObjectives={allObjectives}
+                          operarios={operarios}
+                        />
+                      )
+                    )}
+                  </>
                 ) : (
-                  <WorkPanel 
-                    selectedUsers={selectedUsers} setSelectedUsers={setSelectedUsers}
-                    activities={activities} incidenceMaster={incidenceMaster} masterSpeeds={masterSpeeds}
-                    oeeObjectives={oeeObjectives} operarios={filteredOperarios}
-                    onAddActivity={handleAddActivity}
-                    onAddMultipleActivities={handleAddMultipleActivities}
-                    onEndTurn={handleEndTurn}
-                    onUpdateActivity={handleUpdateActivity}
-                    onDeleteActivity={handleDeleteActivity}
-                    onFinalizeShift={handleFinalizeShift}
-                    onRefresh={loadData}
-                    isEndModalOpen={false} onConfirmEndActivity={() => {}} onCancelEndModal={() => {}} activityToCloseName={''}
-                    selectedArea={selectedArea}
-                    passwords={passwords}
-                  />
+                  activeTab === 'work' && (
+                    <WorkPanel 
+                      selectedUsers={selectedUsers} setSelectedUsers={setSelectedUsers}
+                      activities={activities} incidenceMaster={incidenceMaster} masterSpeeds={masterSpeeds}
+                      oeeObjectives={oeeObjectives} operarios={filteredOperarios}
+                      onAddActivity={handleAddActivity}
+                      onAddMultipleActivities={handleAddMultipleActivities}
+                      onEndTurn={handleEndTurn}
+                      onUpdateActivity={handleUpdateActivity}
+                      onDeleteActivity={handleDeleteActivity}
+                      onFinalizeShift={handleFinalizeShift}
+                      onRefresh={loadData}
+                      isEndModalOpen={false} onConfirmEndActivity={() => {}} onCancelEndModal={() => {}} activityToCloseName={''}
+                      selectedArea={selectedArea}
+                      passwords={passwords}
+                      selectedDate={selectedDate}
+                    />
+                  )
                 )}
               </>
             )}

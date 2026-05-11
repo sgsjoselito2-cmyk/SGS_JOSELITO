@@ -17,8 +17,8 @@ import {
 } from 'lucide-react';
 
 interface HeaderProps {
-  activeTab: 'work' | 'config' | 'database';
-  setActiveTab: (tab: 'work' | 'config' | 'database') => void;
+  activeTab: 'work' | 'config' | 'database' | 'dashboard';
+  setActiveTab: (tab: 'work' | 'config' | 'database' | 'dashboard') => void;
   currentAreaId?: string;
   onGoHome: () => void;
   onBack: () => void;
@@ -220,6 +220,14 @@ const Header: React.FC<HeaderProps> = ({
             >
               Terminal
             </button>
+            {currentAreaId !== 'TOP 60' && currentAreaId !== 'TOP 15' && !currentAreaId.includes('dashboard') && (
+              <button 
+                onClick={() => setActiveTab('dashboard')} 
+                className={`py-2 text-[12px] font-black uppercase tracking-[0.2em] border-b-2 transition-all ${activeTab === 'dashboard' ? 'border-joselito-red text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+              >
+                Dashboard
+              </button>
+            )}
             {currentAreaId !== 'TOP 60' && currentAreaId !== 'TOP 15' && (
               <>
                 <button 
