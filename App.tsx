@@ -38,7 +38,7 @@ import { Activity, MasterSpeed, IncidenceMaster, TaskType, OEEObjectives, User }
 import { getInitialMasterSpeeds, getInitialOperarios, getInitialIncidenceMaster, INITIAL_OEE_OBJECTIVES, AREA_NAMES, INITIAL_ACTION_PLAN_TOP15, JOSELITO_LOGO } from './constants';
 import { supabase, isConfigured, debugConfig } from './lib/supabase';
 import { Session } from '@supabase/supabase-js';
-import { calcDuration } from './src/utils';
+import { calcDuration, normalizeName } from './src/utils';
 
 interface Toast {
   id: string;
@@ -1100,6 +1100,27 @@ const App: React.FC = () => {
     }
   }, [globalPin, passwords]);
 
+  const handleDeleteMerma = useCallback(async (id: string) => {
+    setMermas(prev => prev.filter(m => m.id !== id));
+    executeOrQueue({
+      table: 'mermas',
+      type: 'delete',
+      filter: { column: 'id', value: id }
+    });
+    addToast("MERMA ELIMINADA", "success");
+  }, [executeOrQueue, addToast]);
+
+  const handleUpdateMerma = useCallback(async (merma: any) => {
+    setMermas(prev => prev.map(m => m.id === merma.id ? merma : m));
+    executeOrQueue({
+      table: 'mermas',
+      type: 'upsert',
+      data: [merma],
+      filter: { column: 'id' }
+    });
+    addToast("MERMA ACTUALIZADA", "success");
+  }, [executeOrQueue, addToast]);
+
   const handleUpdatePasswords = async (newPasswords: any) => {
     setPasswords(newPasswords);
     
@@ -1561,7 +1582,9 @@ const App: React.FC = () => {
     try {
       const updatedActs = activities.map(openAct => {
         const selectedOperarios = act.operarios || [];
-        const overlaps = selectedOperarios.some((u: string) => (openAct.operarios || []).includes(u));
+        const overlaps = selectedOperarios.some((u: string) => 
+          (openAct.operarios || []).some((op: string) => normalizeName(op) === normalizeName(u))
+        );
         const shouldClose = !openAct.horaFin && (
           (cierre && (
             (!cierre.idsToClose && overlaps) ||
@@ -1577,7 +1600,7 @@ const App: React.FC = () => {
             ...openAct, 
             horaFin: timeStr, 
             duracionMin: duration, 
-            cantidad: cierre?.cantidad !== undefined ? cierre.cantidad : (openAct.cantidad || 0), 
+            cantidad: cierre?.cantidad !== undefined ? Number(Number(cierre.cantidad).toFixed(1)) : (openAct.cantidad || 0), 
             comentarios: cierre?.comentarios !== undefined ? cierre.comentarios : (openAct.comentarios || "") 
           };
           if (isConfigured || !isOnline) {
@@ -1694,7 +1717,7 @@ const App: React.FC = () => {
                 ...openAct, 
                 horaFin: timeStr, 
                 duracionMin: Math.round(finalDuration * 10) / 10, 
-                cantidad: closeData.cantidad || 0, 
+                cantidad: Number(Number(closeData.cantidad || 0).toFixed(1)), 
                 comentarios: closeData.comentarios || "" 
               };
               if (isConfigured || !isOnline) {
@@ -1788,7 +1811,7 @@ const App: React.FC = () => {
     try {
       const updatedActs = activities.map(openAct => {
         const shouldClose = (
-          (!cierre?.id && users.some(u => openAct.operarios?.includes(u)) && !openAct.horaFin) ||
+          (!cierre?.id && users.some(u => (openAct.operarios || []).some((op: string) => normalizeName(op) === normalizeName(u))) && !openAct.horaFin) ||
           (cierre?.id && openAct.id === cierre.id)
         );
 
@@ -1798,7 +1821,7 @@ const App: React.FC = () => {
             ...openAct, 
             horaFin: timeStr, 
             duracionMin: duration, 
-            cantidad: cierre?.cantidad !== undefined ? cierre.cantidad : (openAct.cantidad || 0), 
+            cantidad: cierre?.cantidad !== undefined ? Number(Number(cierre.cantidad).toFixed(1)) : (openAct.cantidad || 0), 
             comentarios: cierre?.comentarios !== undefined ? cierre.comentarios : (openAct.comentarios || "") 
           };
           if (isConfigured || !isOnline) {
@@ -1909,7 +1932,8 @@ const App: React.FC = () => {
       horaInicio: dataToSync.horaInicio || '',
       horaFin: dataToSync.horaFin || null,
       duracionMin: dataToSync.duracionMin || null,
-      cantidad: dataToSync.cantidad || 0,
+      cantidad: dataToSync.cantidad !== undefined ? Number(Number(dataToSync.cantidad).toFixed(1)) : 0,
+      cantidadNok: dataToSync.cantidadNok !== undefined ? Number(Number(dataToSync.cantidadNok).toFixed(1)) : 0,
       comentarios: dataToSync.comentarios || '',
       fecha: dataToSync.fecha || '',
       area: dataToSync.area || selectedArea,
@@ -2569,6 +2593,8 @@ const App: React.FC = () => {
                   await handleAddActivity(rest);
                 }}
                 onResetMasterSpeeds={handleResetMasterSpeeds}
+                onUpdateMerma={handleUpdateMerma}
+                onDeleteMerma={handleDeleteMerma}
                 selectedArea={selectedArea}
                 passwords={passwords}
                 operarios={operarios}

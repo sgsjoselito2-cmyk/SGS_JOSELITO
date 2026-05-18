@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { TaskType, Activity, IncidenceMaster, MasterSpeed, OEEObjectives, User } from '../types';
 import { AREA_COLUMNS } from '../constants';
-import { calcDuration, calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals } from '../src/utils';
+import { calcDuration, calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals, normalizeName } from '../src/utils';
 import HelpModal from './HelpModal';
 import { Check, X, Edit2, Trash2, Calendar } from 'lucide-react';
 
@@ -73,23 +73,41 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
   const safeParse = (val: string | number | undefined): number => {
     if (val === undefined || val === null || val === '') return 0;
     if (typeof val === 'number') return val;
-    // Eliminar separadores de miles (punto o coma seguidos de exactamente 3 dígitos)
-    // 2.000 -> 2000, 2,000 -> 2000
-    // También manejar el caso de 2.000,50 -> 2000.50 y luego normalizar la coma decimal
-    const str = val.toString().trim();
-    // 1. Eliminar cualquier espacio en blanco intermedio (ej: "2 000" -> "2000")
-    let clean = str.replace(/\s/g, '');
-    // 2. Manejar separadores de miles: si hay un punto o coma seguido de exactamente 3 dígitos al final o antes de otro no-dígito
-    // Ej: "2.000" -> "2000", "2,000" -> "2000", "2.000,50" -> "2000,50"
-    clean = clean.replace(/(\d)[.,](\d{3}($|\D))/g, '$1$2');
-    // 3. Normalizar la coma decimal a punto
-    clean = clean.replace(',', '.');
-    // 4. Si después de lo anterior queda más de un punto, probablemente el primero era de miles no detectado
-    if ((clean.match(/\./g) || []).length > 1) {
-      const parts = clean.split('.');
-      const last = parts.pop();
-      clean = parts.join('') + '.' + last;
+    
+    const str = val.toString().trim().replace(/\s/g, '');
+    
+    // Detect whether comma or dot is the decimal separator
+    // If both are present, the rightmost one is the decimal separator
+    const lastComma = str.lastIndexOf(',');
+    const lastDot = str.lastIndexOf('.');
+    
+    let clean = str;
+    if (lastComma !== -1 && lastDot !== -1) {
+      if (lastComma > lastDot) {
+        // Format like 1.234,56
+        clean = str.replace(/\./g, '').replace(',', '.');
+      } else {
+        // Format like 1,234.56
+        clean = str.replace(/,/g, '');
+      }
+    } else if (lastComma !== -1) {
+      // Only commas present
+      // If multiple commas, they are thousands separators
+      // If one comma, it's likely a decimal separator in this context (weights)
+      if ((str.match(/,/g) || []).length > 1) {
+        clean = str.replace(/,/g, '');
+      } else {
+        clean = str.replace(',', '.');
+      }
+    } else if (lastDot !== -1) {
+      // Only dots present
+      // If multiple dots, they are thousands separators
+      if ((str.match(/\./g) || []).length > 1) {
+        clean = str.replace(/\./g, '');
+      }
+      // If single dot, parseFloat treats it as decimal, which is what we want for weights
     }
+    
     return parseFloat(clean) || 0;
   };
   
@@ -240,6 +258,9 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
   const handleSaveEdit = () => {
     if (editingId && editForm && onUpdateActivity) {
       const updatedRecord = { ...editForm };
+      if (updatedRecord.cantidad !== undefined) {
+        updatedRecord.cantidad = Number(Number(updatedRecord.cantidad).toFixed(1));
+      }
       if (updatedRecord.horaInicio && updatedRecord.horaFin) {
         updatedRecord.duracionMin = calculateDuration(updatedRecord.horaInicio, updatedRecord.horaFin);
       }
@@ -274,7 +295,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
 
   const currentActivities = useMemo(() => {
     return activities.filter(a => 
-      a.operarios?.some(u => selectedUsers.includes(u)) && 
+      a.operarios?.some(u => selectedUsers.some(su => normalizeName(su) === normalizeName(u))) && 
       (!a.horaFin || String(a.horaFin).trim() === "")
     );
   }, [activities, selectedUsers]);
@@ -376,7 +397,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
 
   const confirmClosure = () => {
     const rawQty = safeParse(closureQty) || 0;
-    const qty = Math.max(0, rawQty);
+    const qty = Number(Math.max(0, rawQty).toFixed(1));
     const closureData = { cantidad: qty, comentarios: closureComments };
     if (pendingAction?.type === 'add') onAddActivity(pendingAction.payload, closureData);
     else if (pendingAction?.type === 'end') onEndTurn(selectedUsers, closureData);
@@ -623,8 +644,8 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
 
     Object.entries(shiftClosureData).forEach(([formato, data], idx) => {
       aggregated[formato] = { 
-        cantidad: safeParse(data.cantidad) || 0,
-        cantidadNok: safeParse(data.cantidadNok || '0') || 0
+        cantidad: Number((safeParse(data.cantidad) || 0).toFixed(1)),
+        cantidadNok: Number((safeParse(data.cantidadNok || '0') || 0).toFixed(1))
       };
       // Guardar merma se loncheado e produção
         if (selectedArea === 'sb-loncheado' && data.esProduccion && data.kgEntrada !== undefined && data.kgEntrada !== '') {
@@ -633,16 +654,16 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
           const cantOk = safeParse(data.cantidad || '0') || 0;
           const cantNok = safeParse(data.cantidadNok || '0') || 0;
 
-          const kgEntrada = safeParse(data.kgEntrada || '0') || 0;
-          const kgTacos = safeParse(data.kgTacos || '0') || 0;
-          const kgPieles = safeParse(data.kgPieles || '0') || 0;
-          const kgHueco = safeParse(data.kgHueco || '0') || 0;
-          const mediaCombi = formatPeso;
+          const kgEntrada = Number((safeParse(data.kgEntrada || '0') || 0).toFixed(1));
+          const kgTacos = Number((safeParse(data.kgTacos || '0') || 0).toFixed(1));
+          const kgPieles = Number((safeParse(data.kgPieles || '0') || 0).toFixed(1));
+          const kgHueco = Number((safeParse(data.kgHueco || '0') || 0).toFixed(1));
+          const mediaCombi = formatPeso; // Keeping original precision for mediaCombi as it's a constant reference
           const nEnvases = cantOk + cantNok;
-          const kgSalida = nEnvases * mediaCombi;
-          const kgMerma = kgEntrada - kgTacos - kgPieles - kgHueco - kgSalida;
-          const pctMerma1 = kgEntrada > 0 ? (kgMerma / kgEntrada) * 100 : 0;
-          const pctMerma2 = kgEntrada > 0 ? ((kgMerma + kgTacos + kgPieles + kgHueco) / kgEntrada) * 100 : 0;
+          const kgSalida = Number((nEnvases * mediaCombi).toFixed(1));
+          const kgMerma = Number((kgEntrada - kgTacos - kgPieles - kgHueco - kgSalida).toFixed(1));
+          const pctMerma1 = kgEntrada > 0 ? Number(((kgMerma / kgEntrada) * 100).toFixed(1)) : 0;
+          const pctMerma2 = kgEntrada > 0 ? Number((((kgMerma + kgTacos + kgPieles + kgHueco) / kgEntrada) * 100).toFixed(1)) : 0;
           
           mermasToSave.push({
             id: `merma-${Date.now()}-${idx}-${formato.replace(/\s+/g, '_')}`,

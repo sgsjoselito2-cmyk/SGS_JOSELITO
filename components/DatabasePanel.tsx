@@ -22,6 +22,8 @@ interface DatabasePanelProps {
   history: Activity[];
   mermas?: any[];
   onUpdateActivity: (activity: Activity) => void;
+  onUpdateMerma?: (merma: any) => void;
+  onDeleteMerma?: (id: string) => void;
   onDeleteActivity: (id: string, isHistory: boolean) => void;
   onDeleteAllHistory?: () => void;
   onImportHistory: (data: Activity[]) => void;
@@ -41,6 +43,8 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
   activities,
   history,
   onUpdateActivity,
+  onUpdateMerma,
+  onDeleteMerma,
   onDeleteActivity,
   onDeleteAllHistory,
   onImportHistory,
@@ -72,7 +76,9 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Activity>>({});
-  const [deleteConfirm, setDeleteConfirm] = useState<{id: string, isHistory: boolean} | null>(null);
+  const [editingMermaId, setEditingMermaId] = useState<string | null>(null);
+  const [editMermaForm, setEditMermaForm] = useState<any>({});
+  const [deleteConfirm, setDeleteConfirm] = useState<{id: string, isHistory: boolean, isMerma?: boolean} | null>(null);
   const [actionConfirm, setActionConfirm] = useState<{
     title: string;
     message: string;
@@ -214,6 +220,9 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
   const handleSave = () => {
     if (editingId && editForm) {
       const updatedRecord = { ...editForm };
+      if (updatedRecord.cantidad !== undefined) {
+        updatedRecord.cantidad = Number(Number(updatedRecord.cantidad).toFixed(1));
+      }
       if (updatedRecord.horaInicio && updatedRecord.horaFin) {
         updatedRecord.duracionMin = calcDuration(updatedRecord.horaInicio, updatedRecord.horaFin);
       }
@@ -239,7 +248,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
         horaInicio: newActivity.horaInicio,
         horaFin: newActivity.horaFin || '',
         duracionMin: duracion,
-        cantidad: Number(newActivity.cantidad) || 0,
+        cantidad: Number(Number(newActivity.cantidad || 0).toFixed(1)),
         comentarios: newActivity.comentarios || '',
         area: selectedArea || 'manual'
       };
@@ -260,9 +269,53 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
 
   const confirmDelete = () => {
     if (deleteConfirm) {
-      onDeleteActivity(deleteConfirm.id, deleteConfirm.isHistory);
+      if (deleteConfirm.isMerma) {
+        onDeleteMerma?.(deleteConfirm.id);
+      } else {
+        onDeleteActivity(deleteConfirm.id, deleteConfirm.isHistory);
+      }
       if (editingId === deleteConfirm.id) setEditingId(null);
+      if (editingMermaId === deleteConfirm.id) setEditingMermaId(null);
       setDeleteConfirm(null);
+    }
+  };
+
+  const handleEditMerma = (merma: any) => {
+    setEditingMermaId(merma.id);
+    setEditMermaForm(merma);
+  };
+
+  const handleSaveMerma = () => {
+    if (editingMermaId && editMermaForm && onUpdateMerma) {
+      const m = { ...editMermaForm };
+      
+      const kgEntrada = Number(Number(m.kgEntrada || 0).toFixed(1));
+      const kgTacos = Number(Number(m.kgTacos || 0).toFixed(1));
+      const kgPieles = Number(Number(m.kgPieles || 0).toFixed(1));
+      const kgHueco = Number(Number(m.kgHueco || 0).toFixed(1));
+      const nEnvases = Number(m.nEnvases || 0);
+      const mediaCombi = Number(m.mediaCombi || 0);
+      
+      const kgSalida = Number((nEnvases * mediaCombi).toFixed(1));
+      const kgMerma = Number((kgEntrada - kgTacos - kgPieles - kgHueco - kgSalida).toFixed(1));
+      const pctMerma1 = kgEntrada > 0 ? Number(((kgMerma / kgEntrada) * 100).toFixed(1)) : 0;
+      const pctMerma2 = kgEntrada > 0 ? Number((((kgMerma + kgTacos + kgPieles + kgHueco) / kgEntrada) * 100).toFixed(1)) : 0;
+      
+      const updatedMerma = {
+        ...m,
+        kgEntrada,
+        kgTacos,
+        kgPieles,
+        kgHueco,
+        kgSalida,
+        kgMerma,
+        pctMerma1,
+        pctMerma2
+      };
+      
+      onUpdateMerma(updatedMerma);
+      setEditingMermaId(null);
+      setEditMermaForm({});
     }
   };
 
@@ -755,12 +808,17 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
                       <td className="p-1"><input type="date" value={editForm.fecha || ''} onChange={e => setEditForm({...editForm, fecha: e.target.value})} className="min-w-[80px] w-full p-1 text-[15px] border rounded-lg font-bold" /></td>
                       <td className="p-1"><input type="text" value={editForm.operarios?.join(', ') || ''} onChange={e => setEditForm({...editForm, operarios: e.target.value.split(',').map(s => s.trim())})} className="min-w-[80px] w-full p-1 text-[15px] border rounded-lg font-bold uppercase" /></td>
                       <td className="p-1">
+                        <select value={editForm.tipoTarea} onChange={e => setEditForm({...editForm, tipoTarea: e.target.value as TaskType})} className="w-full p-1 text-[12px] border rounded-lg font-bold">
+                          {Object.values(TaskType).map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </td>
+                      <td className="p-1">
                         <div className="flex flex-col gap-1">
                           <input type="text" value={editForm.formato || ''} onChange={e => setEditForm({...editForm, formato: e.target.value})} className="min-w-[100px] w-full p-1 text-[15px] border rounded-lg font-bold uppercase" />
                           {editForm.tipoTarea === TaskType.PRODUCCION && (
                             <div className="flex items-center gap-1">
                               <span className="text-[10px] font-black text-emerald-600 uppercase">Teo:</span>
-                              <input type="number" step="0.1" value={editForm.tiempoTeoricoManual || 0} onChange={e => setEditForm({...editForm, tiempoTeoricoManual: parseFloat(e.target.value) || 0})} className="w-16 p-1 text-[12px] border rounded bg-white text-slate-900 font-bold" />
+                              <input type="number" step="0.001" value={editForm.tiempoTeoricoManual || 0} onChange={e => setEditForm({...editForm, tiempoTeoricoManual: parseFloat(e.target.value) || 0})} className="w-16 p-1 text-[12px] border rounded bg-white text-slate-900 font-bold" />
                             </div>
                           )}
                         </div>
@@ -779,6 +837,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
                           ? `${((editForm.tiempoTeoricoManual > 0 ? (60 / editForm.tiempoTeoricoManual) : 0) * (selectedArea === 'corte-laser' ? 1 : (editForm.cantidad || 0))).toFixed(1)}m` 
                           : '-'}
                       </td>
+                      <td className="p-1"><input type="number" step="0.1" value={editForm.cantidad || 0} onChange={e => setEditForm({...editForm, cantidad: parseFloat(e.target.value) || 0})} className="min-w-[50px] w-full p-1 text-[15px] border rounded-lg font-bold text-center text-emerald-600" /></td>
                       <td className="p-1"><input type="number" step={selectedArea === 'corte-laser' ? "1" : "0.1"} value={editForm.cantidadNok || 0} onChange={e => setEditForm({...editForm, cantidadNok: parseFloat(e.target.value) || 0})} className="min-w-[50px] w-full p-1 text-[15px] border rounded-lg font-bold text-center text-red-600" /></td>
                       <td className="p-1"><input type="text" value={editForm.comentarios || ''} onChange={e => setEditForm({...editForm, comentarios: e.target.value})} className="min-w-[120px] w-full p-1 text-[15px] border rounded-lg font-bold" /></td>
                       <td className="p-2 flex justify-center gap-1">
@@ -825,7 +884,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
                           : '-'}
                       </td>
                       <td className="p-2 sm:p-4 text-[10px] sm:text-[13px] font-black text-emerald-800 text-center">
-                        {record.cantidad || 0}
+                        {Number(record.cantidad || 0).toFixed(1)}
                       </td>
                       <td className="p-2 sm:p-4 text-[10px] sm:text-[13px] font-black text-red-600 text-center">{selectedArea === 'corte-laser' ? (record.cantidadNok || 0) : (record.cantidadNok || 0).toFixed(1)}</td>
                       <td className="p-2 sm:p-4 text-[10px] sm:text-[13px] font-bold text-slate-500 italic max-w-[150px] sm:max-w-[250px] break-words" title={record.comentarios}>{record.comentarios || '-'}</td>
@@ -875,27 +934,82 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
                   {['Fecha','Formato','Kg Entrada','Kg Tacos','Kg Pieles','Kg Hueco','N Envases','Media Comb.','Kg Envasados','Kg Merma','% Merma 1','% Merma 2'].map(h => (
                     <th key={h} className="p-3 font-black text-amber-800 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
+                  {isAdminMode && <th className="p-3 font-black text-amber-800 uppercase tracking-wider whitespace-nowrap text-center">Acciones</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredMermas.sort((a,b) => (b.fecha||'').localeCompare(a.fecha||'')).map((m, i) => (
-                  <tr key={m.id || i} className="hover:bg-amber-50 transition-colors">
-                    <td className="p-3 font-bold text-slate-700">{m.fecha}</td>
-                    <td className="p-3 font-black text-slate-900 uppercase">{m.formato}</td>
-                    <td className="p-3 text-center font-bold">{Number(m.kgEntrada||0).toFixed(2)}</td>
-                    <td className="p-3 text-center font-bold">{Number(m.kgTacos||0).toFixed(2)}</td>
-                    <td className="p-3 text-center font-bold">{Number(m.kgPieles||0).toFixed(2)}</td>
-                    <td className="p-3 text-center font-bold">{Number(m.kgHueco||0).toFixed(2)}</td>
-                    <td className="p-3 text-center font-bold">{Number(m.nEnvases||0).toFixed(0)}</td>
-                    <td className="p-3 text-center font-bold">{Number(m.mediaCombi||0).toFixed(3)}</td>
-                    <td className="p-3 text-center font-bold">{Number(m.kgSalida||0).toFixed(2)}</td>
-                    <td className="p-3 text-center font-black text-amber-700">{Number(m.kgMerma||0).toFixed(2)}</td>
-                    <td className={`p-3 text-center font-black ${Number(m.pctMerma1||0) > 5 ? 'text-red-600' : 'text-emerald-600'}`}>
-                      {Number(m.pctMerma1||0).toFixed(1)}%
-                    </td>
-                    <td className={`p-3 text-center font-black ${Number(m.pctMerma2||0) > 5 ? 'text-red-600' : 'text-emerald-600'}`}>
-                      {Number(m.pctMerma2||0).toFixed(1)}%
-                    </td>
+                  <tr key={m.id || i} className="hover:bg-amber-50 transition-colors group">
+                    {editingMermaId === m.id ? (
+                      <>
+                        <td className="p-1"><input type="date" value={editMermaForm.fecha || ''} onChange={e => setEditMermaForm({...editMermaForm, fecha: e.target.value})} className="w-full p-1 border rounded" /></td>
+                        <td className="p-1"><input type="text" value={editMermaForm.formato || ''} onChange={e => setEditMermaForm({...editMermaForm, formato: e.target.value})} className="w-full p-1 border rounded uppercase font-bold" /></td>
+                        <td className="p-1"><input type="number" step="0.01" value={editMermaForm.kgEntrada || 0} onChange={e => setEditMermaForm({...editMermaForm, kgEntrada: e.target.value})} className="w-full p-1 border rounded font-bold text-center" /></td>
+                        <td className="p-1"><input type="number" step="0.01" value={editMermaForm.kgTacos || 0} onChange={e => setEditMermaForm({...editMermaForm, kgTacos: e.target.value})} className="w-full p-1 border rounded font-bold text-center" /></td>
+                        <td className="p-1"><input type="number" step="0.01" value={editMermaForm.kgPieles || 0} onChange={e => setEditMermaForm({...editMermaForm, kgPieles: e.target.value})} className="w-full p-1 border rounded font-bold text-center" /></td>
+                        <td className="p-1"><input type="number" step="0.01" value={editMermaForm.kgHueco || 0} onChange={e => setEditMermaForm({...editMermaForm, kgHueco: e.target.value})} className="w-full p-1 border rounded font-bold text-center" /></td>
+                        <td className="p-1"><input type="number" step="1" value={editMermaForm.nEnvases || 0} onChange={e => setEditMermaForm({...editMermaForm, nEnvases: e.target.value})} className="w-full p-1 border rounded font-bold text-center" /></td>
+                        <td className="p-1"><input type="number" step="0.001" value={editMermaForm.mediaCombi || 0} onChange={e => setEditMermaForm({...editMermaForm, mediaCombi: e.target.value})} className="w-full p-1 border rounded font-bold text-center" /></td>
+                        <td className="p-1 text-center font-bold text-slate-400">
+                          {((Number(editMermaForm.nEnvases || 0)) * (Number(editMermaForm.mediaCombi || 0))).toFixed(2)}
+                        </td>
+                        <td className="p-1 text-center font-black text-amber-700">
+                          {(Number(editMermaForm.kgEntrada || 0) - Number(editMermaForm.kgTacos || 0) - Number(editMermaForm.kgPieles || 0) - Number(editMermaForm.kgHueco || 0) - (Number(editMermaForm.nEnvases || 0) * Number(editMermaForm.mediaCombi || 0))).toFixed(2)}
+                        </td>
+                        <td className="p-1 text-center font-black text-slate-400">
+                          {Number(editMermaForm.kgEntrada || 0) > 0 
+                            ? (((Number(editMermaForm.kgEntrada || 0) - Number(editMermaForm.kgTacos || 0) - Number(editMermaForm.kgPieles || 0) - Number(editMermaForm.kgHueco || 0) - (Number(editMermaForm.nEnvases || 0) * Number(editMermaForm.mediaCombi || 0))) / Number(editMermaForm.kgEntrada || 0)) * 100).toFixed(1)
+                            : 0}%
+                        </td>
+                        <td className="p-1 text-center font-black text-slate-400">
+                          {Number(editMermaForm.kgEntrada || 0) > 0 
+                            ? ((((Number(editMermaForm.kgEntrada || 0) - Number(editMermaForm.kgTacos || 0) - Number(editMermaForm.kgPieles || 0) - Number(editMermaForm.kgHueco || 0) - (Number(editMermaForm.nEnvases || 0) * Number(editMermaForm.mediaCombi || 0))) + Number(editMermaForm.kgTacos || 0) + Number(editMermaForm.kgPieles || 0) + Number(editMermaForm.kgHueco || 0)) / Number(editMermaForm.kgEntrada || 0)) * 100).toFixed(1)
+                            : 0}%
+                        </td>
+                        <td className="p-1 flex justify-center gap-1">
+                          <button onClick={handleSaveMerma} className="p-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors shadow-sm" title="Guardar">
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setDeleteConfirm({ id: m.id, isHistory: true, isMerma: true })} className="p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-sm" title="Eliminar">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setEditingMermaId(null)} className="p-2 bg-slate-400 text-white rounded-lg hover:bg-slate-500 transition-colors shadow-sm" title="Cancelar">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="p-3 font-bold text-slate-700">{m.fecha}</td>
+                        <td className="p-3 font-black text-slate-900 uppercase">{m.formato}</td>
+                        <td className="p-3 text-center font-bold">{Number(m.kgEntrada||0).toFixed(1)}</td>
+                        <td className="p-3 text-center font-bold">{Number(m.kgTacos||0).toFixed(1)}</td>
+                        <td className="p-3 text-center font-bold">{Number(m.kgPieles||0).toFixed(1)}</td>
+                        <td className="p-3 text-center font-bold">{Number(m.kgHueco||0).toFixed(1)}</td>
+                        <td className="p-3 text-center font-bold">{Number(m.nEnvases||0).toFixed(0)}</td>
+                        <td className="p-3 text-center font-bold">{Number(m.mediaCombi||0).toFixed(3)}</td>
+                        <td className="p-3 text-center font-bold">{Number(m.kgSalida||0).toFixed(1)}</td>
+                        <td className="p-3 text-center font-black text-amber-700">{Number(m.kgMerma||0).toFixed(1)}</td>
+                        <td className={`p-3 text-center font-black ${Number(m.pctMerma1||0) > 5 ? 'text-red-600' : 'text-emerald-600'}`}>
+                          {Number(m.pctMerma1||0).toFixed(1)}%
+                        </td>
+                        <td className={`p-3 text-center font-black ${Number(m.pctMerma2||0) > 5 ? 'text-red-600' : 'text-emerald-600'}`}>
+                          {Number(m.pctMerma2||0).toFixed(1)}%
+                        </td>
+                        {isAdminMode && (
+                          <td className="p-3 text-center">
+                            <div className="flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => handleEditMerma(m)} className="p-1.5 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-600 hover:text-white transition-all">
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => setDeleteConfirm({ id: m.id, isHistory: true, isMerma: true })} className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>

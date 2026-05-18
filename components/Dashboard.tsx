@@ -696,6 +696,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         prod: pInts.reduce((sum, i) => sum + (i.end - i.start), 0),
         averia: aInts.reduce((sum, i) => sum + (i.end - i.start), 0),
         espera: eInts.reduce((sum, i) => sum + (i.end - i.start), 0),
+        personas: Array.from(new Set(fData.flatMap(a => a.operarios || []))).length,
       };
     }).sort((a, b) => b.prod - a.prod);
   }, [dayData]);
@@ -877,6 +878,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             <thead>
               <tr className="bg-slate-900 text-white font-black text-[11px] uppercase tracking-widest">
                 <th className="p-3 text-left border border-slate-700">Formato</th>
+                <th className="p-3 text-center border border-slate-700">Pers.</th>
                 <th className="p-3 text-center border border-slate-700">OK</th>
                 <th className="p-3 text-center border border-slate-700">NOK</th>
                 <th className="p-3 text-center border border-slate-700">T. Prod (min)</th>
@@ -887,14 +889,15 @@ const Dashboard: React.FC<DashboardProps> = ({
             <tbody>
               {formatDetailedStats.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">No hay datos para esta fecha</td>
+                  <td colSpan={7} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">No hay datos para esta fecha</td>
                 </tr>
               ) : (
                 formatDetailedStats.map((f, idx) => (
                   <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
                     <td className="p-3 font-bold text-slate-700 border border-slate-100">{f.formato}</td>
-                    <td className="p-3 text-center border border-slate-100 font-black text-emerald-600">{f.ok}</td>
-                    <td className="p-3 text-center border border-slate-100 font-black text-red-500">{f.nok}</td>
+                    <td className="p-3 text-center border border-slate-100 font-black text-slate-500">{f.personas}</td>
+                    <td className="p-3 text-center border border-slate-100 font-black text-emerald-600">{Number(f.ok || 0).toFixed(1)}</td>
+                    <td className="p-3 text-center border border-slate-100 font-black text-red-500">{Number(f.nok || 0).toFixed(1)}</td>
                     <td className="p-3 text-center border border-slate-100 font-black text-blue-600">{f.prod}</td>
                     <td className="p-3 text-center border border-slate-100 text-slate-500">{f.averia}</td>
                     <td className="p-3 text-center border border-slate-100 text-slate-500">{f.espera}</td>
