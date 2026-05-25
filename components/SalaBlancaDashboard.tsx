@@ -138,8 +138,10 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
         ];
       } else if (area.id === 'sb-empaquetado-loncheado') {
         areaIndicators = [
-          { id: 'pph_blister', label: 'PPH - Envasado Blister', objKey: null },
-          { id: 'pph_sin_blister', label: 'PPH - Envasado Sin Blister', objKey: null }
+          { id: 'pph_blister_emp', label: 'PPH blister empaquetado', objKey: 'pph_blister_emp' },
+          { id: 'pph_sin_blister_cuchillo', label: 'PPH sin blister cuchillo', objKey: 'pph_sin_blister_cuchillo' },
+          { id: 'pph_sin_marcar', label: 'PPH sin marcar', objKey: 'pph_sin_marcar' },
+          { id: 'pph_empaquetado_jabu', label: 'PPH empaquetado Jabu', objKey: 'pph_empaquetado_jabu' }
         ];
       } else if (area.id === 'sb-empaquetado-deshuesado') {
         areaIndicators = [

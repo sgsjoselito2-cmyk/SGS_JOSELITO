@@ -59,8 +59,10 @@ const TALLER_INDICATORS: Record<string, {id: string, name: string}[]> = {
     { id: 'pph', name: 'PPH PESAR' }
   ],
   'sb-empaquetado-loncheado': [
-    { id: 'pph_blister', name: 'PPH - Envasado Blister' },
-    { id: 'pph_sin_blister', name: 'PPH - Envasado Sin Blister' }
+    { id: 'pph_blister_emp', name: 'PPH blister empaquetado' },
+    { id: 'pph_sin_blister_cuchillo', name: 'PPH sin blister cuchillo' },
+    { id: 'pph_sin_marcar', name: 'PPH sin marcar' },
+    { id: 'pph_empaquetado_jabu', name: 'PPH empaquetado Jabu' }
   ],
   'sb-empaquetado-deshuesado': [
     { id: 'pph', name: 'PPH' }

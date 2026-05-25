@@ -153,7 +153,16 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
   }
 
   // PPH Calculations
-  let pph = 0, pph_blister = 0, pph_sin_blister = 0, pph_jamones = 0, pph_paletas = 0, pph_manteca = 0;
+  let pph = 0;
+  let pph_blister = 0;
+  let pph_sin_blister = 0;
+  let pph_blister_emp = 0;
+  let pph_sin_blister_cuchillo = 0;
+  let pph_sin_marcar = 0;
+  let pph_empaquetado_jabu = 0;
+  let pph_jamones = 0;
+  let pph_paletas = 0;
+  let pph_manteca = 0;
   const calcPPHFromMinutes = (m: number, qty: number) => m > 0 ? qty / (m / 60) : 0;
 
   if (aid.includes('sb-preparacion')) {
@@ -168,9 +177,18 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
     pph = calcPPHFromMinutes(pmInput, qtyInput);
   } else if (aid.includes('sb-empaquetado-loncheado')) {
     const bActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && (a.formato?.toUpperCase().includes('BLISTER') || a.formato?.toUpperCase().includes('BLÍSTER')));
-    const sBActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && !a.formato?.toUpperCase().includes('BLISTER') && !a.formato?.toUpperCase().includes('BLÍSTER'));
-    pph_blister = calcPPHFromMinutes(bActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), bActs.reduce((s, a) => s + (a.cantidad || 0), 0));
-    pph_sin_blister = calcPPHFromMinutes(sBActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), sBActs.reduce((s, a) => s + (a.cantidad || 0), 0));
+    const cuchilloActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && a.formato?.toUpperCase().includes('CUCHILLO'));
+    const sinMarcarActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && a.formato?.toUpperCase().includes('SIN MARCAR'));
+    const jabuActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && a.formato?.toUpperCase().includes('JABU'));
+
+    pph_blister_emp = calcPPHFromMinutes(bActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), bActs.reduce((s, a) => s + (a.cantidad || 0), 0));
+    pph_sin_blister_cuchillo = calcPPHFromMinutes(cuchilloActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), cuchilloActs.reduce((s, a) => s + (a.cantidad || 0), 0));
+    pph_sin_marcar = calcPPHFromMinutes(sinMarcarActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), sinMarcarActs.reduce((s, a) => s + (a.cantidad || 0), 0));
+    pph_empaquetado_jabu = calcPPHFromMinutes(jabuActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), jabuActs.reduce((s, a) => s + (a.cantidad || 0), 0));
+
+    // Support old variables as fallback aliases
+    pph_blister = pph_blister_emp;
+    pph_sin_blister = pph_sin_blister_cuchillo;
   } else if (aid.includes('movimiento-jamones')) {
     const jActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && (a.formato?.toUpperCase().includes('JAMÓN') || a.formato?.toUpperCase().includes('JAMON')) && !a.formato?.toUpperCase().includes('MANTECA'));
     const pActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && a.formato?.toUpperCase().includes('PALETA'));
@@ -201,6 +219,10 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
     pph: hasData ? pph.toFixed(0) : '',
     pph_blister: hasData ? pph_blister.toFixed(0) : '',
     pph_sin_blister: hasData ? pph_sin_blister.toFixed(0) : '',
+    pph_blister_emp: hasData ? pph_blister_emp.toFixed(0) : '',
+    pph_sin_blister_cuchillo: hasData ? pph_sin_blister_cuchillo.toFixed(0) : '',
+    pph_sin_marcar: hasData ? pph_sin_marcar.toFixed(0) : '',
+    pph_empaquetado_jabu: hasData ? pph_empaquetado_jabu.toFixed(0) : '',
     pph_jamones: hasData ? pph_jamones.toFixed(0) : '',
     pph_paletas: hasData ? pph_paletas.toFixed(0) : '',
     pph_manteca: hasData ? pph_manteca.toFixed(0) : '',
@@ -572,8 +594,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
     if (selectedArea === 'sb-empaquetado-loncheado') {
       indicators.unshift(
-        { id: 'pph_blister', objKey: 'pph_blister', label: 'PPH ENV. BLISTER' },
-        { id: 'pph_sin_blister', objKey: 'pph_sin_blister', label: 'PPH ENV. SIN BLISTER' }
+        { id: 'pph_blister_emp', objKey: 'pph_blister_emp', label: 'PPH BLISTER EMPAQUETADO' },
+        { id: 'pph_sin_blister_cuchillo', objKey: 'pph_sin_blister_cuchillo', label: 'PPH SIN BLISTER CUCHILLO' },
+        { id: 'pph_sin_marcar', objKey: 'pph_sin_marcar', label: 'PPH SIN MARCAR' },
+        { id: 'pph_empaquetado_jabu', objKey: 'pph_empaquetado_jabu', label: 'PPH EMPAQUETADO JABU' }
       );
     }
     if (selectedArea === 'sb-empaquetado-deshuesado') {
@@ -655,8 +679,10 @@ const Dashboard: React.FC<DashboardProps> = ({
       kpis.push({ label: 'PPH PESAR', val: stats.pph, obj: getObjectiveForDate('pph', selectedDate), color: 'indigo', key: 'pph' });
     }
     if (aid.includes('sb-empaquetado-loncheado')) {
-      kpis.push({ label: 'PPH ENV. BLISTER', val: stats.pph_blister, obj: getObjectiveForDate('pph_blister', selectedDate), color: 'indigo', key: 'pph_blister' });
-      kpis.push({ label: 'PPH ENV. SIN BLISTER', val: stats.pph_sin_blister, obj: getObjectiveForDate('pph_sin_blister', selectedDate), color: 'indigo', key: 'pph_sin_blister' });
+      kpis.push({ label: 'PPH Blister Emp', val: stats.pph_blister_emp, obj: getObjectiveForDate('pph_blister_emp', selectedDate), color: 'indigo', key: 'pph_blister_emp' });
+      kpis.push({ label: 'PPH Sin Blister Cuchillo', val: stats.pph_sin_blister_cuchillo, obj: getObjectiveForDate('pph_sin_blister_cuchillo', selectedDate), color: 'indigo', key: 'pph_sin_blister_cuchillo' });
+      kpis.push({ label: 'PPH Sin Marcar', val: stats.pph_sin_marcar, obj: getObjectiveForDate('pph_sin_marcar', selectedDate), color: 'indigo', key: 'pph_sin_marcar' });
+      kpis.push({ label: 'PPH Emp Jabu', val: stats.pph_empaquetado_jabu, obj: getObjectiveForDate('pph_empaquetado_jabu', selectedDate), color: 'indigo', key: 'pph_empaquetado_jabu' });
     }
     if (aid.includes('sb-empaquetado-deshuesado') || aid.includes('env-envasado') || aid.includes('env-empaquetado')) {
       kpis.push({ label: 'PPH', val: stats.pph, obj: getObjectiveForDate('pph', selectedDate), color: 'indigo', key: 'pph' });
