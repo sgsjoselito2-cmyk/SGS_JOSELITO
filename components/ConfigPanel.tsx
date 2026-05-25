@@ -366,6 +366,20 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
     'sb-empaquetado-deshuesado': [
       { id: 'pph', name: 'PPH' }
     ],
+    'env-envasado': [
+      { id: 'pph', name: 'PPH' },
+      { id: 'disponibilidad', name: 'Disponibilidad' },
+      { id: 'rendimiento', name: 'Rendimiento' },
+      { id: 'calidad', name: 'Calidad' },
+      { id: 'productividad', name: 'Productividad (OEE)' }
+    ],
+    'env-empaquetado': [
+      { id: 'pph', name: 'PPH' },
+      { id: 'disponibilidad', name: 'Disponibilidad' },
+      { id: 'rendimiento', name: 'Rendimiento' },
+      { id: 'calidad', name: 'Calidad' },
+      { id: 'productividad', name: 'Productividad (OEE)' }
+    ],
     'default': [
       { id: 'disponibilidad', name: 'Disponibilidad' },
       { id: 'rendimiento', name: 'Rendimiento' },
