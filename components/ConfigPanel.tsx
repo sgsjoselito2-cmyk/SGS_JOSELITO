@@ -70,30 +70,48 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
 
   // Estado local para la tabla maestra de TOP 60
   const [localMasterObjectives, setLocalMasterObjectives] = useState<Record<string, OEEObjectives>>({});
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [initKey, setInitKey] = useState('');
   const [objectiveValidFrom, setObjectiveValidFrom] = useState(new Date().toISOString().split('T')[0]);
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'info' | 'error' } | null>(null);
 
   useEffect(() => {
-    if (selectedArea === 'TOP 60' && allObjectives && Object.keys(allObjectives).length > 0 && !isInitialized) {
+    // Generate a unique footprint key based on selected area, selected date, and allObjectives metadata
+    const currentKey = `${selectedArea}_${objectiveValidFrom}_${JSON.stringify(allObjectives)}`;
+    
+    if (selectedArea === 'TOP 60' && allObjectives && Object.keys(allObjectives).length > 0 && initKey !== currentKey) {
       const latest: Record<string, OEEObjectives> = {};
       Object.entries(allObjectives).forEach(([area, objs]) => {
         if (Array.isArray(objs) && objs.length > 0) {
-          objs.forEach(obj => {
-            const key = obj.indicator_id ? `${area}_${obj.indicator_id}` : area;
-            latest[key] = obj;
+          // Sort items chronologically by valid_from (oldest to newest)
+          // This way, newer entries will correctly overwrite older ones in standard sequence,
+          // OR we can explicitly filter by date.
+          const sortedObjs = [...objs].sort((a, b) => a.valid_from.localeCompare(b.valid_from));
+          
+          // Get unique list of indicator IDs present in this area
+          const indicatorIds = Array.from(new Set(sortedObjs.map(o => o.indicator_id || 'default')));
+          
+          indicatorIds.forEach(indId => {
+            const indicatorObjs = sortedObjs.filter(o => (o.indicator_id || 'default') === indId);
+            // Reverse of oldest-to-newest is newest-to-oldest, let's find the most recent valid one on or before selected date
+            const descObjs = [...indicatorObjs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+            let activeObj = descObjs.find(o => o.valid_from <= objectiveValidFrom);
+            
+            // If none was set before or on this date, fallback to the absolute oldest (as starting points)
+            if (!activeObj) {
+              activeObj = descObjs[descObjs.length - 1];
+            }
+            
+            if (activeObj) {
+              const key = activeObj.indicator_id ? `${area}_${activeObj.indicator_id}` : area;
+              latest[key] = activeObj;
+            }
           });
         }
       });
       setLocalMasterObjectives(latest);
-      setIsInitialized(true);
+      setInitKey(currentKey);
     }
-  }, [selectedArea, allObjectives, isInitialized]);
-
-  // Reset initialization when area changes
-  useEffect(() => {
-    setIsInitialized(false);
-  }, [selectedArea]);
+  }, [selectedArea, allObjectives, objectiveValidFrom, initKey]);
 
   useEffect(() => {
     if (pin.length === 4 && passwords) {
