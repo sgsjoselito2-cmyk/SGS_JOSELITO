@@ -52,12 +52,8 @@ const isTimeBased = (wsId: string) => {
 
 const TALLER_INDICATORS: Record<string, {id: string, name: string}[]> = {
   'sb-loncheado': [
-    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' },
-    { id: 'rendimiento', name: 'RENDIMIENTO (%)' },
-    { id: 'calidad', name: 'CALIDAD (%)' },
-    { id: 'merma1', name: '% MERMA 1' },
-    { id: 'merma2', name: '% MERMA 2' },
-    { id: 'subproducto', name: '% SUBPROD' }
+    { id: 'productividad', name: 'OEE (%)' },
+    { id: 'merma1', name: '% MERMA 1' }
   ],
   'sb-preparacion': [
     { id: 'pph', name: 'PPH PESAR' }
@@ -70,16 +66,12 @@ const TALLER_INDICATORS: Record<string, {id: string, name: string}[]> = {
     { id: 'pph', name: 'PPH' }
   ],
   'env-envasado': [
-    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' },
-    { id: 'rendimiento', name: 'RENDIMIENTO (%)' },
-    { id: 'calidad', name: 'CALIDAD (%)' },
-    { id: 'productividad', name: 'OEE (%)' }
+    { id: 'productividad', name: 'OEE (%)' },
+    { id: 'pph', name: 'PPH ENVASADO' }
   ],
   'env-empaquetado': [
-    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' },
-    { id: 'rendimiento', name: 'RENDIMIENTO (%)' },
-    { id: 'calidad', name: 'CALIDAD (%)' },
-    { id: 'productividad', name: 'OEE (%)' }
+    { id: 'productividad', name: 'OEE (%)' },
+    { id: 'pph', name: 'PPH EMPAQUETADO' }
   ],
   'movimiento-jamones': [
     { id: 'pph_jamones', name: 'PPH JAMONES' },
