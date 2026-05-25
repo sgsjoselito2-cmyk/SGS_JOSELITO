@@ -34,7 +34,8 @@ import {
   Lock,
   LogOut
 } from 'lucide-react';
-import { Activity, MasterSpeed, IncidenceMaster, TaskType, OEEObjectives, User } from './types';
+import { Activity, MasterSpeed, IncidenceMaster, TaskType, OEEObjectives, User, Bodega, TipoProducto, MovimientoBodega } from './types';
+import BodegasModule from './components/BodegasModule';
 import { getInitialMasterSpeeds, getInitialOperarios, getInitialIncidenceMaster, INITIAL_OEE_OBJECTIVES, AREA_NAMES, INITIAL_ACTION_PLAN_TOP15, JOSELITO_LOGO } from './constants';
 import { supabase, isConfigured, debugConfig } from './lib/supabase';
 import { Session } from '@supabase/supabase-js';
@@ -48,7 +49,7 @@ interface Toast {
 
 const App: React.FC = () => {
   console.log("App: Component rendering...");
-  const [currentView, setCurrentView] = useState<'root-menu' | 'menu' | 'area'>('root-menu');
+  const [currentView, setCurrentView] = useState<'root-menu' | 'menu' | 'area' | 'bodegas'>('root-menu');
   const [session, setSession] = useState<Session | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [selectedWorkshop, setSelectedWorkshop] = useState<number | null>(null);
@@ -82,6 +83,10 @@ const App: React.FC = () => {
   const [responsibles, setResponsibles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const [bodegas, setBodegas] = useState<Bodega[]>([]);
+  const [tiposProducto, setTiposProducto] = useState<TipoProducto[]>([]);
+  const [movimientosBodega, setMovimientosBodega] = useState<MovimientoBodega[]>([]);
 
   const [globalUsers, setGlobalUsers] = useState<User[]>([]);
   const [top15Users, setTop15Users] = useState<User[]>([]);
@@ -828,6 +833,49 @@ const App: React.FC = () => {
             }));
             localStorage.setItem('zitron_all_incidences', JSON.stringify(incsWithDefaults));
           }
+
+          // Cargar Bodegas, Tipos de Producto y Movimientos
+          try {
+            const { data: bData } = await supabase.from('bodegas').select('*').order('nombre');
+            if (bData) {
+              setBodegas(bData);
+              localStorage.setItem('zitron_bodegas', JSON.stringify(bData));
+            }
+          } catch (e) {
+            console.warn('bodegas load failure', e);
+          }
+
+          try {
+            const { data: tpData } = await supabase.from('tipos_producto').select('*').order('nombre');
+            if (tpData) {
+              setTiposProducto(tpData);
+              localStorage.setItem('zitron_tipos_producto', JSON.stringify(tpData));
+            }
+          } catch (e) {
+            console.warn('tipos_producto load failure', e);
+          }
+
+          try {
+            const { data: movsData } = await supabase.from('movimientos_bodega').select('*').order('created_at', { ascending: false });
+            if (movsData) {
+              const formattedMovs: MovimientoBodega[] = movsData.map((m: any) => ({
+                id: m.id,
+                fecha: m.fecha,
+                hora: m.hora,
+                jefeEquipo: m.jefe_equipo || '',
+                bodegaOrigen: m.bodega_origen || '',
+                bodegaDestino: m.bodega_destino || '',
+                tipoProducto: m.tipo_producto || '',
+                anioJamon: m.anio_jamon || m.anio || '',
+                cantidad: m.cantidad,
+                comentarios: m.comentarios
+              }));
+              setMovimientosBodega(formattedMovs);
+              localStorage.setItem('zitron_movimientos_bodega', JSON.stringify(formattedMovs));
+            }
+          } catch (e) {
+            console.warn('movimientos_bodega load failure', e);
+          }
           
           // Clear any previous error if we reached this point successfully
           localStorage.removeItem('zitron_last_sync_error');
@@ -845,6 +893,14 @@ const App: React.FC = () => {
         const allAreas = [...Object.keys(AREA_NAMES)];
         aggregatedActivities = [];
         aggregatedHistory = [];
+
+        // Bodegas module fallbacks
+        const storedBodegas = safeParse('zitron_bodegas', []);
+        const storedTipos = safeParse('zitron_tipos_producto', []);
+        const storedMovs = safeParse('zitron_movimientos_bodega', []);
+        setBodegas(storedBodegas);
+        setTiposProducto(storedTipos);
+        setMovimientosBodega(storedMovs);
         
         // Load global users and objectives from localStorage if fetch failed
         const localGlobalUsers = safeParse('zitron_global_users', []);
@@ -2092,6 +2148,99 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateBodegas = async (newBodegas: Bodega[]) => {
+    setBodegas(newBodegas);
+    localStorage.setItem('zitron_bodegas', JSON.stringify(newBodegas));
+    if (isConfigured) {
+      try {
+        const ids = newBodegas.map(b => b.id);
+        const { data: currentB } = await supabase.from('bodegas').select('id');
+        if (currentB) {
+          const deletedIds = currentB.filter(b => !ids.includes(b.id)).map(b => b.id);
+          if (deletedIds.length > 0) {
+            await supabase.from('bodegas').delete().in('id', deletedIds);
+          }
+        }
+        for (const b of newBodegas) {
+          await supabase.from('bodegas').upsert({ id: b.id, nombre: b.nombre });
+        }
+      } catch (e) {
+        console.error('Error syncing bodegas to Supabase', e);
+      }
+    }
+  };
+
+  const handleUpdateTiposProducto = async (newTipos: TipoProducto[]) => {
+    setTiposProducto(newTipos);
+    localStorage.setItem('zitron_tipos_producto', JSON.stringify(newTipos));
+    if (isConfigured) {
+      try {
+        const ids = newTipos.map(t => t.id);
+        const { data: currentT } = await supabase.from('tipos_producto').select('id');
+        if (currentT) {
+          const deletedIds = currentT.filter(t => !ids.includes(t.id)).map(t => t.id);
+          if (deletedIds.length > 0) {
+            await supabase.from('tipos_producto').delete().in('id', deletedIds);
+          }
+        }
+        for (const t of newTipos) {
+          await supabase.from('tipos_producto').upsert({ id: t.id, nombre: t.nombre });
+        }
+      } catch (e) {
+        console.error('Error syncing tipos_producto to Supabase', e);
+      }
+    }
+  };
+
+  const handleSaveMovimientoBodega = async (mov: Omit<MovimientoBodega, 'id'>) => {
+    const id = Math.random().toString(36).substr(2, 9);
+    const hora = new Date().toTimeString().split(' ')[0]; // HH:MM:SS
+    const cantidadTotal = parseInt(String(mov.cantidad), 10) || 0;
+    
+    const newMov: MovimientoBodega = {
+      id,
+      fecha: mov.fecha,
+      hora,
+      jefeEquipo: mov.jefeEquipo,
+      bodegaOrigen: mov.bodegaOrigen,
+      bodegaDestino: mov.bodegaDestino,
+      tipoProducto: mov.tipoProducto,
+      anioJamon: mov.anioJamon,
+      cantidad: cantidadTotal,
+      comentarios: mov.comentarios
+    };
+
+    const updated = [newMov, ...movimientosBodega];
+    setMovimientosBodega(updated);
+    localStorage.setItem('zitron_movimientos_bodega', JSON.stringify(updated));
+
+    if (isConfigured) {
+      try {
+        const { error } = await supabase.from('movimientos_bodega').insert({
+          id,
+          fecha: mov.fecha,
+          hora,
+          jefe_equipo: mov.jefeEquipo,
+          bodega_origen: mov.bodegaOrigen,
+          bodega_destino: mov.bodegaDestino,
+          tipo_producto: mov.tipoProducto,
+          anio_jamon: mov.anioJamon,
+          cantidad: cantidadTotal,
+          comentarios: mov.comentarios,
+          created_at: new Date().toISOString()
+        });
+        if (error) {
+          console.error('Supabase movimientos_bodega insert error:', error);
+          return false;
+        }
+      } catch (e) {
+        console.error('Error inserting movimiento_bodega', e);
+        return false;
+      }
+    }
+    return true;
+  };
+
   const handleDeleteActivity = async (id: string, isHistory: boolean) => {
     if (!selectedArea) return;
     if (isHistory) {
@@ -2341,7 +2490,7 @@ const App: React.FC = () => {
     setActiveTab(tab);
   };
 
-  const handleRootSelect = (opt: 'top5' | 'top15' | 'top60') => {
+  const handleRootSelect = (opt: 'top5' | 'top15' | 'top60' | 'bodegas') => {
     // Verificar niveles de acceso (N1: TOP 5, N2: TOP 15, N3: TOP 60)
     if (opt === 'top15' && userLevel < 2) {
       addToast("NIVEL INSUFICIENTE: Requiere acceso Nivel 2 (TOP 15)", "error");
@@ -2349,6 +2498,11 @@ const App: React.FC = () => {
     }
     if (opt === 'top60' && userLevel < 3) {
       addToast("NIVEL INSUFICIENTE: Requiere acceso Nivel 3 (TOP 60)", "error");
+      return;
+    }
+
+    if (opt === 'bodegas') {
+      setCurrentView('bodegas');
       return;
     }
 
@@ -2408,6 +2562,21 @@ const App: React.FC = () => {
 
   if (!session) {
     return <Login onLoginSuccess={() => {}} />;
+  }
+
+  if (currentView === 'bodegas') {
+    return (
+      <BodegasModule
+        bodegas={bodegas || []}
+        tiposProducto={tiposProducto || []}
+        movimientos={movimientosBodega || []}
+        operarios={globalUsers || []}
+        onBack={() => setCurrentView('root-menu')}
+        onSaveMovimiento={handleSaveMovimientoBodega}
+        onUpdateBodegas={handleUpdateBodegas}
+        onUpdateTiposProducto={handleUpdateTiposProducto}
+      />
+    );
   }
 
   return (
@@ -2472,6 +2641,7 @@ const App: React.FC = () => {
               onSelectArea={handleAreaSelect} 
               operarios={globalUsers}
               onUpdateOperario={handleUpdateGlobalUser}
+              onSelectBodegas={() => setCurrentView('bodegas')}
             />
           </div>
         ) : (

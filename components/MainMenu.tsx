@@ -16,6 +16,7 @@ interface MainMenuProps {
   setSelectedWorkshop: (workshop: number | null) => void;
   operarios: any[];
   onUpdateOperario: (op: any) => void;
+  onSelectBodegas?: () => void;
 }
 
 const MainMenu: React.FC<MainMenuProps> = ({ 
@@ -23,11 +24,12 @@ const MainMenu: React.FC<MainMenuProps> = ({
   selectedWorkshop, 
   setSelectedWorkshop,
   operarios = [],
-  onUpdateOperario
+  onUpdateOperario,
+  onSelectBodegas
 }) => {
   const areas: AreaCard[] = [
     { id: 'sb-preparacion', name: 'DESHUESADO/PRENSADO', sub: 'Sala Blanca', icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012-2"/></svg>, status: 'active', taller: 1 },
-    { id: 'sb-loncheado', name: 'LONCHEADO', sub: 'Sala Blanca', icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.628.282a2 2 0 01-1.806 0l-.628-.282a6 6 0 00-3.86-.517l-2.387.477a2 2 0 00-1.022.547l-1.16 1.16a2 2 0 000 2.828l1.16 1.16a2 2 0 001.022.547l2.387.477a6 6 0 003.86-.517l.628-.282a2 2 0 011.806 0l.628.282a6 6 0 003.86-.517l2.387-.477a2 2 0 001.022-.547l1.16-1.16a2 2 0 000-2.828l-1.16-1.16z"/></svg>, status: 'active', taller: 1 },
+    { id: 'sb-loncheado', name: 'LONCHEADO', sub: 'Sala Blanca', icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.628.282a2 2 0 01-1.806 0l-.628-.282a6 6 0 00-3.86-.517l-2.387.477a2 2 0 00-1.022.547l-1.16 1.16a2 2 0 000 2.828l1.16 1.16a2 2 0 001.022.547l2.387.477a6 6 0 003.86-.517l.628-.282a2 2 0 011.806 0l.628.282a6 6 0 003.86-.517l2.387-.477a2 2 0 00-1.022.547l1.16-1.16a2 2 0 000-2.828l-1.16-1.16z"/></svg>, status: 'active', taller: 1 },
     { id: 'sb-empaquetado-loncheado', name: 'EMP. LONCHEADO', sub: 'Sala Blanca', icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>, status: 'active', taller: 1 },
     { id: 'sb-empaquetado-deshuesado', name: 'EMP. DESHUESADO', sub: 'Sala Blanca', icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>, status: 'active', taller: 1 },
     { id: 'env-envasado', name: 'ENVASADO', sub: 'Envasado', icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>, status: 'active', taller: 2 },
@@ -46,7 +48,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
   };
 
   const workshops = [
-    { id: 1, name: 'SALA BLANCA', sub: 'Deshuesado/Prensado, Loncheado y Empaquetado', icon: <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.628.282a2 2 0 01-1.806 0l-.628-.282a6 6 0 00-3.86-.517l-2.387.477a2 2 0 00-1.022.547l-1.16 1.16a2 2 0 000 2.828l1.16 1.16a2 2 0 001.022.547l2.387.477a6 6 0 003.86-.517l.628-.282a2 2 0 011.806 0l.628.282a6 6 0 003.86-.517l2.387-.477a2 2 0 001.022-.547l1.16-1.16a2 2 0 000-2.828l-1.16-1.16z"/></svg> },
+    { id: 1, name: 'SALA BLANCA', sub: 'Deshuesado/Prensado, Loncheado y Empaquetado', icon: <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.628.282a2 2 0 01-1.806 0l-.628-.282a6 6 0 00-3.86-.517l-2.387.477a2 2 0 00-1.022.547l-1.16 1.16a2 2 0 000 2.828l1.16 1.16a2 2 0 001.022.547l2.387.477a6 6 0 003.86-.517l.628-.282a2 2 0 011.806 0l.628.282a6 6 0 003.86-.517l2.387-.477a2 2 0 00-1.022.547l-1.16-1.16a2 2 0 000-2.828l-1.16-1.16z"/></svg> },
     { id: 2, name: 'ENVASADO', sub: 'Envasado y Empaquetado', icon: <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg> },
     { id: 3, name: 'EXPEDICIONES', sub: 'Expediciones y Preparación', icon: <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg> },
     { id: 4, name: 'MOVIMIENTOS', sub: 'Logística Interna', icon: <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg> }
@@ -82,11 +84,17 @@ const MainMenu: React.FC<MainMenuProps> = ({
       </div>
 
       {!selectedWorkshop ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 max-w-5xl w-full px-4 sm:px-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 max-w-7xl w-full px-4 sm:px-6">
           {workshops.map((w) => (
             <button
               key={w.id}
-              onClick={() => setSelectedWorkshop(w.id)}
+              onClick={() => {
+                if (w.id === 5) {
+                  if (onSelectBodegas) onSelectBodegas();
+                } else {
+                  setSelectedWorkshop(w.id);
+                }
+              }}
               className="group relative p-4 sm:p-5 rounded-2xl border-2 border-slate-100 bg-white text-left transition-all duration-700 hover:border-blue-500 hover:-translate-y-1 min-h-[160px] sm:h-[340px] flex flex-col justify-between overflow-hidden shadow-sm hover:shadow-xl hover:shadow-blue-50"
             >
               <div className="absolute -right-8 -bottom-8 sm:-right-10 sm:-bottom-10 opacity-[0.03] group-hover:opacity-[0.08] group-hover:scale-125 group-hover:rotate-12 transition-all duration-1000 text-slate-900 pointer-events-none">
@@ -105,7 +113,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
 
               <div className="relative z-10 flex items-center justify-between">
                 <span className="text-[16px] font-black text-blue-600 bg-blue-50/50 px-3 py-1.5 rounded-full uppercase tracking-widest border border-blue-100 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                  {areas.filter(a => a.taller === w.id).length} ÁREAS
+                  {w.id === 5 ? "REGISTRO" : `${areas.filter(a => a.taller === w.id).length} ÁREAS`}
                 </span>
                 <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d="M9 5l7 7-7 7"/></svg>

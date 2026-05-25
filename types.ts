@@ -93,3 +93,26 @@ export interface User {
   esJefeEquipo?: boolean;
   areaJefeEquipo?: string; // ej: 'movimiento-jamones'
 }
+
+export interface Bodega {
+  id: string;
+  nombre: string;
+}
+
+export interface TipoProducto {
+  id: string;
+  nombre: string;
+}
+
+export interface MovimientoBodega {
+  id: string;
+  fecha: string;
+  hora: string;
+  jefeEquipo: string;
+  bodegaOrigen: string;
+  bodegaDestino: string;
+  tipoProducto: string;
+  anioJamon: string;
+  cantidad: number;
+  comentarios?: string;
+}
