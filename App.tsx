@@ -1472,51 +1472,99 @@ const App: React.FC = () => {
   }, [selectedArea, addToast, executeOrQueue]);
 
   const handleSetObjectives = useCallback(async (newObj: OEEObjectives) => {
-    setOeeObjectives(newObj);
     if (!selectedArea) return;
-    
-    setAllObjectives(prev => {
-      const current = prev[selectedArea] || [];
-      const idx = current.findIndex(o => o.valid_from === newObj.valid_from);
-      let updated;
-      if (idx >= 0) {
-        updated = [...current];
-        updated[idx] = newObj;
-      } else {
-        updated = [newObj, ...current].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
-      }
-      safeLocalStorageSetItem(`zitron_${selectedArea}_objectives`, JSON.stringify(updated));
-      return { ...prev, [selectedArea]: updated };
-    });
 
-    const { id, ...objWithoutId } = newObj;
-    executeOrQueue({
-      table: 'oee_objectives',
-      type: 'upsert',
-      data: [{
-        ...objWithoutId, 
+    try {
+      // Find matching existing record in the current state to preserve its db id for upsert
+      const currentList = allObjectives[selectedArea] || [];
+      const existing = currentList.find(o => o.valid_from === newObj.valid_from && o.indicator_id === newObj.indicator_id);
+      
+      const recordId = existing?.id || newObj.id;
+      const finalObjToSave: OEEObjectives = {
+        ...newObj,
+        id: recordId,
         area: selectedArea,
-        indicator_id: newObj.indicator_id,
-        valid_from: newObj.valid_from
-      }],
-      filter: { column: 'id', value: null } // onConflict handled by upsert
-    });
-  }, [selectedArea, executeOrQueue]);
+        disponibilidad: parseFloat(String(newObj.disponibilidad)) || 0,
+        rendimiento: parseFloat(String(newObj.rendimiento)) || 0,
+        calidad: parseFloat(String(newObj.calidad)) || 0,
+        productividad: parseFloat(String(newObj.productividad)) || 0,
+        objetivo: parseFloat(String(newObj.objetivo)) || 0
+      };
+
+      // 1. Wait for Supabase upsert (await)
+      const success = await executeOrQueue({
+        table: 'oee_objectives',
+        type: 'upsert',
+        data: [{
+          id: recordId || undefined,
+          area: selectedArea,
+          valid_from: newObj.valid_from,
+          indicator_id: newObj.indicator_id || null,
+          disponibilidad: finalObjToSave.disponibilidad,
+          rendimiento: finalObjToSave.rendimiento,
+          calidad: finalObjToSave.calidad,
+          productividad: finalObjToSave.productividad,
+          objetivo: finalObjToSave.objetivo,
+          merma1: newObj.merma1 || 0,
+          merma2: newObj.merma2 || 0,
+          subproducto: newObj.subproducto || 0,
+          pph: newObj.pph || 0
+        }],
+        filter: { column: 'id' }
+      });
+
+      if (success) {
+        addToast("Objetivo guardado", "success");
+      } else {
+        addToast("Error al guardar objetivo", "error");
+        return;
+      }
+
+      // 2. Update state and localStorage (after successful wait)
+      setOeeObjectives(finalObjToSave);
+      
+      setAllObjectives(prev => {
+        const next = { ...prev };
+        const current = next[selectedArea] || [];
+        const idx = current.findIndex(o => o.valid_from === finalObjToSave.valid_from && o.indicator_id === finalObjToSave.indicator_id);
+        let updated;
+        if (idx >= 0) {
+          updated = [...current];
+          updated[idx] = finalObjToSave;
+        } else {
+          updated = [finalObjToSave, ...current].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+        }
+        next[selectedArea] = updated;
+        
+        safeLocalStorageSetItem(`zitron_${selectedArea}_objectives`, JSON.stringify(updated));
+        safeLocalStorageSetItem('zitron_global_objectives', JSON.stringify(next));
+        
+        return next;
+      });
+
+    } catch (error) {
+      console.error("Error en handleSetObjectives:", error);
+      addToast("Error al guardar objetivo", "error");
+    }
+  }, [selectedArea, allObjectives, executeOrQueue, addToast]);
 
   const handleUpdateAllObjectives = useCallback(async (objectivesMap: Record<string, OEEObjectives>, valid_from: string) => {
-    const toUpsert: any[] = [];
-    
-    setAllObjectives(prev => {
-      const next = { ...prev };
-      // Regroup objectives by their actual area ID (not the composite map key)
+    try {
+      const toUpsert: any[] = [];
+      const groupedUpdates: Record<string, OEEObjectives[]> = {};
+
       Object.values(objectivesMap).forEach((obj) => {
         const areaId = obj.area;
         if (!areaId) return;
 
-        // Ensure numeric values and proper keys
-        const { id, ...rest } = obj;
+        // Find if this record already exists in allObjectives
+        const currentList = allObjectives[areaId] || [];
+        const existing = currentList.find(o => o.valid_from === valid_from && o.indicator_id === obj.indicator_id);
+        const recordId = existing?.id || obj.id;
+
         const newObj: OEEObjectives = { 
-          ...rest,
+          ...obj,
+          id: recordId,
           area: areaId,
           valid_from,
           disponibilidad: parseFloat(String(obj.disponibilidad)) || 0,
@@ -1526,23 +1574,14 @@ const App: React.FC = () => {
           objetivo: parseFloat(String(obj.objetivo)) || 0
         };
 
-        const current = next[areaId] || [];
-        // Unique check: same area, same indicator_id, same valid_from
-        const idx = current.findIndex(o => o.valid_from === valid_from && (o.indicator_id === obj.indicator_id));
-        
-        let updated;
-        if (idx >= 0) {
-          updated = [...current];
-          updated[idx] = newObj;
-        } else {
-          updated = [newObj, ...current].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+        if (!groupedUpdates[areaId]) {
+          groupedUpdates[areaId] = [];
         }
-        
-        next[areaId] = updated;
-        safeLocalStorageSetItem(`zitron_${areaId}_objectives`, JSON.stringify(updated));
-        
-        // Prepare for DB upsert - MUST be snake_case
+        groupedUpdates[areaId].push(newObj);
+
+        // Prepare database row
         toUpsert.push({
+          id: recordId || undefined,
           area: areaId,
           valid_from: valid_from,
           indicator_id: obj.indicator_id || null,
@@ -1557,35 +1596,64 @@ const App: React.FC = () => {
           pph: obj.pph || 0
         });
       });
-      return next;
-    });
 
-    executeOrQueue({
-      table: 'oee_objectives',
-      type: 'upsert',
-      data: toUpsert,
-      filter: { column: 'id' }
-    }).then(success => {
-      if (success) addToast("OBJETIVOS GUARDADOS EN LA NUBE", "success");
-      else addToast("OBJETIVOS GUARDADOS LOCALMENTE (PENDIENTE SUBIR)", "info");
-    });
-    
-    if (selectedArea && objectivesMap[selectedArea]) {
-      setOeeObjectives({ 
-        ...objectivesMap[selectedArea], 
-        area: selectedArea, 
-        valid_from,
-        indicator_id: objectivesMap[selectedArea].indicator_id,
-        disponibilidad: parseFloat(String(objectivesMap[selectedArea].disponibilidad)) || 0,
-        rendimiento: parseFloat(String(objectivesMap[selectedArea].rendimiento)) || 0,
-        calidad: parseFloat(String(objectivesMap[selectedArea].calidad)) || 0,
-        productividad: parseFloat(String(objectivesMap[selectedArea].productividad)) || 0,
-        objetivo: parseFloat(String(objectivesMap[selectedArea].objetivo)) || 0
+      if (toUpsert.length === 0) return;
+
+      // 1. Wait for Supabase upsert (await)
+      const success = await executeOrQueue({
+        table: 'oee_objectives',
+        type: 'upsert',
+        data: toUpsert,
+        filter: { column: 'id' }
       });
+
+      if (success) {
+        addToast("Objetivo guardado", "success");
+      } else {
+        addToast("Error al guardar objetivo", "error");
+        return;
+      }
+
+      // 2. Update state and localStorage
+      setAllObjectives(prev => {
+        const next = { ...prev };
+
+        Object.entries(groupedUpdates).forEach(([areaId, list]) => {
+          const current = next[areaId] || [];
+          let updated = [...current];
+
+          list.forEach((newObj) => {
+            const idx = updated.findIndex(o => o.valid_from === valid_from && o.indicator_id === newObj.indicator_id);
+            if (idx >= 0) {
+              updated[idx] = newObj;
+            } else {
+              updated.push(newObj);
+            }
+          });
+
+          updated.sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+          next[areaId] = updated;
+          safeLocalStorageSetItem(`zitron_${areaId}_objectives`, JSON.stringify(updated));
+        });
+
+        safeLocalStorageSetItem('zitron_global_objectives', JSON.stringify(next));
+        return next;
+      });
+
+      // Update current selectedArea objectives if it was one of the updated ones
+      if (selectedArea) {
+        const currentList = groupedUpdates[selectedArea];
+        if (currentList && currentList.length > 0) {
+          const activeObj = currentList.find(o => o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id) || currentList[0];
+          setOeeObjectives(activeObj);
+        }
+      }
+
+    } catch (error) {
+      console.error("Error en handleUpdateAllObjectives:", error);
+      addToast("Error al guardar objetivo", "error");
     }
-    
-    addToast("OBJETIVOS MAESTROS ACTUALIZADOS", "success");
-  }, [selectedArea, addToast, executeOrQueue]);
+  }, [selectedArea, allObjectives, executeOrQueue, addToast]);
 
   const handleAddActivity = async (act: any, cierre?: any) => {
     if (!selectedArea) return;
