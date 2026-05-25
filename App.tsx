@@ -38,7 +38,7 @@ import { Activity, MasterSpeed, IncidenceMaster, TaskType, OEEObjectives, User }
 import { getInitialMasterSpeeds, getInitialOperarios, getInitialIncidenceMaster, INITIAL_OEE_OBJECTIVES, AREA_NAMES, INITIAL_ACTION_PLAN_TOP15, JOSELITO_LOGO } from './constants';
 import { supabase, isConfigured, debugConfig } from './lib/supabase';
 import { Session } from '@supabase/supabase-js';
-import { calcDuration, normalizeName } from './src/utils';
+import { calcDuration } from './src/utils';
 
 interface Toast {
   id: string;
@@ -535,7 +535,16 @@ const App: React.FC = () => {
         value = sanitizeData(value);
       }
       
-      clean[cleanKey] = value;
+      let activeKey = cleanKey;
+      if (activeKey === 'jefeEquipo') {
+        activeKey = 'jefe_equipo';
+      } else if (activeKey === 'esJefeEquipo') {
+        activeKey = 'es_jefe_equipo';
+      } else if (activeKey === 'areaJefeEquipo') {
+        activeKey = 'area_jefe_equipo';
+      }
+      
+      clean[activeKey] = value;
     });
     return clean;
   };
@@ -735,7 +744,8 @@ const App: React.FC = () => {
           if (actsRes.status === 'fulfilled') {
             aggregatedActivities = actsRes.value.map((a: any) => ({
               ...a,
-              tiempoTeorico: a.tiempoTeorico !== undefined ? a.tiempoTeorico : a.tiempo_teorico
+              tiempoTeorico: a.tiempoTeorico !== undefined ? a.tiempoTeorico : a.tiempo_teorico,
+              jefeEquipo: a.jefe_equipo || undefined
             }));
             globalActivitiesRef.current = aggregatedActivities;
           }
@@ -743,7 +753,8 @@ const App: React.FC = () => {
           if (histRes.status === 'fulfilled') {
             aggregatedHistory = histRes.value.map((h: any) => ({
               ...h,
-              tiempoTeorico: h.tiempoTeorico !== undefined ? h.tiempoTeorico : h.tiempo_teorico
+              tiempoTeorico: h.tiempoTeorico !== undefined ? h.tiempoTeorico : h.tiempo_teorico,
+              jefeEquipo: h.jefe_equipo || undefined
             }));
             console.log(`App: Fetched ${aggregatedHistory.length} history records from Supabase`);
             globalHistoryRef.current = aggregatedHistory;
@@ -753,7 +764,9 @@ const App: React.FC = () => {
           if (opsRes.status === 'fulfilled' && opsRes.value.data) {
             const allOps = opsRes.value.data.map((u: any) => ({
               ...u,
-              areas: u.areas || (u.area ? [u.area] : [])
+              areas: u.areas || (u.area ? [u.area] : []),
+              esJefeEquipo: u.es_jefe_equipo || false,
+              areaJefeEquipo: u.area_jefe_equipo || undefined
             }));
             
             // Centralize all users in globalUsers
@@ -1051,7 +1064,9 @@ const App: React.FC = () => {
           if (data && data.length > 0) {
             localGlobal = data.map((u: any) => ({
               ...u,
-              areas: u.areas || (u.area ? [u.area] : [])
+              areas: u.areas || (u.area ? [u.area] : []),
+              esJefeEquipo: u.es_jefe_equipo || false,
+              areaJefeEquipo: u.area_jefe_equipo || undefined
             }));
           }
         } catch (e) {
@@ -1582,9 +1597,7 @@ const App: React.FC = () => {
     try {
       const updatedActs = activities.map(openAct => {
         const selectedOperarios = act.operarios || [];
-        const overlaps = selectedOperarios.some((u: string) => 
-          (openAct.operarios || []).some((op: string) => normalizeName(op) === normalizeName(u))
-        );
+        const overlaps = selectedOperarios.some((u: string) => (openAct.operarios || []).includes(u));
         const shouldClose = !openAct.horaFin && (
           (cierre && (
             (!cierre.idsToClose && overlaps) ||
@@ -1811,7 +1824,7 @@ const App: React.FC = () => {
     try {
       const updatedActs = activities.map(openAct => {
         const shouldClose = (
-          (!cierre?.id && users.some(u => (openAct.operarios || []).some((op: string) => normalizeName(op) === normalizeName(u))) && !openAct.horaFin) ||
+          (!cierre?.id && users.some(u => openAct.operarios?.includes(u)) && !openAct.horaFin) ||
           (cierre?.id && openAct.id === cierre.id)
         );
 
@@ -2096,21 +2109,36 @@ const App: React.FC = () => {
     addToast("HISTÓRICO IMPORTADO Y SINCRONIZADO", "success");
   };
 
-  const handleFinalizeShift = async (fecha: string, forceClose: boolean = false, aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, mermasToSave?: any[]) => {
+  const handleFinalizeShift = async (
+    fecha: string, 
+    forceClose: boolean = false, 
+    aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, 
+    mermasToSave?: any[],
+    jefe_equipo_filter?: string | null
+  ) => {
     if (!selectedArea) return;
     setIsLoading(true);
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 
+    // If filtering by coach, separate out activities to keep vs archive
+    const filteredActivities = jefe_equipo_filter
+      ? activities.filter(a => a.jefeEquipo === jefe_equipo_filter)
+      : activities;
+    
+    const remainingActivities = jefe_equipo_filter
+      ? activities.filter(a => a.jefeEquipo !== jefe_equipo_filter)
+      : [];
+
     try {
-      const readyToArchive: Activity[] = activities.map(a => {
+      const readyToArchive: Activity[] = filteredActivities.map(a => {
         let cantidad = a.cantidad || 0;
         let cantidadNok = a.cantidadNok || 0;
         
         if (aggregatedQuantities && aggregatedQuantities[a.formato]) {
           // Proportional distribution based on duration (or just assign if only one activity)
           // Simplified: assign to all activities of the same format
-          const sameFormatCount = activities.filter(act => act.formato === a.formato).length || 1;
+          const sameFormatCount = filteredActivities.filter(act => act.formato === a.formato).length || 1;
           cantidad = aggregatedQuantities[a.formato].cantidad / sameFormatCount;
           cantidadNok = (aggregatedQuantities[a.formato].cantidadNok || 0) / sameFormatCount;
         }
@@ -2138,8 +2166,8 @@ const App: React.FC = () => {
         return next;
       });
       
-      setActivities([]);
-      safeLocalStorageSetItem(`zitron_${selectedArea}_activities`, JSON.stringify([]));
+      setActivities(remainingActivities);
+      safeLocalStorageSetItem(`zitron_${selectedArea}_activities`, JSON.stringify(remainingActivities));
 
       // Move to history - only send fields that exist in the DB table
       const archiveData = readyToArchive.map(a => {
@@ -2158,7 +2186,8 @@ const App: React.FC = () => {
           fecha: act.fecha || '',
           area: selectedArea,
           afectaCalidad: act.afectaCalidad || false,
-          tiempoTeoricoManual: act.tiempoTeoricoManual || 0
+          tiempoTeoricoManual: act.tiempoTeoricoManual || 0,
+          jefe_equipo: act.jefeEquipo || null
         };
       });
 
@@ -2168,11 +2197,19 @@ const App: React.FC = () => {
         data: archiveData,
         filter: { column: 'id' }
       }).then(() => {
-        executeOrQueue({
-          table: 'activities',
-          type: 'delete',
-          filter: { column: 'area', value: selectedArea }
-        });
+        if (jefe_equipo_filter) {
+          executeOrQueue({
+            table: 'activities',
+            type: 'delete',
+            filter: { column: 'jefe_equipo', value: jefe_equipo_filter }
+          });
+        } else {
+          executeOrQueue({
+            table: 'activities',
+            type: 'delete',
+            filter: { column: 'area', value: selectedArea }
+          });
+        }
       });
 
       // Guardar mermas se existirem
@@ -2372,7 +2409,7 @@ const App: React.FC = () => {
         ) : (
           <>
             {/* Dashboard View */}
-            {(activeTab === 'dashboard' || (selectedArea && selectedArea.includes('dashboard'))) && selectedArea && selectedArea !== 'TOP 15' && selectedArea !== 'TOP 60' && (
+            {activeTab !== 'database' && (activeTab === 'dashboard' || (selectedArea && selectedArea.includes('dashboard'))) && selectedArea && selectedArea !== 'TOP 15' && selectedArea !== 'TOP 60' && (
               <>
                 {/* Individual Area Dashboard */}
                 {!selectedArea.includes('dashboard') && (
@@ -2772,6 +2809,7 @@ const App: React.FC = () => {
           users={globalUsers}
           onUpdateUsers={handleUpdateGlobalUsers}
           onClose={() => setShowGlobalUserConfig(false)}
+          passwords={passwords}
         />
       )}
 

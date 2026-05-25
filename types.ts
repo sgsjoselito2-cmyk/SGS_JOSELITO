@@ -20,6 +20,7 @@ export interface Activity {
   area?: string;
   afectaCalidad?: boolean;
   tiempoTeoricoManual?: number; 
+  jefeEquipo?: string; // nombre del jefe de esta actividad
 }
 
 export interface ActionPlanItem {
@@ -85,4 +86,6 @@ export interface User {
   id: string;
   areas?: string[];
   email?: string;
+  esJefeEquipo?: boolean;
+  areaJefeEquipo?: string; // ej: 'movimiento-jamones'
 }

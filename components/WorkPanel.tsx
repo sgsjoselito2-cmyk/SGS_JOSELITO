@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { TaskType, Activity, IncidenceMaster, MasterSpeed, OEEObjectives, User } from '../types';
 import { AREA_COLUMNS } from '../constants';
-import { calcDuration, calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals, normalizeName } from '../src/utils';
+import { calcDuration, calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals } from '../src/utils';
 import HelpModal from './HelpModal';
-import { Check, X, Edit2, Trash2, Calendar } from 'lucide-react';
+import { Check, X, Edit2, Trash2, Calendar, Star, Shield } from 'lucide-react';
 
 interface WorkPanelProps {
   selectedUsers: string[];
@@ -17,7 +17,7 @@ interface WorkPanelProps {
   onEndTurn: (userNames: string[], closureData?: { cantidad: number, comentarios: string, id?: string }) => void;
   onUpdateActivity?: (activity: Activity) => void;
   onDeleteActivity?: (id: string, isHistory: boolean) => void;
-  onFinalizeShift: (fecha: string, forceClose?: boolean, aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, mermasToSave?: any[]) => void;
+  onFinalizeShift: (fecha: string, forceClose?: boolean, aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, mermasToSave?: any[], jefe_equipo_filter?: string | null) => void;
   onRefresh: () => void;
   onAddMultipleActivities?: (newActivities: any[], closedActivitiesData: any[]) => void;
   isEndModalOpen: boolean;
@@ -58,6 +58,52 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
   const [localDate, setLocalDate] = useState(new Date().toISOString().split('T')[0]);
   const selectedDate = propDate || localDate;
   const setSelectedDate = propSetDate || setLocalDate;
+
+  const [jefeEquipoTurno, setJefeEquipoTurno] = useState<string | null>(() => {
+    return localStorage.getItem(`zitron_${selectedArea || 'default'}_jefe_turno`) || null;
+  });
+  const [flowStep, setFlowStep] = useState<number>(() => {
+    const saved = localStorage.getItem(`zitron_${selectedArea || 'default'}_flow_step`);
+    return saved ? parseInt(saved, 10) : 1;
+  });
+
+  useEffect(() => {
+    if (jefeEquipoTurno) {
+      localStorage.setItem(`zitron_${selectedArea || 'default'}_jefe_turno`, jefeEquipoTurno);
+    } else {
+      localStorage.removeItem(`zitron_${selectedArea || 'default'}_jefe_turno`);
+    }
+  }, [jefeEquipoTurno, selectedArea]);
+
+  useEffect(() => {
+    localStorage.setItem(`zitron_${selectedArea || 'default'}_flow_step`, flowStep.toString());
+  }, [flowStep, selectedArea]);
+
+  const safeAddActivity = (activity: any, closureData?: any) => {
+    const enhanced = { ...activity };
+    if (selectedArea === 'movimiento-jamones' && jefeEquipoTurno) {
+      enhanced.jefeEquipo = jefeEquipoTurno;
+    }
+    onAddActivity(enhanced, closureData);
+  };
+
+  const safeAddMultipleActivities = (newActivities: any[], closedActivitiesData: any[]) => {
+    const enhancedNew = newActivities.map(a => {
+      const copy = { ...a };
+      if (selectedArea === 'movimiento-jamones' && jefeEquipoTurno) {
+        copy.jefeEquipo = jefeEquipoTurno;
+      }
+      return copy;
+    });
+    if (onAddMultipleActivities) {
+      onAddMultipleActivities(enhancedNew, closedActivitiesData);
+    } else {
+      closedActivitiesData.forEach(c => onEndTurn(selectedUsers, c));
+      if (enhancedNew.length > 0) {
+        enhancedNew.forEach(a => safeAddActivity(a));
+      }
+    }
+  };
   
   const isLaserArea = selectedArea === 'corte-laser';
   const isLoncheadoArea = selectedArea === 'sb-loncheado';
@@ -295,7 +341,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
 
   const currentActivities = useMemo(() => {
     return activities.filter(a => 
-      a.operarios?.some(u => selectedUsers.some(su => normalizeName(su) === normalizeName(u))) && 
+      a.operarios?.some(u => selectedUsers.includes(u)) && 
       (!a.horaFin || String(a.horaFin).trim() === "")
     );
   }, [activities, selectedUsers]);
@@ -341,7 +387,18 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
 
       if (isCorrect) {
         if (pendingShiftFinalization) {
-          onFinalizeShift(pendingShiftFinalization.fecha, pendingShiftFinalization.force, pendingShiftFinalization.aggregatedQuantities, pendingShiftFinalization.mermasToSave);
+          onFinalizeShift(
+            pendingShiftFinalization.fecha,
+            pendingShiftFinalization.force,
+            pendingShiftFinalization.aggregatedQuantities,
+            pendingShiftFinalization.mermasToSave,
+            selectedArea === 'movimiento-jamones' ? jefeEquipoTurno : null
+          );
+          if (selectedArea === 'movimiento-jamones') {
+            setJefeEquipoTurno(null);
+            setFlowStep(1);
+            setSelectedUsers([]);
+          }
           setPendingShiftFinalization(null);
           setIsAdminMode(false);
         } else {
@@ -386,12 +443,12 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       const closureData = { cantidad: 0, comentarios: '', idsToClose: currentActivities.map(a => a.id) };
 
       if (nextAction === 'end') {
-        onAddActivity({} as any, closureData);
+        safeAddActivity({} as any, closureData);
       } else {
-        onAddActivity(nextPayload, closureData);
+        safeAddActivity(nextPayload, closureData);
       }
     } else {
-      if (nextAction === 'add') onAddActivity(nextPayload);
+      if (nextAction === 'add') safeAddActivity(nextPayload);
     }
   };
 
@@ -399,7 +456,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
     const rawQty = safeParse(closureQty) || 0;
     const qty = Number(Math.max(0, rawQty).toFixed(1));
     const closureData = { cantidad: qty, comentarios: closureComments };
-    if (pendingAction?.type === 'add') onAddActivity(pendingAction.payload, closureData);
+    if (pendingAction?.type === 'add') safeAddActivity(pendingAction.payload, closureData);
     else if (pendingAction?.type === 'end') onEndTurn(selectedUsers, closureData);
     setShowClosureModal(false); setPendingAction(null);
   };
@@ -420,12 +477,12 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
     const newActs = pendingActivities;
     
     if (onAddMultipleActivities) {
-      onAddMultipleActivities(newActs, closedActsData);
+      safeAddMultipleActivities(newActs, closedActsData);
     } else {
       // Fallback if not provided
       closedActsData.forEach(c => onEndTurn(selectedUsers, c));
       if (newActs.length > 0) {
-        newActs.forEach(a => onAddActivity(a));
+        newActs.forEach(a => safeAddActivity(a));
       }
     }
 
@@ -455,9 +512,9 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       setShowMultipleStartModal(false);
     } else {
       if (onAddMultipleActivities) {
-        onAddMultipleActivities(pendingActivities, []);
+        safeAddMultipleActivities(pendingActivities, []);
       } else {
-        pendingActivities.forEach(a => onAddActivity(a));
+        pendingActivities.forEach(a => safeAddActivity(a));
       }
       setShowMultipleStartModal(false);
       setPendingActivities([]);
@@ -493,7 +550,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       } else {
         // Si decidió no cerrar ninguna, simplemente añadimos la nueva
         if (pendingMecanizadoAction?.payload) {
-          onAddActivity(pendingMecanizadoAction.payload);
+          safeAddActivity(pendingMecanizadoAction.payload);
         }
       }
     } else if (machineSelectionType === 'incidence') {
@@ -501,7 +558,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       if (pendingMecanizadoAction?.payload) {
         selectedMachineIds.forEach(id => {
           const act = currentActivities.find(a => a.id === id);
-          onAddActivity(
+          safeAddActivity(
             pendingMecanizadoAction.payload,
             { idsToClose: [id], cantidad: 0, comentarios: '' }
           );
@@ -521,7 +578,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       });
       
       if (onAddMultipleActivities) {
-        onAddMultipleActivities([], closedActsData);
+        safeAddMultipleActivities([], closedActsData);
       } else {
         closedActsData.forEach(c => onEndTurn(selectedUsers, c));
       }
@@ -733,6 +790,26 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
         />
       </div>
 
+      {selectedArea === 'movimiento-jamones' && jefeEquipoTurno && flowStep === 3 && (
+        <div className="bg-gradient-to-r from-blue-900 to-indigo-955 p-3 sm:p-4 rounded-2xl shadow-md border border-slate-800 flex items-center justify-between gap-3 shrink-0 text-white select-none">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center border border-white/20">
+              <Star className="w-5 h-5 text-amber-400 fill-amber-400" />
+            </div>
+            <div>
+              <p className="text-[9px] font-black tracking-widest text-blue-300 uppercase leading-none">Jefe de Equipo Activo</p>
+              <h3 className="text-sm font-black tracking-tight leading-normal uppercase mt-0.5">{jefeEquipoTurno}</h3>
+            </div>
+          </div>
+          <button
+            onClick={() => setFlowStep(1)}
+            className="px-3 py-1.5 bg-white/10 hover:bg-white/20 active:scale-95 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all border border-white/10"
+          >
+            Cambiar Jefe
+          </button>
+        </div>
+      )}
+
       {/* KPI SUMMARY */}
       <div className="grid grid-cols-4 gap-0.5 sm:gap-1 mb-0.5 relative shrink-0">
         <button 
@@ -940,7 +1017,9 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                 <p className={`text-[13px] font-bold text-center uppercase tracking-widest leading-relaxed ${isForcingClosure ? 'text-amber-800' : 'text-blue-700'}`}>
                   {isForcingClosure 
                     ? `⚠️ Todas las tareas abiertas se cerrarán ahora con cantidad 0.` 
-                    : `Confirmado: Los registros se archivarán con fecha `} 
+                    : (selectedArea === 'movimiento-jamones' && jefeEquipoTurno)
+                      ? `Cerrando turno del equipo de ${jefeEquipoTurno}. Los registros se archivarán con fecha `
+                      : `Confirmado: Los registros se archivarán con fecha `} 
                   <span className="font-black underline">{shiftDate}</span>
                 </p>
               </div>
@@ -958,27 +1037,37 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
         </div>
       )}
 
-      {/* PANEL DE CONTROL SUPERIOR */}
-      <div className="flex-1 overflow-y-auto pr-1 space-y-1 no-scrollbar">
+      {!(selectedArea === 'movimiento-jamones' && flowStep < 3) ? (
+        <>
+          {/* PANEL DE CONTROL SUPERIOR */}
+          <div className="flex-1 overflow-y-auto pr-1 space-y-1 no-scrollbar">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-1 sm:gap-1.5">
           <div className="flex flex-col gap-1 sm:gap-1.5">
             <section className={`p-1 sm:p-1.5 rounded-lg border bg-white shadow-sm ${selectedUsers.length === 0 ? 'border-blue-400 ring-2 ring-blue-50' : 'border-slate-200'}`}>
               <h2 className="text-[14px] font-black mb-0.5 text-blue-600 uppercase">1. OPERARIOS</h2>
             <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto p-1 bg-slate-50 rounded-md border border-slate-100">
-              {operarios.map(u => (
-                <label key={u.id} className={`flex items-center gap-1 px-2 py-1 rounded-md cursor-pointer transition-all ${selectedUsers.includes(u.nombre) ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
-                  <input 
-                    type="checkbox" 
-                    className="hidden"
-                    checked={selectedUsers.includes(u.nombre)}
-                    onChange={(e) => {
-                      if (e.target.checked) setSelectedUsers([...selectedUsers, u.nombre]);
-                      else setSelectedUsers(selectedUsers.filter(n => n !== u.nombre));
-                    }}
-                  />
-                  <span className="text-[12px] font-black uppercase">{u.nombre}</span>
-                </label>
-              ))}
+              {operarios.map(u => {
+                const isJefe = selectedArea === 'movimiento-jamones' && u.nombre === jefeEquipoTurno;
+                return (
+                  <label key={u.id} className={`flex items-center gap-1.5 px-2 py-1 rounded-md cursor-pointer transition-all ${selectedUsers.includes(u.nombre) ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+                    <input 
+                      type="checkbox" 
+                      className="hidden"
+                      checked={selectedUsers.includes(u.nombre)}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedUsers([...selectedUsers, u.nombre]);
+                        else setSelectedUsers(selectedUsers.filter(n => n !== u.nombre));
+                      }}
+                    />
+                    <span className="text-[12px] font-black uppercase">{u.nombre}</span>
+                    {isJefe && (
+                      <span className={`text-[8px] font-black px-1.5 py-0.5 rounded ${selectedUsers.includes(u.nombre) ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-600'}`}>
+                        JEFE
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
             </div>
             {selectedUsers.length > 0 && (
               <div className="flex gap-2 mt-3">
@@ -1066,7 +1155,8 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                 <tr>
                   <th className="px-2 py-2">FECHA</th>
                   <th className="px-2 py-2">OPERARIOS</th>
-                  <th className="px-2 py-2">FORMATO</th>
+                  {selectedArea === 'movimiento-jamones' && <th className="px-2 py-2">JEFE EQUIPO</th>}
+                  <th className="px-2 py-2">{selectedArea === 'movimiento-jamones' ? 'TAREA' : 'FORMATO'}</th>
                   <th className="px-2 py-2 text-center">INTERVALO</th>
                   <th className="px-2 py-2 text-center">T. REAL</th>
                   {selectedArea !== 'sb-preparacion' && <th className="px-2 py-2 text-center">T. TEO</th>}
@@ -1081,6 +1171,13 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                       <>
                         <td className="px-2 py-1.5"><input type="date" value={editForm.fecha || ''} onChange={e => setEditForm({...editForm, fecha: e.target.value})} className="w-full p-1 text-[14px] border rounded bg-white text-slate-900 font-bold" /></td>
                         <td className="px-2 py-1.5"><input type="text" value={act.operarios?.join(', ') || ''} readOnly className="w-full p-1 text-[14px] border rounded bg-slate-100 text-slate-500 font-bold uppercase" /></td>
+                        {selectedArea === 'movimiento-jamones' && (
+                          <td className="px-2 py-1.5 font-bold uppercase text-[12px] text-slate-500 whitespace-nowrap">
+                            <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-black text-[11px] uppercase whitespace-nowrap">
+                              {act.jefeEquipo || '—'}
+                            </span>
+                          </td>
+                        )}
                         <td className="px-2 py-1.5">
                           <div className="flex flex-col gap-1">
                             <input type="text" value={editForm.formato || ''} onChange={e => setEditForm({...editForm, formato: e.target.value})} className="w-full p-1 text-[14px] border rounded bg-white text-slate-900 font-bold uppercase" placeholder="FORMATO" />
@@ -1113,6 +1210,17 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                       <>
                         <td className="px-2 py-1.5 font-bold text-[12px] whitespace-nowrap">{act.fecha}</td>
                         <td className="px-2 py-1.5 font-black uppercase text-[12px]">{act.operarios?.join(', ')}</td>
+                        {selectedArea === 'movimiento-jamones' && (
+                          <td className="px-2 py-1.5 whitespace-nowrap">
+                            {act.jefeEquipo ? (
+                              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-black text-[11px] uppercase">
+                                {act.jefeEquipo}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-bold">—</span>
+                            )}
+                          </td>
+                        )}
                         <td className="px-2 py-1.5">
                           <span className="font-black uppercase">{act.formato}</span> 
                           {act.tiempoTeoricoManual !== undefined && (
@@ -1164,6 +1272,143 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
           </div>
         </div>
       </section>
+    </>
+  ) : (
+    <>
+      {/* Paso 1: Seleccionar Jefe de Equipo */}
+      {flowStep === 1 && (
+        <div className="flex-1 bg-slate-50 rounded-[2rem] border-2 border-slate-100 p-6 flex flex-col justify-center items-center text-center space-y-6 animate-in fade-in zoom-in-95 duration-200">
+          <div className="max-w-md w-full p-6 bg-white rounded-3xl shadow-xl border border-slate-100">
+            <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100 shadow-md">
+              <span className="text-2xl font-black">👑</span>
+            </div>
+            <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Paso 1: Jefe de Equipo</h2>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Selecciona al jefe de este equipo para el turno</p>
+            
+            {operarios.filter(u => u.esJefeEquipo).length === 0 ? (
+              <div className="mt-6 p-4 bg-amber-50 rounded-2xl border border-amber-200 text-amber-800 text-sm font-bold uppercase leading-relaxed text-center">
+                ⚠️ No hay Jefes de Equipo registrados.<br />Registra uno en la pantalla de gestión de operarios antes de continuar.
+              </div>
+            ) : (
+              <div className="mt-6 grid grid-cols-1 gap-2 max-h-60 overflow-y-auto pr-1">
+                {operarios.filter(u => u.esJefeEquipo).map(j => {
+                  const isSelected = jefeEquipoTurno === j.nombre;
+                  return (
+                    <button
+                      key={j.id}
+                      onClick={() => setJefeEquipoTurno(j.nombre)}
+                      className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all font-black text-sm uppercase ${
+                        isSelected 
+                          ? 'border-blue-600 bg-blue-50/50 text-blue-950 ring-2 ring-blue-500/10'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">👤</span>
+                        <span className="text-[14px] normal-case">{j.nombre}</span>
+                      </div>
+                      {j.areaJefeEquipo && (
+                        <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-bold uppercase">
+                          {j.areaJefeEquipo.replace('movimiento-', '')}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <button
+              disabled={!jefeEquipoTurno}
+              onClick={() => setFlowStep(2)}
+              className="w-full mt-6 py-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-30 disabled:hover:bg-blue-600 text-white font-black uppercase text-[12px] tracking-widest shadow-xl shadow-blue-100 rounded-2xl transition-all active:scale-95"
+            >
+              Siguiente Paso
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Paso 2: Seleccionar Operarios de Equipo */}
+      {flowStep === 2 && (
+        <div className="flex-1 bg-slate-50 rounded-[2rem] border-2 border-slate-100 p-6 flex flex-col justify-center items-center text-center space-y-6 animate-in fade-in zoom-in-95 duration-200">
+          <div className="max-w-md w-full p-6 bg-white rounded-3xl shadow-xl border border-slate-100">
+            <div className="flex items-center justify-between border-b pb-4 mb-4">
+              <button 
+                onClick={() => setFlowStep(1)} 
+                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 font-black uppercase text-[10px] tracking-wider"
+              >
+                ← Volver
+              </button>
+              <div className="text-right">
+                <span className="text-[9px] font-black text-slate-400 uppercase block">Jefe Asignado</span>
+                <span className="font-extrabold text-blue-600 uppercase text-xs">{jefeEquipoTurno}</span>
+              </div>
+            </div>
+            
+            <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Paso 2: Operarios del Equipo</h2>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Selecciona los operarios que integrarán el equipo de este turno</p>
+            
+            <div className="mt-6 flex flex-wrap gap-2 max-h-60 overflow-y-auto p-2 bg-slate-50 rounded-2xl border border-slate-200/50">
+              {operarios.map(u => {
+                const isSelected = selectedUsers.includes(u.nombre);
+                const isJefe = u.nombre === jefeEquipoTurno;
+                return (
+                  <label 
+                    key={u.id} 
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-all border-2 text-[12px] font-black uppercase ${
+                      isSelected 
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-100' 
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'
+                    }`}
+                  >
+                    <input 
+                      type="checkbox" 
+                      className="hidden"
+                      checked={isSelected}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedUsers([...selectedUsers, u.nombre]);
+                        else setSelectedUsers(selectedUsers.filter(n => n !== u.nombre));
+                      }}
+                    />
+                    <span>{u.nombre}</span>
+                    {isJefe && (
+                      <span className={`text-[8px] px-1.5 py-0.5 rounded font-black ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-700'}`}>
+                        JEFE
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="flex gap-2 mt-4">
+              <button 
+                onClick={() => setSelectedUsers(operarios.map(u => u.nombre))} 
+                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-widest transition-all"
+              >
+                Seleccionar Todos
+              </button>
+              <button 
+                onClick={() => setSelectedUsers([])} 
+                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-widest transition-all"
+              >
+                Limpiar Selección
+              </button>
+            </div>
+
+            <button
+              disabled={selectedUsers.length === 0}
+              onClick={() => setFlowStep(3)}
+              className="w-full mt-6 py-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-30 disabled:hover:bg-emerald-600 text-white font-black uppercase text-[12px] tracking-widest shadow-xl shadow-emerald-100 rounded-2xl transition-all active:scale-95"
+            >
+              Confirmar e Iniciar Turno
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  )}
 
       {/* MODAL SELECCIÓN MÁQUINAS MECANIZADO */}
       {showMachineSelectionModal && (

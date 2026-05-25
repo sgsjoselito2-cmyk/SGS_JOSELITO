@@ -200,9 +200,7 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
       // Special case for Loncheado Mermas
       if (area.id === 'sb-loncheado') {
         const mermaInds = [
-          { id: 'merma1', label: '% MERMA 1', obj: 3 },
-          { id: 'merma2', label: '% MERMA 2', obj: 3 },
-          { id: 'subproducto', label: '% SUBPROD', obj: 5 }
+          { id: 'merma1', label: '% MERMA 1', obj: 3 }
         ];
 
         mermaInds.forEach(ind => {
@@ -493,14 +491,80 @@ export const ExpedicionesDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'su
   />
 );
 
-export const MovimientosDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'subtitle'>> = (props) => (
-  <GroupDashboard {...props}
-    title="Movimientos"
-    subtitle="Logística Interna"
-    areas={[
-      { id: 'movimiento-jamones', name: 'MOVIMIENTOS' },
-    ]}
-  />
-);
+export const MovimientosDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'subtitle'>> = (props) => {
+
+  // 1. Extraer jefes únicos de las actividades recibidas
+  const allData = [...props.history, ...props.activities];
+  const jefesEquipo = [...new Set(
+    allData
+      .filter(a => a.area === 'movimiento-jamones' && a.jefeEquipo)
+      .map(a => a.jefeEquipo!)
+  )].sort();
+
+  // 2. Estado del filtro
+  const [selectedJefe, setSelectedJefe] = useState('');
+
+  // 3. Resetear si el jefe seleccionado no tiene datos
+  React.useEffect(() => {
+    if (selectedJefe && !jefesEquipo.includes(selectedJefe)) {
+      setSelectedJefe('');
+    }
+  }, [jefesEquipo, selectedJefe]);
+
+  // 4. Filtrar datos según jefe seleccionado
+  const filteredActivities = selectedJefe
+    ? props.activities.filter(a => a.jefeEquipo === selectedJefe)
+    : props.activities;
+  const filteredHistory = selectedJefe
+    ? props.history.filter(a => a.jefeEquipo === selectedJefe)
+    : props.history;
+
+  return (
+    <div>
+      {/* Selector de equipo — solo mostrar si hay más de un jefe */}
+      {jefesEquipo.length > 0 && (
+        <div className="px-4 pt-4 flex items-center gap-3">
+          <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
+            Equipo:
+          </span>
+          <div className="flex rounded-xl border-2 border-slate-100 overflow-hidden">
+            <button
+              onClick={() => setSelectedJefe('')}
+              className={`px-3 py-2 text-[11px] font-black uppercase tracking-widest transition-all ${
+                selectedJefe === ''
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-white text-slate-400 hover:text-slate-700'
+              }`}
+            >
+              Todos
+            </button>
+            {jefesEquipo.map(jefe => (
+              <button
+                key={jefe}
+                onClick={() => setSelectedJefe(jefe)}
+                className={`px-3 py-2 text-[11px] font-black uppercase tracking-widest transition-all ${
+                  selectedJefe === jefe
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-white text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                {jefe}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <GroupDashboard
+        {...props}
+        activities={filteredActivities}
+        history={filteredHistory}
+        title="Movimientos"
+        subtitle="Logística Interna"
+        areas={[{ id: 'movimiento-jamones', name: 'MOVIMIENTOS' }]}
+      />
+    </div>
+  );
+};
 
 export default SalaBlancaDashboard;

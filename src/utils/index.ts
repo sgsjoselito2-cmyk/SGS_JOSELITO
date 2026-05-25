@@ -34,11 +34,6 @@ export const normalizeDate = (dateStr: string): string => {
   }
 };
 
-export const normalizeName = (name: string): string => {
-  if (!name) return '';
-  return name.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-};
-
 export const sanitizeData = (data: any) => {
   // Add sanity checks here if needed
   return data;
