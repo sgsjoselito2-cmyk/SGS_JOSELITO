@@ -138,11 +138,11 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
     let sumKgHueco = 0;
 
     mermas.forEach(m => {
-      sumKgEntrada += Number(m.kgEntrada || 0);
-      sumKgMerma += Number(m.kgMerma || 0);
-      sumKgTacos += Number(m.kgTacos || 0);
-      sumKgPieles += Number(m.kgPieles || 0);
-      sumKgHueco += Number(m.kgHueco || 0);
+      sumKgEntrada += Number(m.kgEntrada !== undefined ? m.kgEntrada : (m.kg_entrada || 0));
+      sumKgMerma += Number(m.kgMerma !== undefined ? m.kgMerma : (m.kg_merma || 0));
+      sumKgTacos += Number(m.kgTacos !== undefined ? m.kgTacos : (m.kg_tacos || 0));
+      sumKgPieles += Number(m.kgPieles !== undefined ? m.kgPieles : (m.kg_pieles || 0));
+      sumKgHueco += Number(m.kgHueco !== undefined ? m.kgHueco : (m.kg_hueco || 0));
     });
 
     if (sumKgEntrada > 0) {
@@ -411,11 +411,11 @@ const Dashboard: React.FC<DashboardProps> = ({
     let sumKgEnvasados = 0;
 
     records.forEach(m => {
-      sumKgMerma += Number(m.kgMerma || 0);
-      sumKgTacos += Number(m.kgTacos || 0);
-      sumKgPieles += Number(m.kgPieles || 0);
-      sumKgHueco += Number(m.kgHueco || 0);
-      sumKgEnvasados += Number(m.kgSalida || m.kgEnvasados || 0);
+      sumKgMerma += Number(m.kgMerma !== undefined ? m.kgMerma : (m.kg_merma || 0));
+      sumKgTacos += Number(m.kgTacos !== undefined ? m.kgTacos : (m.kg_tacos || 0));
+      sumKgPieles += Number(m.kgPieles !== undefined ? m.kgPieles : (m.kg_pieles || 0));
+      sumKgHueco += Number(m.kgHueco !== undefined ? m.kgHueco : (m.kg_hueco || 0));
+      sumKgEnvasados += Number(m.kgSalida !== undefined ? m.kgSalida : (m.kg_salida || m.kgEnvasados || m.kg_envasados || 0));
     });
 
     const totalKgSalida = sumKgEnvasados + sumKgTacos + sumKgPieles + sumKgHueco + sumKgMerma;

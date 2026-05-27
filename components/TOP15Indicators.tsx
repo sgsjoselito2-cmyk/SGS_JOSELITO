@@ -14,6 +14,12 @@ import { generateContentWithRetry } from '../src/utils/aiUtils';
 import HelpModal from './HelpModal';
 import { X } from 'lucide-react';
 
+const parseLocalDate = (dateStr: string) => {
+  if (!dateStr) return new Date();
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day, 12, 0, 0);
+};
+
 interface TOP15IndicatorsProps {
   activities: Activity[];
   history: Activity[];
@@ -376,7 +382,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
       const dayDataMap = last7Days.map(date => {
         const data = allData.filter(a => a.area === ws.id && a.fecha && a.fecha === date);
         const dayMermas = mermas.filter(m => m.fecha === date && m.area === ws.id);
-        return data.length === 0 ? null : calculateStats(data, ws.id, dayMermas);
+        return (data.length === 0 && dayMermas.length === 0) ? null : calculateStats(data, ws.id, dayMermas);
       });
 
       indicators.forEach(ind => {
@@ -406,12 +412,12 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
       const weekDataMap = last7Weeks.map(w => {
         const data = allData.filter(a => {
           if (a.area !== ws.id || !a.fecha) return false;
-          const ad = new Date(a.fecha);
+          const ad = parseLocalDate(a.fecha);
           return getWeekNumber(ad) === w.week && ad.getFullYear() === w.year;
         });
         const weekMermas = mermas.filter(m => {
           if (!m.fecha || m.area !== ws.id) return false;
-          const md = new Date(m.fecha);
+          const md = parseLocalDate(m.fecha);
           return getWeekNumber(md) === w.week && md.getFullYear() === w.year;
         });
 
@@ -429,7 +435,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
           objective = Math.round((d * r * c) / 10000);
         }
 
-        if (data.length === 0) return { stats: null, objective };
+        if (data.length === 0 && weekMermas.length === 0) return { stats: null, objective };
         return { stats: calculateStats(data, ws.id, weekMermas), objective };
       });
 
@@ -458,12 +464,12 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
       const data = last7Weeks.map(w => {
         const weekActivities = allData.filter(a => {
           if (a.area !== ws.id || !a.fecha) return false;
-          const ad = new Date(a.fecha);
+          const ad = parseLocalDate(a.fecha);
           return getWeekNumber(ad) === w.week && ad.getFullYear() === w.year;
         });
         const weekMermas = mermas.filter(m => {
           if (!m.fecha || m.area !== ws.id) return false;
-          const md = new Date(m.fecha);
+          const md = parseLocalDate(m.fecha);
           return getWeekNumber(md) === w.week && md.getFullYear() === w.year;
         });
 

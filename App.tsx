@@ -736,8 +736,8 @@ const App: React.FC = () => {
             setLastConnectionError(null);
           }
 
-          // Carregar mermas se área for loncheado ou dashboard de sala blanca
-          if (selectedArea === 'sb-loncheado' || selectedArea === 'sala-blanca-dashboard') {
+          // Carregar mermas se área for loncheado, dashboard de sala blanca ou se estivermos nos dashboards globais (TOP 15, TOP 60 etc)
+          if (!selectedArea || ['sb-loncheado', 'sala-blanca-dashboard', 'TOP 15', 'TOP 60', 'menu', 'root-menu', 'TOP 5'].includes(selectedArea)) {
             try {
               const { data: mermasData } = await supabase.from('mermas').select('*').eq('area', 'sb-loncheado').order('fecha', { ascending: false });
               if (mermasData) {

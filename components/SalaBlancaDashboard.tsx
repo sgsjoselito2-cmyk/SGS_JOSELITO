@@ -4,6 +4,12 @@ import { calculateStats, getWeekNumber } from './Dashboard';
 import { calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals } from '../src/utils';
 import { INITIAL_OEE_OBJECTIVES } from '../constants';
 
+const parseLocalDate = (dateStr: string) => {
+  if (!dateStr) return new Date();
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day, 12, 0, 0);
+};
+
 // Helper to get formatted intervals for calculateUniqueMinutes
 const getIntervals = (acts: Activity[]) => acts
   .filter(a => a.horaInicio && a.horaFin)
@@ -219,7 +225,7 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
               data = mermas.filter(m => { 
                 const mArea = (m.area || '').toLowerCase();
                 if (!m.fecha || mArea !== area.id.toLowerCase()) return false; 
-                const d = new Date(m.fecha); 
+                const d = parseLocalDate(m.fecha); 
                 return d.getFullYear() === yr && getWeekNumber(d) === w; 
               });
             } else {
