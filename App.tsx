@@ -2107,6 +2107,208 @@ const App: React.FC = () => {
     addToast("REGISTRO ACTUALIZADO", "success");
   };
 
+  const handleCorrectShift = async (
+    fecha: string, 
+    corrections: Record<string, { nuevoOk: number; nuevoNok: number }>
+  ) => {
+    if (!selectedArea) return;
+    setIsLoading(true);
+
+    const areaFilteredHistory = history.filter(h => h.fecha === fecha && h.tipoTarea === TaskType.PRODUCCION);
+    const areaFilteredActivities = activities.filter(a => a.fecha === fecha && a.tipoTarea === TaskType.PRODUCCION);
+
+    const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
+    const envAreas = ['env-envasado', 'env-empaquetado'];
+    const expAreas = ['expedicion', 'preparacion-exp'];
+    const movAreas = ['movimiento-jamones'];
+
+    let targetHistory = [...areaFilteredHistory];
+    let targetActivities = [...areaFilteredActivities];
+
+    if (selectedArea === 'sala-blanca-dashboard') {
+      targetHistory = targetHistory.filter(r => sbAreas.includes(r.area));
+      targetActivities = targetActivities.filter(r => sbAreas.includes(r.area));
+    } else if (selectedArea === 'envasado-dashboard') {
+      targetHistory = targetHistory.filter(r => envAreas.includes(r.area));
+      targetActivities = targetActivities.filter(r => envAreas.includes(r.area));
+    } else if (selectedArea === 'expediciones-dashboard') {
+      targetHistory = targetHistory.filter(r => expAreas.includes(r.area));
+      targetActivities = targetActivities.filter(r => expAreas.includes(r.area));
+    } else if (selectedArea === 'movimientos-dashboard') {
+      targetHistory = targetHistory.filter(r => movAreas.includes(r.area));
+      targetActivities = targetActivities.filter(r => movAreas.includes(r.area));
+    } else if (selectedArea && !['TOP 5', 'TOP 15', 'TOP 60', 'root-menu', 'menu'].includes(selectedArea)) {
+      targetHistory = targetHistory.filter(r => r.area === selectedArea);
+      targetActivities = targetActivities.filter(r => r.area === selectedArea);
+    }
+
+    const allProdActs = [
+      ...targetHistory,
+      ...targetActivities
+    ];
+
+    if (allProdActs.length === 0) {
+      addToast("No se encontraron actividades de producción para el día seleccionado.", "error");
+      setIsLoading(false);
+      return;
+    }
+
+    const updatedHistory: Activity[] = [];
+    const updatedActivitiesList: Activity[] = [];
+
+    const dbHistoryUpdates: any[] = [];
+    const dbActivitiesUpdates: any[] = [];
+
+    // Group activities internally by area to apply correction separate for each "tipo" / area
+    const uniqueAreas = Array.from(new Set(allProdActs.map(a => a.area)));
+
+    uniqueAreas.forEach(areaId => {
+      const areaActs = allProdActs.filter(a => a.area === areaId);
+      const correction = corrections[areaId];
+      if (!correction) return; // Skip if no override given for this area
+
+      const { nuevoOk, nuevoNok } = correction;
+
+      const currentTotalOk = areaActs.reduce((sum, a) => sum + (a.cantidad || 0), 0);
+      const currentTotalNok = areaActs.reduce((sum, a) => sum + (a.cantidadNok || 0), 0);
+
+      const ratioOk = currentTotalOk > 0 ? (nuevoOk / currentTotalOk) : 0;
+      const ratioNok = currentTotalNok > 0 ? (nuevoNok / currentTotalNok) : 0;
+
+      areaActs.forEach(act => {
+        let finalOk = 0;
+        let finalNok = 0;
+
+        if (currentTotalOk > 0) {
+          finalOk = Number(((act.cantidad || 0) * ratioOk).toFixed(1));
+        } else {
+          finalOk = Number((nuevoOk / areaActs.length).toFixed(1));
+        }
+
+        if (currentTotalNok > 0) {
+          finalNok = Number(((act.cantidadNok || 0) * ratioNok).toFixed(1));
+        } else {
+          finalNok = Number((nuevoNok / areaActs.length).toFixed(1));
+        }
+
+        const updatedAct = {
+          ...act,
+          cantidad: finalOk,
+          cantidadNok: finalNok
+        };
+
+        const isHist = targetHistory.some(h => h.id === act.id);
+        if (isHist) {
+          updatedHistory.push(updatedAct);
+          dbHistoryUpdates.push({
+            id: act.id,
+            operarios: act.operarios || [],
+            formato: act.formato || '',
+            tipoTarea: act.tipoTarea || '',
+            horaInicio: act.horaInicio || '',
+            horaFin: act.horaFin || '',
+            duracionMin: act.duracionMin || 0,
+            cantidad: finalOk,
+            cantidadNok: finalNok,
+            comentarios: act.comentarios || '',
+            fecha: act.fecha || '',
+            area: act.area,
+            afectaCalidad: act.afectaCalidad || false,
+            tiempoTeoricoManual: act.tiempoTeoricoManual || 0,
+            jefe_equipo: act.jefeEquipo || null,
+            lastModified: new Date().toISOString()
+          });
+        } else {
+          updatedActivitiesList.push(updatedAct);
+          dbActivitiesUpdates.push({
+            id: act.id,
+            operarios: act.operarios || [],
+            formato: act.formato || '',
+            tipoTarea: act.tipoTarea || '',
+            horaInicio: act.horaInicio || '',
+            horaFin: act.horaFin || '',
+            duracionMin: act.duracionMin || 0,
+            cantidad: finalOk,
+            cantidadNok: finalNok,
+            comentarios: act.comentarios || '',
+            fecha: act.fecha || '',
+            area: act.area,
+            afectaCalidad: act.afectaCalidad || false,
+            tiempoTeoricoManual: act.tiempoTeoricoManual || 0,
+            jefe_equipo: act.jefeEquipo || null,
+            lastModified: new Date().toISOString()
+          });
+        }
+      });
+    });
+
+    if (updatedHistory.length > 0) {
+      setHistory(prev => {
+        const next = prev.map(item => {
+          const matching = updatedHistory.find(u => u.id === item.id);
+          return matching ? matching : item;
+        });
+        safeLocalStorageSetItem(`zitron_${selectedArea}_history`, JSON.stringify(next));
+        return next;
+      });
+    }
+
+    if (updatedActivitiesList.length > 0) {
+      setActivities(prev => {
+        const next = prev.map(item => {
+          const matching = updatedActivitiesList.find(u => u.id === item.id);
+          return matching ? matching : item;
+        });
+        safeLocalStorageSetItem(`zitron_${selectedArea}_activities`, JSON.stringify(next));
+        return next;
+      });
+    }
+
+    let updatedCount = 0;
+    try {
+      if (dbHistoryUpdates.length > 0) {
+        if (isOnline && isConfigured) {
+          const { error } = await supabase.from('history').upsert(dbHistoryUpdates);
+          if (error) throw error;
+        } else {
+          dbHistoryUpdates.forEach(row => {
+            executeOrQueue({
+              table: 'history',
+              type: 'upsert',
+              data: row,
+              filter: { column: 'id' }
+            }, true);
+          });
+        }
+        updatedCount += dbHistoryUpdates.length;
+      }
+
+      if (dbActivitiesUpdates.length > 0) {
+        if (isOnline && isConfigured) {
+          const { error } = await supabase.from('activities').upsert(dbActivitiesUpdates);
+          if (error) throw error;
+        } else {
+          dbActivitiesUpdates.forEach(row => {
+            executeOrQueue({
+              table: 'activities',
+              type: 'upsert',
+              data: row,
+              filter: { column: 'id' }
+            }, true);
+          });
+        }
+        updatedCount += dbActivitiesUpdates.length;
+      }
+
+      addToast(`Corrección aplicada — ${updatedCount} registros actualizados`, "success");
+    } catch (e: any) {
+      console.error("Error applying correction in Supabase:", e);
+      addToast(`Error al sincronizar con Supabase: ${e.message}`, "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleResetMasterSpeeds = async () => {
     if (!selectedArea) return;
     setIsLoading(true);
@@ -2873,6 +3075,7 @@ const App: React.FC = () => {
                 selectedArea={selectedArea}
                 passwords={passwords}
                 operarios={operarios}
+                onCorrectShift={handleCorrectShift}
               />
             )}
           </>

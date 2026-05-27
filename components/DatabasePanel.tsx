@@ -16,6 +16,7 @@ import {
   Download
 } from 'lucide-react';
 import Papa from 'papaparse';
+import { AREA_NAMES } from '../constants';
 
 interface DatabasePanelProps {
   activities: Activity[];
@@ -37,6 +38,10 @@ interface DatabasePanelProps {
     asistenciaTecnica: string;
   };
   operarios: User[];
+  onCorrectShift?: (
+    date: string, 
+    corrections: Record<string, { nuevoOk: number; nuevoNok: number }>
+  ) => Promise<void>;
 }
 
 const DatabasePanel: React.FC<DatabasePanelProps> = ({
@@ -53,7 +58,8 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
   selectedArea,
   passwords,
   operarios,
-  mermas = []
+  mermas = [],
+  onCorrectShift
 }) => {
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [showPassModal, setShowPassModal] = useState(false);
@@ -90,6 +96,94 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
   const [filterDate, setFilterDate] = useState('');
   const [filterTask, setFilterTask] = useState('');
   const [filterType, setFilterType] = useState('');
+
+  // Corrección de Turno
+  const [showCorrectionModal, setShowCorrectionModal] = useState(false);
+  const [areaCorrections, setAreaCorrections] = useState<Record<string, { nuevoOk: string; nuevoNok: string }>>({});
+  const [correctionError, setCorrectionError] = useState<string | null>(null);
+
+  const prodActsOfDay = useMemo(() => {
+    if (!filterDate) return [];
+    
+    let combined = [
+      ...activities.map(a => ({ ...a, isHistory: false })),
+      ...history.map(h => ({ ...h, isHistory: true }))
+    ];
+
+    const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
+    const envAreas = ['env-envasado', 'env-empaquetado'];
+    const expAreas = ['expedicion', 'preparacion-exp'];
+    const movAreas = ['movimiento-jamones'];
+
+    if (selectedArea === 'sala-blanca-dashboard') {
+      combined = combined.filter(r => sbAreas.includes(r.area));
+    } else if (selectedArea === 'envasado-dashboard') {
+      combined = combined.filter(r => envAreas.includes(r.area));
+    } else if (selectedArea === 'expediciones-dashboard') {
+      combined = combined.filter(r => expAreas.includes(r.area));
+    } else if (selectedArea === 'movimientos-dashboard') {
+      combined = combined.filter(r => movAreas.includes(r.area));
+    } else if (selectedArea && !['TOP 5', 'TOP 15', 'TOP 60', 'root-menu', 'menu'].includes(selectedArea)) {
+      combined = combined.filter(r => r.area === selectedArea);
+    }
+
+    const seen = new Set();
+    combined = combined.filter(r => {
+      const key = `${r.isHistory ? 'h' : 'a'}-${r.id}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    return combined.filter(r => r.fecha === filterDate && r.tipoTarea === TaskType.PRODUCCION);
+  }, [activities, history, filterDate, selectedArea]);
+
+  const uniqueAreasInDay = useMemo(() => {
+    return Array.from(new Set(prodActsOfDay.map(a => a.area)));
+  }, [prodActsOfDay]);
+
+  const handleCorrectTurnClick = () => {
+    setCorrectionError(null);
+    const initialCorrections: Record<string, { nuevoOk: string; nuevoNok: string }> = {};
+    uniqueAreasInDay.forEach(areaId => {
+      const areaActs = prodActsOfDay.filter(a => a.area === areaId);
+      const totalOk = areaActs.reduce((sum, a) => sum + (a.cantidad || 0), 0);
+      const totalNok = areaActs.reduce((sum, a) => sum + (a.cantidadNok || 0), 0);
+      initialCorrections[areaId] = {
+        nuevoOk: totalOk.toString(),
+        nuevoNok: totalNok.toString()
+      };
+    });
+    setAreaCorrections(initialCorrections);
+    setShowCorrectionModal(true);
+  };
+
+  const handleApplyCorrection = async () => {
+    setCorrectionError(null);
+    
+    const parsedCorrections: Record<string, { nuevoOk: number; nuevoNok: number }> = {};
+    let hasError = false;
+
+    for (const areaId of uniqueAreasInDay) {
+      const corr = areaCorrections[areaId] || { nuevoOk: '0', nuevoNok: '0' };
+      const valOk = parseFloat(corr.nuevoOk);
+      const valNok = parseFloat(corr.nuevoNok);
+
+      if (isNaN(valOk) || valOk < 0 || isNaN(valNok) || valNok < 0) {
+        setCorrectionError(`❌ Valores no válidos en ${AREA_NAMES[areaId] || areaId}. Deben ser ≥ 0.`);
+        hasError = true;
+        break;
+      }
+      parsedCorrections[areaId] = { nuevoOk: valOk, nuevoNok: valNok };
+    }
+
+    if (hasError) return;
+
+    if (onCorrectShift) {
+      await onCorrectShift(filterDate, parsedCorrections);
+    }
+    setShowCorrectionModal(false);
+  };
 
   useEffect(() => {
     if (pin.length === 4 && passwords) {
@@ -721,6 +815,15 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
               </div>
             </>
           )}
+          {isAdminMode && (
+            <button 
+              type="button"
+              onClick={handleCorrectTurnClick}
+              className="px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl text-[13px] sm:text-[14px] font-black uppercase tracking-widest border-2 bg-amber-600 border-amber-500 text-white shadow-lg hover:bg-amber-700 transition-all active:scale-95"
+            >
+              CORREGIR TURNO
+            </button>
+          )}
           <button 
             type="button"
             onClick={() => isAdminMode ? setIsAdminMode(false) : setShowPassModal(true)} 
@@ -1041,6 +1144,128 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
                 Confirmar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CORREGIR TURNO */}
+      {showCorrectionModal && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-xl z-[9800] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-[2.5rem] border-[8px] border-blue-50 p-6 sm:p-8 animate-in zoom-in shadow-2xl flex flex-col max-h-[90vh]">
+            <h3 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tighter mb-4 text-center shrink-0">
+              CORRECCIÓN POR TIPO — <span className="text-blue-600">{filterDate || '[FECHA]'}</span>
+            </h3>
+            
+            {!filterDate ? (
+              <div className="space-y-6 shrink-0">
+                <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-center text-red-700 font-bold text-sm">
+                  ⚠️ Debe seleccionar una fecha en los filtros antes de poder corregir las cantidades del turno.
+                </div>
+                <button onClick={() => setShowCorrectionModal(false)} className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-500 font-black rounded-xl uppercase tracking-widest transition-all">
+                  Entendido
+                </button>
+              </div>
+            ) : prodActsOfDay.length === 0 ? (
+              <div className="space-y-6 shrink-0">
+                <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-center text-red-700 font-bold text-sm">
+                  ⚠️ No existen actividades de tipo <span className="font-extrabold uppercase">PRODUCCIÓN</span> registradas para esta fecha.
+                </div>
+                <button onClick={() => setShowCorrectionModal(false)} className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-500 font-black rounded-xl uppercase tracking-widest transition-all">
+                  Cerrar
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col overflow-hidden gap-4 flex-1">
+                <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest shrink-0">
+                  Introduce las nuevas cantidades para cada tipo de puesto:
+                </p>
+
+                <div className="space-y-4 overflow-y-auto flex-1 pr-1 pb-2">
+                  {uniqueAreasInDay.map(areaId => {
+                    const areaActs = prodActsOfDay.filter(a => a.area === areaId);
+                    const currentOk = areaActs.reduce((sum, a) => sum + (a.cantidad || 0), 0);
+                    const currentNok = areaActs.reduce((sum, a) => sum + (a.cantidadNok || 0), 0);
+                    const corr = areaCorrections[areaId] || { nuevoOk: '0', nuevoNok: '0' };
+
+                    return (
+                      <div key={areaId} className="p-4 bg-slate-50 border border-slate-100 rounded-3xl space-y-3">
+                        <div className="flex justify-between items-center border-b border-slate-200/60 pb-2">
+                          <h4 className="font-extrabold text-slate-800 text-[12px] uppercase tracking-wide">
+                            {AREA_NAMES[areaId] || areaId}
+                          </h4>
+                          <span className="text-[9px] bg-slate-200/70 text-slate-500 font-extrabold px-2 py-0.5 rounded-full uppercase">
+                            {areaActs.length} {areaActs.length === 1 ? 'Actividad' : 'Actividades'}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 bg-white p-2.5 rounded-2xl border border-slate-200/55">
+                          <div>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">OK de Origen</p>
+                            <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg">{currentOk.toFixed(1)}</span>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">NOK de Origen</p>
+                            <span className="text-xs font-black text-red-500 bg-red-50 px-2 py-0.5 rounded-lg">{currentNok.toFixed(1)}</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Nuevo OK</label>
+                            <input 
+                              type="number" 
+                              step="any"
+                              min="0"
+                              value={corr.nuevoOk}
+                              onChange={e => setAreaCorrections(prev => ({
+                                ...prev,
+                                [areaId]: { ...prev[areaId], nuevoOk: e.target.value }
+                              }))}
+                              className="w-full p-2.5 bg-white focus:bg-slate-50 border-2 border-slate-200 focus:border-blue-500 rounded-xl font-bold outline-none transition-all text-xs text-slate-900"
+                              placeholder="0"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Nuevo NOK</label>
+                            <input 
+                              type="number" 
+                              step="any"
+                              min="0"
+                              value={corr.nuevoNok}
+                              onChange={e => setAreaCorrections(prev => ({
+                                ...prev,
+                                [areaId]: { ...prev[areaId], nuevoNok: e.target.value }
+                              }))}
+                              className="w-full p-2.5 bg-white focus:bg-slate-50 border-2 border-slate-200 focus:border-red-400 text-red-600 rounded-xl font-bold outline-none transition-all text-xs"
+                              placeholder="0"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  
+                  {correctionError && (
+                    <p className="text-red-600 text-xs font-bold text-center mt-2 shrink-0">{correctionError}</p>
+                  )}
+                </div>
+
+                <div className="flex gap-4 pt-4 border-t border-slate-100 shrink-0">
+                  <button 
+                    onClick={() => setShowCorrectionModal(false)} 
+                    className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-500 font-black rounded-xl uppercase text-xs tracking-widest transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={handleApplyCorrection}
+                    className="flex-1 py-4 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl uppercase text-xs tracking-widest transition-all shadow-lg active:scale-95"
+                  >
+                    Aplicar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
