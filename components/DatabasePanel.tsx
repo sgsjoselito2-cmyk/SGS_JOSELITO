@@ -110,23 +110,6 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
       ...history.map(h => ({ ...h, isHistory: true }))
     ];
 
-    const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
-    const envAreas = ['env-envasado', 'env-empaquetado'];
-    const expAreas = ['expedicion', 'preparacion-exp'];
-    const movAreas = ['movimiento-jamones'];
-
-    if (selectedArea === 'sala-blanca-dashboard') {
-      combined = combined.filter(r => sbAreas.includes(r.area));
-    } else if (selectedArea === 'envasado-dashboard') {
-      combined = combined.filter(r => envAreas.includes(r.area));
-    } else if (selectedArea === 'expediciones-dashboard') {
-      combined = combined.filter(r => expAreas.includes(r.area));
-    } else if (selectedArea === 'movimientos-dashboard') {
-      combined = combined.filter(r => movAreas.includes(r.area));
-    } else if (selectedArea && !['TOP 5', 'TOP 15', 'TOP 60', 'root-menu', 'menu'].includes(selectedArea)) {
-      combined = combined.filter(r => r.area === selectedArea);
-    }
-
     const seen = new Set();
     combined = combined.filter(r => {
       const key = `${r.isHistory ? 'h' : 'a'}-${r.id}`;
@@ -136,20 +119,20 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
     });
 
     return combined.filter(r => r.fecha === filterDate && r.tipoTarea === TaskType.PRODUCCION);
-  }, [activities, history, filterDate, selectedArea]);
+  }, [activities, history, filterDate]);
 
-  const uniqueAreasInDay = useMemo(() => {
-    return Array.from(new Set(prodActsOfDay.map(a => a.area)));
+  const uniqueFormatsInDay = useMemo(() => {
+    return Array.from(new Set(prodActsOfDay.map(a => a.formato || 'SIN FORMATO')));
   }, [prodActsOfDay]);
 
   const handleCorrectTurnClick = () => {
     setCorrectionError(null);
     const initialCorrections: Record<string, { nuevoOk: string; nuevoNok: string }> = {};
-    uniqueAreasInDay.forEach(areaId => {
-      const areaActs = prodActsOfDay.filter(a => a.area === areaId);
-      const totalOk = areaActs.reduce((sum, a) => sum + (a.cantidad || 0), 0);
-      const totalNok = areaActs.reduce((sum, a) => sum + (a.cantidadNok || 0), 0);
-      initialCorrections[areaId] = {
+    uniqueFormatsInDay.forEach(formatId => {
+      const formatActs = prodActsOfDay.filter(a => (a.formato || 'SIN FORMATO') === formatId);
+      const totalOk = Math.round(formatActs.reduce((sum, a) => sum + (a.cantidad || 0), 0));
+      const totalNok = Math.round(formatActs.reduce((sum, a) => sum + (a.cantidadNok || 0), 0));
+      initialCorrections[formatId] = {
         nuevoOk: totalOk.toString(),
         nuevoNok: totalNok.toString()
       };
@@ -164,17 +147,17 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
     const parsedCorrections: Record<string, { nuevoOk: number; nuevoNok: number }> = {};
     let hasError = false;
 
-    for (const areaId of uniqueAreasInDay) {
-      const corr = areaCorrections[areaId] || { nuevoOk: '0', nuevoNok: '0' };
+    for (const formatId of uniqueFormatsInDay) {
+      const corr = areaCorrections[formatId] || { nuevoOk: '0', nuevoNok: '0' };
       const valOk = parseFloat(corr.nuevoOk);
       const valNok = parseFloat(corr.nuevoNok);
 
       if (isNaN(valOk) || valOk < 0 || isNaN(valNok) || valNok < 0) {
-        setCorrectionError(`❌ Valores no válidos en ${AREA_NAMES[areaId] || areaId}. Deben ser ≥ 0.`);
+        setCorrectionError(`❌ Valores no válidos en ${formatId}. Deben ser ≥ 0.`);
         hasError = true;
         break;
       }
-      parsedCorrections[areaId] = { nuevoOk: valOk, nuevoNok: valNok };
+      parsedCorrections[formatId] = { nuevoOk: Math.round(valOk), nuevoNok: Math.round(valNok) };
     }
 
     if (hasError) return;
@@ -1181,31 +1164,31 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
                 </p>
 
                 <div className="space-y-4 overflow-y-auto flex-1 pr-1 pb-2">
-                  {uniqueAreasInDay.map(areaId => {
-                    const areaActs = prodActsOfDay.filter(a => a.area === areaId);
-                    const currentOk = areaActs.reduce((sum, a) => sum + (a.cantidad || 0), 0);
-                    const currentNok = areaActs.reduce((sum, a) => sum + (a.cantidadNok || 0), 0);
-                    const corr = areaCorrections[areaId] || { nuevoOk: '0', nuevoNok: '0' };
+                  {uniqueFormatsInDay.map(formatId => {
+                    const formatActs = prodActsOfDay.filter(a => (a.formato || 'SIN FORMATO') === formatId);
+                    const currentOk = Math.round(formatActs.reduce((sum, a) => sum + (a.cantidad || 0), 0));
+                    const currentNok = Math.round(formatActs.reduce((sum, a) => sum + (a.cantidadNok || 0), 0));
+                    const corr = areaCorrections[formatId] || { nuevoOk: '0', nuevoNok: '0' };
 
                     return (
-                      <div key={areaId} className="p-4 bg-slate-50 border border-slate-100 rounded-3xl space-y-3">
+                      <div key={formatId} className="p-4 bg-slate-50 border border-slate-100 rounded-3xl space-y-3">
                         <div className="flex justify-between items-center border-b border-slate-200/60 pb-2">
                           <h4 className="font-extrabold text-slate-800 text-[12px] uppercase tracking-wide">
-                            {AREA_NAMES[areaId] || areaId}
+                            {formatId}
                           </h4>
                           <span className="text-[9px] bg-slate-200/70 text-slate-500 font-extrabold px-2 py-0.5 rounded-full uppercase">
-                            {areaActs.length} {areaActs.length === 1 ? 'Actividad' : 'Actividades'}
+                            {formatActs.length} {formatActs.length === 1 ? 'Actividad' : 'Actividades'}
                           </span>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3 bg-white p-2.5 rounded-2xl border border-slate-200/55">
                           <div>
                             <p className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">OK de Origen</p>
-                            <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg">{currentOk.toFixed(1)}</span>
+                            <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg">{currentOk}</span>
                           </div>
                           <div>
                             <p className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">NOK de Origen</p>
-                            <span className="text-xs font-black text-red-500 bg-red-50 px-2 py-0.5 rounded-lg">{currentNok.toFixed(1)}</span>
+                            <span className="text-xs font-black text-red-500 bg-red-50 px-2 py-0.5 rounded-lg">{currentNok}</span>
                           </div>
                         </div>
 
@@ -1214,12 +1197,12 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
                             <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Nuevo OK</label>
                             <input 
                               type="number" 
-                              step="any"
+                              step="1"
                               min="0"
                               value={corr.nuevoOk}
                               onChange={e => setAreaCorrections(prev => ({
                                 ...prev,
-                                [areaId]: { ...prev[areaId], nuevoOk: e.target.value }
+                                [formatId]: { ...prev[formatId], nuevoOk: e.target.value }
                               }))}
                               className="w-full p-2.5 bg-white focus:bg-slate-50 border-2 border-slate-200 focus:border-blue-500 rounded-xl font-bold outline-none transition-all text-xs text-slate-900"
                               placeholder="0"
@@ -1229,12 +1212,12 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
                             <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Nuevo NOK</label>
                             <input 
                               type="number" 
-                              step="any"
+                              step="1"
                               min="0"
                               value={corr.nuevoNok}
                               onChange={e => setAreaCorrections(prev => ({
                                 ...prev,
-                                [areaId]: { ...prev[areaId], nuevoNok: e.target.value }
+                                [formatId]: { ...prev[formatId], nuevoNok: e.target.value }
                               }))}
                               className="w-full p-2.5 bg-white focus:bg-slate-50 border-2 border-slate-200 focus:border-red-400 text-red-600 rounded-xl font-bold outline-none transition-all text-xs"
                               placeholder="0"

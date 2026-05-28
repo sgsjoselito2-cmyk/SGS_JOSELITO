@@ -2114,33 +2114,8 @@ const App: React.FC = () => {
     if (!selectedArea) return;
     setIsLoading(true);
 
-    const areaFilteredHistory = history.filter(h => h.fecha === fecha && h.tipoTarea === TaskType.PRODUCCION);
-    const areaFilteredActivities = activities.filter(a => a.fecha === fecha && a.tipoTarea === TaskType.PRODUCCION);
-
-    const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
-    const envAreas = ['env-envasado', 'env-empaquetado'];
-    const expAreas = ['expedicion', 'preparacion-exp'];
-    const movAreas = ['movimiento-jamones'];
-
-    let targetHistory = [...areaFilteredHistory];
-    let targetActivities = [...areaFilteredActivities];
-
-    if (selectedArea === 'sala-blanca-dashboard') {
-      targetHistory = targetHistory.filter(r => sbAreas.includes(r.area));
-      targetActivities = targetActivities.filter(r => sbAreas.includes(r.area));
-    } else if (selectedArea === 'envasado-dashboard') {
-      targetHistory = targetHistory.filter(r => envAreas.includes(r.area));
-      targetActivities = targetActivities.filter(r => envAreas.includes(r.area));
-    } else if (selectedArea === 'expediciones-dashboard') {
-      targetHistory = targetHistory.filter(r => expAreas.includes(r.area));
-      targetActivities = targetActivities.filter(r => expAreas.includes(r.area));
-    } else if (selectedArea === 'movimientos-dashboard') {
-      targetHistory = targetHistory.filter(r => movAreas.includes(r.area));
-      targetActivities = targetActivities.filter(r => movAreas.includes(r.area));
-    } else if (selectedArea && !['TOP 5', 'TOP 15', 'TOP 60', 'root-menu', 'menu'].includes(selectedArea)) {
-      targetHistory = targetHistory.filter(r => r.area === selectedArea);
-      targetActivities = targetActivities.filter(r => r.area === selectedArea);
-    }
+    const targetHistory = history.filter(h => h.fecha === fecha && h.tipoTarea === TaskType.PRODUCCION);
+    const targetActivities = activities.filter(a => a.fecha === fecha && a.tipoTarea === TaskType.PRODUCCION);
 
     const allProdActs = [
       ...targetHistory,
@@ -2159,36 +2134,36 @@ const App: React.FC = () => {
     const dbHistoryUpdates: any[] = [];
     const dbActivitiesUpdates: any[] = [];
 
-    // Group activities internally by area to apply correction separate for each "tipo" / area
-    const uniqueAreas = Array.from(new Set(allProdActs.map(a => a.area)));
+    // Group activities internally by format to apply correction separately for each format
+    const uniqueFormats = Array.from(new Set(allProdActs.map(a => a.formato || 'SIN FORMATO')));
 
-    uniqueAreas.forEach(areaId => {
-      const areaActs = allProdActs.filter(a => a.area === areaId);
-      const correction = corrections[areaId];
-      if (!correction) return; // Skip if no override given for this area
+    uniqueFormats.forEach(formatId => {
+      const formatActs = allProdActs.filter(a => (a.formato || 'SIN FORMATO') === formatId);
+      const correction = corrections[formatId];
+      if (!correction) return; // Skip if no override given for this format
 
       const { nuevoOk, nuevoNok } = correction;
 
-      const currentTotalOk = areaActs.reduce((sum, a) => sum + (a.cantidad || 0), 0);
-      const currentTotalNok = areaActs.reduce((sum, a) => sum + (a.cantidadNok || 0), 0);
+      const currentTotalOk = formatActs.reduce((sum, a) => sum + (a.cantidad || 0), 0);
+      const currentTotalNok = formatActs.reduce((sum, a) => sum + (a.cantidadNok || 0), 0);
 
       const ratioOk = currentTotalOk > 0 ? (nuevoOk / currentTotalOk) : 0;
       const ratioNok = currentTotalNok > 0 ? (nuevoNok / currentTotalNok) : 0;
 
-      areaActs.forEach(act => {
+      formatActs.forEach(act => {
         let finalOk = 0;
         let finalNok = 0;
 
         if (currentTotalOk > 0) {
-          finalOk = Number(((act.cantidad || 0) * ratioOk).toFixed(1));
+          finalOk = Math.round((act.cantidad || 0) * ratioOk);
         } else {
-          finalOk = Number((nuevoOk / areaActs.length).toFixed(1));
+          finalOk = Math.round(nuevoOk / formatActs.length);
         }
 
         if (currentTotalNok > 0) {
-          finalNok = Number(((act.cantidadNok || 0) * ratioNok).toFixed(1));
+          finalNok = Math.round((act.cantidadNok || 0) * ratioNok);
         } else {
-          finalNok = Number((nuevoNok / areaActs.length).toFixed(1));
+          finalNok = Math.round(nuevoNok / formatActs.length);
         }
 
         const updatedAct = {
@@ -2216,7 +2191,7 @@ const App: React.FC = () => {
             afectaCalidad: act.afectaCalidad || false,
             tiempoTeoricoManual: act.tiempoTeoricoManual || 0,
             jefe_equipo: act.jefeEquipo || null,
-            lastModified: new Date().toISOString()
+            last_modified: new Date().toISOString()
           });
         } else {
           updatedActivitiesList.push(updatedAct);
@@ -2236,7 +2211,7 @@ const App: React.FC = () => {
             afectaCalidad: act.afectaCalidad || false,
             tiempoTeoricoManual: act.tiempoTeoricoManual || 0,
             jefe_equipo: act.jefeEquipo || null,
-            lastModified: new Date().toISOString()
+            last_modified: new Date().toISOString()
           });
         }
       });
@@ -2540,14 +2515,15 @@ const App: React.FC = () => {
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 
+    // Filter activities by the selected shift date
+    const areaActivities = activities.filter(a => a.area === selectedArea && a.fecha === fecha);
+
     // If filtering by coach, separate out activities to keep vs archive
     const filteredActivities = jefe_equipo_filter
-      ? activities.filter(a => a.jefeEquipo === jefe_equipo_filter)
-      : activities;
+      ? areaActivities.filter(a => a.jefeEquipo === jefe_equipo_filter)
+      : areaActivities;
     
-    const remainingActivities = jefe_equipo_filter
-      ? activities.filter(a => a.jefeEquipo !== jefe_equipo_filter)
-      : [];
+    const remainingActivities = activities.filter(a => !filteredActivities.some(fa => fa.id === a.id));
 
     try {
       const readyToArchive: Activity[] = filteredActivities.map(a => {
@@ -2616,19 +2592,14 @@ const App: React.FC = () => {
         data: archiveData,
         filter: { column: 'id' }
       }).then(() => {
-        if (jefe_equipo_filter) {
+        // Delete only the archived activities from the active activities table in Supabase
+        filteredActivities.forEach(a => {
           executeOrQueue({
             table: 'activities',
             type: 'delete',
-            filter: { column: 'jefe_equipo', value: jefe_equipo_filter }
-          });
-        } else {
-          executeOrQueue({
-            table: 'activities',
-            type: 'delete',
-            filter: { column: 'area', value: selectedArea }
-          });
-        }
+            filter: { column: 'id', value: a.id }
+          }, true);
+        });
       });
 
       // Guardar mermas se existirem

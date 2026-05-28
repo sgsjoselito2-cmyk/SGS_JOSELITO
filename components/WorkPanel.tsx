@@ -35,6 +35,13 @@ interface WorkPanelProps {
   setSelectedDate?: (d: string) => void;
 }
 
+const getFormattedShiftDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const d = new Date(year, month - 1, day);
+  return d.toLocaleDateString();
+};
+
 const WorkPanel: React.FC<WorkPanelProps> = ({ 
   selectedUsers, 
   setSelectedUsers, 
@@ -292,7 +299,13 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
   const [showShiftConflictModal, setShowShiftConflictModal] = useState(false);
   const [showShiftConfirmModal, setShowShiftConfirmModal] = useState(false);
   const [isForcingClosure, setIsForcingClosure] = useState(false);
-  const [shiftDate, setShiftDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [shiftDate, setShiftDate] = useState<string>(selectedDate || new Date().toISOString().split('T')[0]);
+
+  useEffect(() => {
+    if (selectedDate) {
+      setShiftDate(selectedDate);
+    }
+  }, [selectedDate]);
   const [activeOperators, setActiveOperators] = useState<string[]>([]);
   const [pendingShiftFinalization, setPendingShiftFinalization] = useState<{fecha: string, force: boolean, aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, mermasToSave?: any[]} | null>(null);
 
@@ -632,7 +645,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       return;
     }
     const oldestRecord = activities[0];
-    const defaultDate = oldestRecord?.fecha || new Date().toISOString().split('T')[0];
+    const defaultDate = selectedDate || oldestRecord?.fecha || new Date().toISOString().split('T')[0];
     setShiftDate(defaultDate);
     const openSessions = activities.filter(a => !a.horaFin || String(a.horaFin).trim() === "");
     if (openSessions.length > 0) { 
@@ -880,7 +893,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
               </div>
               <div className="text-right">
                  <span className="text-[9px] font-black text-slate-400 uppercase block leading-none">Local</span>
-                 <span className="text-[11px] font-bold text-slate-500">{new Date().toLocaleDateString()}</span>
+                 <span className="text-[11px] font-bold text-slate-500">{getFormattedShiftDate(shiftDate)}</span>
               </div>
             </div>
 

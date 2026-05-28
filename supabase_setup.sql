@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS activities (
     maquina TEXT,
     piezasNOK INTEGER DEFAULT 0,
     observaciones TEXT,
-    lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    last_modified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- 2. History Table
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS history (
     maquina TEXT,
     piezasNOK INTEGER DEFAULT 0,
     observaciones TEXT,
-    lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    last_modified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- 3. Operarios Table
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS operarios (
     nombre TEXT NOT NULL,
     area TEXT,
     areas TEXT[],
-    lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    last_modified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- 4. OEE Objectives Table
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS oee_objectives (
     pph NUMERIC DEFAULT 0,
     indicator_id TEXT,
     valid_from DATE NOT NULL,
-    lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    last_modified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- 5. TOP60 Seguridad Table
@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS top60_seguridad (
     fechaObjetivo DATE,
     avance INTEGER,
     observaciones TEXT,
-    lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    last_modified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- 6. TOP60 RRHH Table
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS top60_rrhh (
     area TEXT NOT NULL,
     absentismo NUMERIC DEFAULT 0,
     ausentismo NUMERIC DEFAULT 0,
-    lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    last_modified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- 7. TOP60 Ausentismo Table
@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS top60_ausentismo (
     fecha DATE NOT NULL,
     area TEXT NOT NULL,
     valor NUMERIC DEFAULT 0,
-    lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    last_modified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- 8. TOP60 Calidad Table
@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS top60_calidad (
     anio INTEGER NOT NULL,
     imagenes TEXT[], -- Array of base64 strings
     fechaCreacion TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    last_modified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- 9. TOP60 IdM Table (Ideas de Mejora)
@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS top60_idm (
     fechaObjetivo DATE,
     avance INTEGER,
     observaciones TEXT,
-    lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    last_modified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- 10. Master Speeds Table
@@ -138,10 +138,11 @@ CREATE TABLE IF NOT EXISTS master_speeds (
     tiempoTeorico INTEGER NOT NULL,
     peso NUMERIC DEFAULT 0,
     unidad TEXT DEFAULT 'unidades',
-    lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    last_modified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Migration: Rename columns if they exist (PostgreSQL doesn't have RENAME COLUMN IF EXISTS directly in one line)
+-- Note: we can also add a migration rename if 'lastModified' exists to 'last_modified'
 DO $$ 
 BEGIN 
     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='master_speeds' AND column_name='tiempo_teorico') THEN
@@ -179,6 +180,56 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='top60_seguridad' AND column_name='fecha_objetivo') THEN
         ALTER TABLE top60_seguridad RENAME COLUMN fecha_objetivo TO fechaObjetivo;
     END IF;
+    
+    -- Add helper renames for schema migration from lastModified -> last_modified
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='activities' AND column_name='lastmodified') THEN
+        ALTER TABLE activities RENAME COLUMN lastmodified TO last_modified;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='history' AND column_name='lastmodified') THEN
+        ALTER TABLE history RENAME COLUMN lastmodified TO last_modified;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='operarios' AND column_name='lastmodified') THEN
+        ALTER TABLE operarios RENAME COLUMN lastmodified TO last_modified;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='oee_objectives' AND column_name='lastmodified') THEN
+        ALTER TABLE oee_objectives RENAME COLUMN lastmodified TO last_modified;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='top60_seguridad' AND column_name='lastmodified') THEN
+        ALTER TABLE top60_seguridad RENAME COLUMN lastmodified TO last_modified;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='top60_rrhh' AND column_name='lastmodified') THEN
+        ALTER TABLE top60_rrhh RENAME COLUMN lastmodified TO last_modified;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='top60_ausentismo' AND column_name='lastmodified') THEN
+        ALTER TABLE top60_ausentismo RENAME COLUMN lastmodified TO last_modified;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='top60_calidad' AND column_name='lastmodified') THEN
+        ALTER TABLE top60_calidad RENAME COLUMN lastmodified TO last_modified;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='top60_idm' AND column_name='lastmodified') THEN
+        ALTER TABLE top60_idm RENAME COLUMN lastmodified TO last_modified;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='master_speeds' AND column_name='lastmodified') THEN
+        ALTER TABLE master_speeds RENAME COLUMN lastmodified TO last_modified;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='incidence_master' AND column_name='lastmodified') THEN
+        ALTER TABLE incidence_master RENAME COLUMN lastmodified TO last_modified;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='app_passwords' AND column_name='lastmodified') THEN
+        ALTER TABLE app_passwords RENAME COLUMN lastmodified TO last_modified;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='top60_actionplan' AND column_name='lastmodified') THEN
+        ALTER TABLE top60_actionplan RENAME COLUMN lastmodified TO last_modified;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='top15_actionplan' AND column_name='lastmodified') THEN
+        ALTER TABLE top15_actionplan RENAME COLUMN lastmodified TO last_modified;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='authorized_users' AND column_name='lastmodified') THEN
+        ALTER TABLE authorized_users RENAME COLUMN lastmodified TO last_modified;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='mermas' AND column_name='lastmodified') THEN
+        ALTER TABLE mermas RENAME COLUMN lastmodified TO last_modified;
+    END IF;
 END $$;
 
 -- 11. Incidence Master Table
@@ -189,14 +240,14 @@ CREATE TABLE IF NOT EXISTS incidence_master (
     afectaCalidad BOOLEAN DEFAULT FALSE,
     requiereMaquina BOOLEAN DEFAULT FALSE,
     area TEXT,
-    lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    last_modified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- 12. App Passwords Table
 CREATE TABLE IF NOT EXISTS app_passwords (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
-    lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    last_modified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- 13. TOP60 Action Plan Table
@@ -210,7 +261,7 @@ CREATE TABLE IF NOT EXISTS top60_actionplan (
     fechaObjetivo DATE,
     avance INTEGER,
     observaciones TEXT,
-    lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    last_modified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- 14. TOP15 Action Plan Table
@@ -224,13 +275,13 @@ CREATE TABLE IF NOT EXISTS top15_actionplan (
     fechaObjetivo DATE,
     avance INTEGER,
     observaciones TEXT,
-    lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    last_modified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- 15. Authorized Users Table
 CREATE TABLE IF NOT EXISTS authorized_users (
     email TEXT PRIMARY KEY,
-    lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    last_modified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Insert default authorized user
@@ -252,7 +303,7 @@ CREATE TABLE IF NOT EXISTS mermas (
     kg_merma NUMERIC DEFAULT 0,
     pct_merma1 NUMERIC DEFAULT 0,
     pct_merma2 NUMERIC DEFAULT 0,
-    lastModified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    last_modified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Disable Row Level Security (RLS) for all tables
@@ -368,4 +419,3 @@ GRANT ALL ON TABLE tipos_producto TO anon;
 GRANT ALL ON TABLE tipos_producto TO authenticated;
 GRANT ALL ON TABLE movimientos_bodega TO anon;
 GRANT ALL ON TABLE movimientos_bodega TO authenticated;
-
