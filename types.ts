@@ -49,6 +49,8 @@ export interface OEEObjectives {
   pph?: number;
   pph_jamones?: number;
   pph_paletas?: number;
+  pph_manteca?: number;
+  cantidad_colgada?: number;
   pph_blister?: number;
   pph_sin_blister?: number;
   pph_blister_emp?: number;

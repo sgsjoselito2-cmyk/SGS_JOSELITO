@@ -362,7 +362,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
 
   const workshopsList = [
     'sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado',
-    'env-envasado', 'env-empaquetado', 'expedicion', 'preparacion-exp'
+    'env-envasado', 'env-empaquetado', 'expedicion', 'preparacion-exp', 'movimiento-jamones'
   ];
 
   const workshopIndicators: Record<string, {id: string, name: string}[]> = {
@@ -399,6 +399,13 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
       { id: 'rendimiento', name: 'Rendimiento' },
       { id: 'calidad', name: 'Calidad' },
       { id: 'productividad', name: 'Productividad (OEE)' }
+    ],
+    'movimiento-jamones': [
+      { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },
+      { id: 'pph_paletas', name: 'PPH COLGAR PALETAS' },
+      { id: 'pph_manteca', name: 'PPH COLGAR JAMONES MANTECA' },
+      { id: 'cantidad_colgada', name: 'CANTIDAD COLGADA' },
+      { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' }
     ],
     'default': [
       { id: 'disponibilidad', name: 'Disponibilidad' },

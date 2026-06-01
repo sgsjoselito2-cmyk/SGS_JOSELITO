@@ -82,9 +82,10 @@ const TALLER_INDICATORS: Record<string, {id: string, name: string}[]> = {
     { id: 'pph', name: 'PPH EMPAQUETADO' }
   ],
   'movimiento-jamones': [
-    { id: 'pph_jamones', name: 'PPH JAMONES' },
-    { id: 'pph_paletas', name: 'PPH PALETAS' },
-    { id: 'pph_manteca', name: 'PPH JAMONES MANTECA' },
+    { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },
+    { id: 'pph_paletas', name: 'PPH COLGAR PALETAS' },
+    { id: 'pph_manteca', name: 'PPH COLGAR JAMONES MANTECA' },
+    { id: 'cantidad_colgada', name: 'CANTIDAD COLGADA' },
     { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' }
   ],
   'default': [
@@ -179,9 +180,25 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
         const d = getVal('disponibilidad', objs, targetDate);
         const r = getVal('rendimiento', objs, targetDate);
         const c = getVal('calidad', objs, targetDate);
-        return parseFloat(((d * r * c) / 10000).toFixed(1));
+        if (d > 0 || r > 0 || c > 0) {
+          return parseFloat(((d * r * c) / 10000).toFixed(1));
+        }
+        if (wsId === 'env-envasado' || wsId === 'env-empaquetado') {
+          return 45;
+        }
+        return 62.4;
       }
-      return getVal(indicator_id, objs, targetDate);
+      const val = getVal(indicator_id, objs, targetDate);
+      if (val > 0) return val;
+      if (wsId === 'env-envasado' || wsId === 'env-empaquetado') {
+        if (indicator_id === 'disponibilidad') return 90;
+        if (indicator_id === 'rendimiento') return 50;
+        if (indicator_id === 'calidad') return 100;
+      }
+      if (indicator_id === 'disponibilidad') return 90;
+      if (indicator_id === 'rendimiento') return 70;
+      if (indicator_id === 'calidad') return 99;
+      return val;
     }
 
     // Default fallbacks for non-OEE indicators
@@ -196,6 +213,10 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
     if (indicator_id === 'merma2') {
       const spec = objs.find(o => o.valid_from <= targetDate && o.indicator_id === 'merma2');
       return spec?.objetivo || spec?.merma2 || 3;
+    }
+    if (indicator_id === 'cantidad_colgada') {
+      const spec = objs.find(o => o.valid_from <= targetDate && o.indicator_id === 'cantidad_colgada');
+      return spec?.objetivo || 2000;
     }
     if (indicator_id === 'subproducto') {
       const spec = objs.find(o => o.valid_from <= targetDate && o.indicator_id === 'subproducto');
@@ -637,7 +658,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
                     {row.indicatorName}
                   </td>
                   <td className="p-1 text-center font-black border border-slate-200 text-blue-600 bg-blue-50/30">
-                    {objective !== 0 ? (row.indicatorId.startsWith('pph') ? objective : `${objective}%`) : '—'}
+                    {objective !== 0 ? ((row.indicatorId.startsWith('pph') || row.indicatorId === 'cantidad_colgada') ? objective : `${objective}%`) : '—'}
                   </td>
                   {row.values.map((val: any, i: number) => {
                     const isKPI = (row.indicatorId === 'productividad' || row.indicatorId === 'oee' || row.indicatorId === 'disponibilidad' || row.indicatorId === 'rendimiento' || row.indicatorId === 'calidad');
@@ -662,7 +683,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
                         className={`p-1 text-center font-bold border border-slate-200 select-none ${isEmpty ? 'text-slate-300' : (isGood ? 'text-emerald-600 bg-emerald-50/30' : 'text-red-500 bg-red-50/30')}`}
                         title={date && isKPI ? "Doble clic para ver Pareto" : ""}
                       >
-                        {isEmpty ? '-' : (row.indicatorId.startsWith('pph') ? val : `${val}%`)}
+                        {isEmpty ? '-' : ((row.indicatorId.startsWith('pph') || row.indicatorId === 'cantidad_colgada') ? val : `${val}%`)}
                       </td>
                     );
                   })}

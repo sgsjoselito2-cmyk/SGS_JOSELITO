@@ -71,12 +71,32 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
         const d = getVal('disponibilidad');
         const r = getVal('rendimiento');
         const c = getVal('calidad');
-        return parseFloat(((d * r * c) / 10000).toFixed(1));
+        if (d > 0 || r > 0 || c > 0) {
+          return parseFloat(((d * r * c) / 10000).toFixed(1));
+        }
+        if (areaId === 'env-envasado' || areaId === 'env-empaquetado') {
+          return 45;
+        }
+        return 62.4;
       }
-      return getVal(indicator_id);
+      const val = getVal(indicator_id);
+      if (val > 0) return val;
+      if (areaId === 'env-envasado' || areaId === 'env-empaquetado') {
+        if (indicator_id === 'disponibilidad') return 90;
+        if (indicator_id === 'rendimiento') return 50;
+        if (indicator_id === 'calidad') return 100;
+      }
+      if (indicator_id === 'disponibilidad') return 90;
+      if (indicator_id === 'rendimiento') return 70;
+      if (indicator_id === 'calidad') return 99;
+      return val;
     }
 
     // Default fallbacks for non-OEE indicators
+    if (indicator_id === 'cantidad_colgada') {
+      const spec = sorted.find(o => o.valid_from <= targetDate && o.indicator_id === 'cantidad_colgada');
+      return spec ? (spec.objetivo || (spec as any).cantidad_colgada || 0) : 2000;
+    }
     if (indicator_id.startsWith('pph')) {
       const spec = sorted.find(o => o.valid_from <= targetDate && o.indicator_id === indicator_id) || 
                    sorted.find(o => o.valid_from <= targetDate && o.indicator_id === 'pph');
@@ -169,9 +189,10 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
         ];
       } else if (area.id === 'movimiento-jamones') {
         areaIndicators = [
-          { id: 'pph_jamones', label: 'PPH JAMONES', objKey: 'pph_jamones' },
-          { id: 'pph_paletas', label: 'PPH PALETAS', objKey: 'pph_paletas' },
-          { id: 'pph_manteca', label: 'PPH JAMONES MANTECA', objKey: 'pph_manteca' },
+          { id: 'pph_jamones', label: 'PPH COLGAR JAMONES', objKey: 'pph_jamones' },
+          { id: 'pph_paletas', label: 'PPH COLGAR PALETAS', objKey: 'pph_paletas' },
+          { id: 'pph_manteca', label: 'PPH COLGAR JAMONES MANTECA', objKey: 'pph_manteca' },
+          { id: 'cantidad_colgada', label: 'CANTIDAD COLGADA', objKey: 'cantidad_colgada' },
           { id: 'disponibilidad', label: 'DISPONIBILIDAD (%)', objKey: 'disponibilidad' as const }
         ];
       } else {
@@ -344,7 +365,7 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
                 const isFirstOfArea = idx === 0 || tableRows[idx - 1].area.id !== row.area.id;
                 
                 const currentObj = getObjectiveValue(row.area.id, row.indicator.id);
-                const isPPH = row.indicator.id.startsWith('pph');
+                const isPPH = row.indicator.id.startsWith('pph') || row.indicator.id === 'cantidad_colgada';
 
                 return (
                   <tr key={`${row.area.id}-${row.indicator.id}`} className="hover:bg-slate-50 transition-colors">

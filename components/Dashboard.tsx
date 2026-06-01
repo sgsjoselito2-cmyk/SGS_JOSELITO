@@ -163,6 +163,7 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
   let pph_jamones = 0;
   let pph_paletas = 0;
   let pph_manteca = 0;
+  let cantidad_colgada = 0;
   const calcPPHFromMinutes = (m: number, qty: number) => m > 0 ? qty / (m / 60) : 0;
 
   if (aid.includes('sb-preparacion')) {
@@ -190,12 +191,41 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
     pph_blister = pph_blister_emp;
     pph_sin_blister = pph_sin_blister_cuchillo;
   } else if (aid.includes('movimiento-jamones')) {
-    const jActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && (a.formato?.toUpperCase().includes('JAMÓN') || a.formato?.toUpperCase().includes('JAMON')) && !a.formato?.toUpperCase().includes('MANTECA'));
-    const pActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && a.formato?.toUpperCase().includes('PALETA'));
-    const mActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && a.formato?.toUpperCase().includes('MANTECA'));
-    pph_jamones = calcPPHFromMinutes(jActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), jActs.reduce((s, a) => s + (a.cantidad || 0), 0));
-    pph_paletas = calcPPHFromMinutes(pActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), pActs.reduce((s, a) => s + (a.cantidad || 0), 0));
-    pph_manteca = calcPPHFromMinutes(mActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), mActs.reduce((s, a) => s + (a.cantidad || 0), 0));
+    const actsJamones = data.filter(a =>
+      a.formato === 'COLGAR JAMONES'
+      && a.tipoTarea === TaskType.PRODUCCION
+    );
+    const cantJamones = actsJamones.reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
+    const persJamones = new Set(actsJamones.flatMap(a => a.operarios || [])).size || 1;
+    const horasJamones = calculateUniqueMinutes(getIntervals(actsJamones)) / 60;
+    pph_jamones = horasJamones > 0 ? Math.round(cantJamones / persJamones / horasJamones) : 0;
+
+    const actsPaletas = data.filter(a =>
+      a.formato === 'COLGAR PALETAS'
+      && a.tipoTarea === TaskType.PRODUCCION
+    );
+    const cantPaletas = actsPaletas.reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
+    const persPaletas = new Set(actsPaletas.flatMap(a => a.operarios || [])).size || 1;
+    const horasPaletas = calculateUniqueMinutes(getIntervals(actsPaletas)) / 60;
+    pph_paletas = horasPaletas > 0 ? Math.round(cantPaletas / persPaletas / horasPaletas) : 0;
+
+    const actsManteca = data.filter(a =>
+      a.formato === 'COLGAR JAMONES MANTECA'
+      && a.tipoTarea === TaskType.PRODUCCION
+    );
+    const cantManteca = actsManteca.reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
+    const persManteca = new Set(actsManteca.flatMap(a => a.operarios || [])).size || 1;
+    const horasManteca = calculateUniqueMinutes(getIntervals(actsManteca)) / 60;
+    pph_manteca = horasManteca > 0 ? Math.round(cantManteca / persManteca / horasManteca) : 0;
+
+    cantidad_colgada = data
+      .filter(a => 
+        (a.formato === 'COLGAR JAMONES' || 
+         a.formato === 'COLGAR PALETAS' || 
+         a.formato === 'COLGAR JAMONES MANTECA') &&
+        a.tipoTarea === TaskType.PRODUCCION
+      )
+      .reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
   }
 
   const finalAvailability = Math.min(100, availability > 0 ? availability : 0);
@@ -226,6 +256,7 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
     pph_jamones: hasData ? pph_jamones.toFixed(0) : '',
     pph_paletas: hasData ? pph_paletas.toFixed(0) : '',
     pph_manteca: hasData ? pph_manteca.toFixed(0) : '',
+    cantidad_colgada: hasData ? cantidad_colgada.toFixed(0) : '',
     tiempo_produccion_real: uniqueTimeP,
     tiempo_esperas: uniqueTimeE,
     tiempo_averias: uniqueTimeA
@@ -283,12 +314,32 @@ const Dashboard: React.FC<DashboardProps> = ({
         const d = getVal('disponibilidad');
         const r = getVal('rendimiento');
         const c = getVal('calidad');
-        return parseFloat(((d * r * c) / 10000).toFixed(1));
+        if (d > 0 || r > 0 || c > 0) {
+          return parseFloat(((d * r * c) / 10000).toFixed(1));
+        }
+        if (selectedArea === 'env-envasado' || selectedArea === 'env-empaquetado') {
+          return 45;
+        }
+        return 62.4;
       }
-      return getVal(indicator_id);
+      const val = getVal(indicator_id);
+      if (val > 0) return val;
+      if (selectedArea === 'env-envasado' || selectedArea === 'env-empaquetado') {
+        if (indicator_id === 'disponibilidad' || indicator_id === 'availability') return 90;
+        if (indicator_id === 'rendimiento' || indicator_id === 'performance') return 50;
+        if (indicator_id === 'calidad' || indicator_id === 'quality') return 100;
+      }
+      if (indicator_id === 'disponibilidad' || indicator_id === 'availability') return 90;
+      if (indicator_id === 'rendimiento' || indicator_id === 'performance') return 70;
+      if (indicator_id === 'calidad' || indicator_id === 'quality') return 99;
+      return val;
     }
 
     // Default fallbacks for non-OEE indicators
+    if (indicator_id === 'cantidad_colgada') {
+      const spec = sorted.find(o => o.valid_from <= dateStr && o.indicator_id === 'cantidad_colgada');
+      return spec?.objetivo || (oeeObjectives as any).cantidad_colgada || 2000;
+    }
     if (indicator_id === 'pph') {
       const spec = sorted.find(o => o.valid_from <= dateStr && o.indicator_id === 'pph');
       return spec?.objetivo || spec?.pph || (oeeObjectives as any).pph || 0;
@@ -611,9 +662,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
     if (selectedArea === 'movimiento-jamones') {
       indicators.unshift(
-        { id: 'pph_jamones', objKey: 'pph_jamones', label: 'PPH JAMONES' },
-        { id: 'pph_paletas', objKey: 'pph_paletas', label: 'PPH PALETAS' },
-        { id: 'pph_manteca', objKey: 'pph_manteca', label: 'PPH JAMONES MANTECA' }
+        { id: 'pph_jamones', objKey: 'pph_jamones', label: 'PPH COLGAR JAMONES' },
+        { id: 'pph_paletas', objKey: 'pph_paletas', label: 'PPH COLGAR PALETAS' },
+        { id: 'pph_manteca', objKey: 'pph_manteca', label: 'PPH COLGAR JAMONES MANTECA' },
+        { id: 'cantidad_colgada', objKey: 'cantidad_colgada', label: 'CANTIDAD COLGADA' }
       );
     }
 
@@ -631,7 +683,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             {indicators.map((indicator) => {
               const staticObj = (oeeObjectives as any)[indicator.objKey || ''] || 0;
               const isLowerBetter = indicator.id.startsWith('merma') || indicator.id === 'subproducto';
-              const isPPH = indicator.id.startsWith('pph');
+              const isPPH = indicator.id.startsWith('pph') || indicator.id === 'cantidad_colgada';
 
               return (
                 <tr key={indicator.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
@@ -688,9 +740,10 @@ const Dashboard: React.FC<DashboardProps> = ({
       kpis.push({ label: 'PPH', val: stats.pph, obj: getObjectiveForDate('pph', selectedDate), color: 'indigo', key: 'pph' });
     }
     if (aid.includes('movimiento-jamones')) {
-      kpis.push({ label: 'PPH JAMONES', val: stats.pph_jamones, obj: getObjectiveForDate('pph_jamones', selectedDate), color: 'indigo', key: 'pph_jamones' });
-      kpis.push({ label: 'PPH PALETAS', val: stats.pph_paletas, obj: getObjectiveForDate('pph_paletas', selectedDate), color: 'indigo', key: 'pph_paletas' });
-      kpis.push({ label: 'PPH JAMONES MANTECA', val: stats.pph_manteca, obj: getObjectiveForDate('pph_manteca', selectedDate), color: 'indigo', key: 'pph_manteca' });
+      kpis.push({ label: 'PPH COLGAR JAMONES', val: stats.pph_jamones, obj: getObjectiveForDate('pph_jamones', selectedDate), color: 'indigo', key: 'pph_jamones' });
+      kpis.push({ label: 'PPH COLGAR PALETAS', val: stats.pph_paletas, obj: getObjectiveForDate('pph_paletas', selectedDate), color: 'indigo', key: 'pph_paletas' });
+      kpis.push({ label: 'PPH COLGAR JAMONES MANTECA', val: stats.pph_manteca, obj: getObjectiveForDate('pph_manteca', selectedDate), color: 'indigo', key: 'pph_manteca' });
+      kpis.push({ label: 'CANTIDAD COLGADA', val: stats.cantidad_colgada, obj: getObjectiveForDate('cantidad_colgada', selectedDate) || 2000, color: 'indigo', key: 'cantidad_colgada' });
     }
     return kpis;
   }, [selectedArea, stats, selectedDate]);
