@@ -1535,7 +1535,7 @@ const App: React.FC = () => {
       const currentList = allObjectives[selectedArea] || [];
       const existing = currentList.find(o => o.valid_from === newObj.valid_from && o.indicator_id === newObj.indicator_id);
       
-      const recordId = existing?.id || newObj.id;
+      const recordId = existing?.id || newObj.id || (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16); }));
       const finalObjToSave: OEEObjectives = {
         ...newObj,
         id: recordId,
@@ -1552,7 +1552,7 @@ const App: React.FC = () => {
         table: 'oee_objectives',
         type: 'upsert',
         data: [{
-          id: recordId || undefined,
+          id: recordId,
           area: selectedArea,
           valid_from: newObj.valid_from,
           indicator_id: newObj.indicator_id || null,
@@ -1616,7 +1616,7 @@ const App: React.FC = () => {
         // Find if this record already exists in allObjectives
         const currentList = allObjectives[areaId] || [];
         const existing = currentList.find(o => o.valid_from === valid_from && o.indicator_id === obj.indicator_id);
-        const recordId = existing?.id || obj.id;
+        const recordId = existing?.id || obj.id || (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16); }));
 
         const newObj: OEEObjectives = { 
           ...obj,
@@ -1637,7 +1637,7 @@ const App: React.FC = () => {
 
         // Prepare database row
         toUpsert.push({
-          id: recordId || undefined,
+          id: recordId,
           area: areaId,
           valid_from: valid_from,
           indicator_id: obj.indicator_id || null,

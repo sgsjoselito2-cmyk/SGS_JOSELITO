@@ -449,11 +449,23 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
         const found = objs.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id));
         
         let objective = 62;
+        if (ws.id === 'env-envasado' || ws.id === 'env-empaquetado') {
+          objective = 45;
+        }
         if (found) {
-          const d = found.disponibilidad || 0;
-          const r = found.rendimiento || 0;
-          const c = found.calidad || 0;
-          objective = Math.round((d * r * c) / 10000);
+          let d = found.disponibilidad || 0;
+          let r = found.rendimiento || 0;
+          let c = found.calidad || 0;
+          if (ws.id === 'env-envasado' || ws.id === 'env-empaquetado') {
+            if (d === 90 && r === 70 && c === 99) {
+              d = 90;
+              r = 50;
+              c = 100;
+            }
+          }
+          if (d > 0 || r > 0 || c > 0) {
+            objective = Math.round((d * r * c) / 10000);
+          }
         }
 
         if (data.length === 0 && weekMermas.length === 0) return { stats: null, objective };
@@ -501,11 +513,23 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
         const found = objs.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id));
         
         let objective = 62;
+        if (ws.id === 'env-envasado' || ws.id === 'env-empaquetado') {
+          objective = 45;
+        }
         if (found) {
-          const d = found.disponibilidad || 0;
-          const r = found.rendimiento || 0;
-          const c = found.calidad || 0;
-          objective = Math.round((d * r * c) / 10000);
+          let d = found.disponibilidad || 0;
+          let r = found.rendimiento || 0;
+          let c = found.calidad || 0;
+          if (ws.id === 'env-envasado' || ws.id === 'env-empaquetado') {
+            if (d === 90 && r === 70 && c === 99) {
+              d = 90;
+              r = 50;
+              c = 100;
+            }
+          }
+          if (d > 0 || r > 0 || c > 0) {
+            objective = Math.round((d * r * c) / 10000);
+          }
         }
 
         if (weekActivities.length === 0) return { name: `S${w.week}`, Disp: 0, Rto: 0, Prod: 0, Obj: objective };

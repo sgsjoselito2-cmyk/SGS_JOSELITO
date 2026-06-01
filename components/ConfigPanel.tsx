@@ -561,8 +561,18 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                       </tr>
                       {indicators.map(ind => {
                         const key = `${wsId}_${ind.id}`;
-                        const obj = localMasterObjectives[key] || { disponibilidad: 0, rendimiento: 0, calidad: 0, productividad: 0, objetivo: 0 };
                         const isOEE = ind.id === 'productividad' || ind.id === 'oee';
+                        const defaultObj = (wsId === 'env-envasado' || wsId === 'env-empaquetado') 
+                          ? { disponibilidad: 90, rendimiento: 50, calidad: 100, productividad: 45, objetivo: 45 }
+                          : { disponibilidad: 90, rendimiento: 70, calidad: 99, productividad: 62.4, objetivo: 62 };
+                        
+                        const obj = localMasterObjectives[key] || { 
+                          disponibilidad: isOEE ? defaultObj.disponibilidad : 0, 
+                          rendimiento: isOEE ? defaultObj.rendimiento : 0, 
+                          calidad: isOEE ? defaultObj.calidad : 0, 
+                          productividad: isOEE ? defaultObj.productividad : 0, 
+                          objetivo: isOEE ? defaultObj.objetivo : 0 
+                        };
                         return (
                           <tr key={key} className="hover:bg-slate-50 transition-colors">
                             <td className="p-4 pl-8 text-[13px] font-bold text-slate-500 uppercase tracking-tight border-r border-slate-100 italic">
