@@ -1712,6 +1712,12 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
 
                   <div className="space-y-8 pl-2 border-l-2 border-slate-200 ml-2">
                     {areaGroup.talleres.map(ws => {
+                      const objs = allObjectives[ws.id] || [];
+                      const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+                      const spec = sorted.find(o => o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id);
+                      const isVisible = spec ? (spec.showInTop60 !== undefined ? !!spec.showInTop60 : true) : true;
+                      if (!isVisible) return null;
+
                       const { weeklyData, monthlyData } = getWorkshopData(ws.id);
 
                       return (

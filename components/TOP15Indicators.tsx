@@ -29,6 +29,7 @@ interface TOP15IndicatorsProps {
   mermas?: any[];
   selectedDate?: string;
   setSelectedDate?: (d: string) => void;
+  workshopIndicators: Record<string, {id: string, name: string, formula?: string}[]>;
 }
 
 const TALLERES = [
@@ -56,45 +57,6 @@ const isTimeBased = (wsId: string) => {
   return true; // All Joselito workshops are time-based for now
 };
 
-const TALLER_INDICATORS: Record<string, {id: string, name: string}[]> = {
-  'sb-loncheado': [
-    { id: 'productividad', name: 'OEE (%)' },
-    { id: 'merma1', name: '% MERMA 1' }
-  ],
-  'sb-preparacion': [
-    { id: 'pph', name: 'PPH PESAR' }
-  ],
-  'sb-empaquetado-loncheado': [
-    { id: 'pph_blister_emp', name: 'PPH blister empaquetado' },
-    { id: 'pph_sin_blister_cuchillo', name: 'PPH sin blister cuchillo' },
-    { id: 'pph_sin_marcar', name: 'PPH sin marcar' },
-    { id: 'pph_empaquetado_jabu', name: 'PPH empaquetado Jabu' }
-  ],
-  'sb-empaquetado-deshuesado': [
-    { id: 'pph', name: 'PPH' }
-  ],
-  'env-envasado': [
-    { id: 'productividad', name: 'OEE (%)' },
-    { id: 'pph', name: 'PPH ENVASADO' }
-  ],
-  'env-empaquetado': [
-    { id: 'productividad', name: 'OEE (%)' },
-    { id: 'pph', name: 'PPH EMPAQUETADO' }
-  ],
-  'movimiento-jamones': [
-    { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },
-    { id: 'pph_paletas', name: 'PPH COLGAR PALETAS' },
-    { id: 'pph_manteca', name: 'PPH COLGAR JAMONES MANTECA' },
-    { id: 'cantidad_colgada', name: 'CANTIDAD COLGADA' },
-    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' }
-  ],
-  'default': [
-    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' },
-    { id: 'rendimiento', name: 'RENDIMIENTO (%)' },
-    { id: 'calidad', name: 'CALIDAD (%)' },
-    { id: 'productividad', name: 'OEE (%)' }
-  ]
-};
 
 const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({ 
   activities, 
@@ -104,7 +66,8 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
   allObjectives,
   mermas = [],
   selectedDate: propDate,
-  setSelectedDate: propSetDate
+  setSelectedDate: propSetDate,
+  workshopIndicators
 }) => {
   const [localDate, setLocalDate] = useState(() => {
     const now = new Date();
@@ -126,7 +89,61 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
   const [drillDownPareto, setDrillDownPareto] = useState<{ workshopId: string, date: string } | null>(null);
   const [drillDownRecords, setDrillDownRecords] = useState<{ workshopId: string, date: string, type: 'disponibilidad' | 'rendimiento' | 'calidad', category: string } | null>(null);
 
+  // Mobile View Mode: 'diaria', 'semanal', or 'anual'
+  const [mobileViewMode, setMobileViewMode] = useState<'diaria' | 'semanal' | 'anual'>('semanal');
+
   const allData = useMemo(() => [...history, ...activities], [history, activities]);
+
+  const getSpanishWeekdayName = useCallback((dateStr: string) => {
+    const weekdays = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const date = parseLocalDate(dateStr);
+    return weekdays[date.getDay()];
+  }, []);
+
+  const getMobileWeekInfo = useCallback((dateStr: string) => {
+    const date = parseLocalDate(dateStr);
+    const weekNum = getWeekNumber(date);
+    const year = date.getFullYear();
+    
+    // Find Monday and Sunday
+    const day = date.getDay(); // 0 is Sunday, 1 to 6 are Monday to Saturday
+    const diffToMonday = date.getDate() - (day === 0 ? 6 : day - 1);
+    const monday = new Date(date.setDate(diffToMonday));
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const format = (d: Date) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+    return {
+      weekNum,
+      year,
+      rangeStr: `${format(monday)} - ${format(sunday)}`
+    };
+  }, []);
+
+  const handlePrev = useCallback(() => {
+    const d = parseLocalDate(selectedDate);
+    if (mobileViewMode === 'diaria') {
+      d.setDate(d.getDate() - 1);
+    } else if (mobileViewMode === 'semanal') {
+      d.setDate(d.getDate() - 7);
+    } else {
+      d.setFullYear(d.getFullYear() - 1);
+    }
+    setSelectedDate(d.toISOString().split('T')[0]);
+  }, [selectedDate, setSelectedDate, mobileViewMode]);
+
+  const handleNext = useCallback(() => {
+    const d = parseLocalDate(selectedDate);
+    if (mobileViewMode === 'diaria') {
+      d.setDate(d.getDate() + 1);
+    } else if (mobileViewMode === 'semanal') {
+      d.setDate(d.getDate() + 7);
+    } else {
+      d.setFullYear(d.getFullYear() + 1);
+    }
+    setSelectedDate(d.toISOString().split('T')[0]);
+  }, [selectedDate, setSelectedDate, mobileViewMode]);
 
   // Handle ESC key
   useEffect(() => {
@@ -399,7 +416,16 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
   const dailyStats = useMemo(() => {
     const rows: any[] = [];
     TALLERES.forEach(ws => {
-      const indicators = TALLER_INDICATORS[ws.id] || TALLER_INDICATORS.default;
+      const rawIndicators = workshopIndicators[ws.id] || workshopIndicators.default;
+      const indicators = rawIndicators.filter(ind => {
+        const objs = allObjectives[ws.id] || [];
+        const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+        const spec = sorted.find(o => o.indicator_id === ind.id);
+        if (spec) {
+          return spec.showInTop15 !== undefined ? !!spec.showInTop15 : true;
+        }
+        return true;
+      });
       const dayDataMap = last7Days.map(date => {
         const data = allData.filter(a => a.area === ws.id && a.fecha && a.fecha === date);
         const dayMermas = mermas.filter(m => m.fecha === date && m.area === ws.id);
@@ -428,7 +454,16 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
   const weeklyStats = useMemo(() => {
     const rows: any[] = [];
     TALLERES.forEach(ws => {
-      const indicators = TALLER_INDICATORS[ws.id] || TALLER_INDICATORS.default;
+      const rawIndicators = workshopIndicators[ws.id] || workshopIndicators.default;
+      const indicators = rawIndicators.filter(ind => {
+        const objs = allObjectives[ws.id] || [];
+        const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+        const spec = sorted.find(o => o.indicator_id === ind.id);
+        if (spec) {
+          return spec.showInTop15 !== undefined ? !!spec.showInTop15 : true;
+        }
+        return true;
+      });
       
       const weekDataMap = last7Weeks.map(w => {
         const data = allData.filter(a => {
@@ -631,6 +666,73 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
     setAiAnalysis('Pulsa el botón para analizar los indicadores con IA.');
   }, [selectedDate]);
 
+  // Calculate stats for each workshop and for the current year
+  const annualStats = useMemo(() => {
+    const rows: any[] = [];
+    const targetYear = new Date(selectedDate).getFullYear().toString();
+    
+    TALLERES.forEach(ws => {
+      const rawIndicators = workshopIndicators[ws.id] || workshopIndicators.default;
+      const indicators = rawIndicators.filter(ind => {
+        const objs = allObjectives[ws.id] || [];
+        const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+        const spec = sorted.find(o => o.indicator_id === ind.id);
+        if (spec) {
+          return spec.showInTop15 !== undefined ? !!spec.showInTop15 : true;
+        }
+        return true;
+      });
+      const yearActivities = allData.filter(a => a.area === ws.id && a.fecha && a.fecha.startsWith(targetYear));
+      const yearMermas = mermas.filter(m => m.area === ws.id && m.fecha && m.fecha.startsWith(targetYear));
+      
+      const stats = (yearActivities.length === 0 && yearMermas.length === 0) ? null : calculateStats(yearActivities, ws.id, yearMermas);
+
+      indicators.forEach(ind => {
+        const val = stats ? stats[ind.id as keyof typeof stats] : null;
+        rows.push({
+          id: ws.id,
+          taller: ws.taller,
+          workshopName: ws.name,
+          indicatorName: ind.name,
+          indicatorId: ind.id,
+          value: val
+        });
+      });
+    });
+    return rows;
+  }, [allData, selectedDate, mermas, workshopIndicators]);
+
+  const mobileGroupedData = useMemo(() => {
+    let sourceStats: any[] = [];
+    if (mobileViewMode === 'diaria') {
+      sourceStats = dailyStats;
+    } else if (mobileViewMode === 'semanal') {
+      sourceStats = weeklyStats;
+    } else {
+      sourceStats = annualStats;
+    }
+
+    const groups: Record<string, Record<string, { id: string, indicatorId: string, indicatorName: string, value: any }[]>> = {};
+    
+    sourceStats.forEach(row => {
+      if (!groups[row.taller]) {
+        groups[row.taller] = {};
+      }
+      if (!groups[row.taller][row.workshopName]) {
+        groups[row.taller][row.workshopName] = [];
+      }
+      
+      const val = mobileViewMode === 'anual' ? row.value : row.values[6];
+      groups[row.taller][row.workshopName].push({
+        id: row.id,
+        indicatorId: row.indicatorId,
+        indicatorName: row.indicatorName,
+        value: val
+      });
+    });
+    return groups;
+  }, [mobileViewMode, dailyStats, weeklyStats, annualStats]);
+
   const renderTable = (title: string, columns: string[], stats: any[]) => (
     <div className={`bg-white ${isPrinting ? 'p-1' : 'p-2'} rounded-xl border border-slate-100 shadow-sm overflow-hidden shrink-0`}>
       <h3 className={`${isPrinting ? 'text-[11px]' : 'text-[13px]'} font-black text-slate-900 uppercase tracking-tighter mb-1 px-1`}>{title}</h3>
@@ -762,7 +864,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
           </div>
         </div>
         
-        <div className="flex items-center gap-1.5">
+        <div className="hidden sm:flex items-center gap-1.5">
           <input 
             type="date" 
             value={selectedDate} 
@@ -773,9 +875,139 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto pr-1 space-y-2 no-scrollbar">
-        {/* Tables */}
-        {renderTable('Rendimiento Diario (%)', last7Days.map(d => d.split('-').slice(1).reverse().join('/')), dailyStats)}
-        {renderTable('Rendimiento Semanal (%)', last7Weeks.map(w => `S${w.week}`), weeklyStats)}
+        {/* Selector de Fecha para Móvil */}
+        <div className="block sm:hidden space-y-2">
+          {/* Toggles DIARIA / SEMANAL / ANUAL */}
+          <div className="flex rounded-xl border border-slate-100 overflow-hidden bg-slate-50 p-0.5">
+            {([
+              { id: 'diaria', label: 'Diaria' },
+              { id: 'semanal', label: 'Semanal' },
+              { id: 'anual', label: 'Anual' }
+            ] as const).map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setMobileViewMode(tab.id)}
+                className={`flex-1 py-1.5 text-center text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                  mobileViewMode === tab.id 
+                    ? 'bg-slate-900 text-white shadow-sm' 
+                    : 'text-slate-400 hover:text-slate-700 bg-transparent'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 shadow-sm relative overflow-hidden">
+            <div className="flex items-center justify-between w-full max-w-xs">
+              <button 
+                onClick={handlePrev} 
+                className="w-10 h-10 rounded-xl bg-slate-50 font-extrabold text-[15px] text-slate-800 flex items-center justify-center active:scale-95 hover:bg-slate-100 transition-all border border-slate-100"
+              >
+                &lt;
+              </button>
+              <div className="text-center flex-1 mx-2">
+                {mobileViewMode === 'diaria' && (
+                  <h3 className="text-sm font-black text-slate-900 tracking-tight leading-tight uppercase">
+                    {getSpanishWeekdayName(selectedDate)} {selectedDate.split('-').reverse().join('/')}
+                  </h3>
+                )}
+                {mobileViewMode === 'semanal' && (
+                  <>
+                    <h3 className="text-sm font-black text-slate-900 tracking-tight leading-tight">
+                      Semana {getMobileWeekInfo(selectedDate).weekNum} — {getMobileWeekInfo(selectedDate).year}
+                    </h3>
+                    <p className="text-[10px] font-bold text-slate-400 mt-0.5 tracking-wider font-mono">
+                      {getMobileWeekInfo(selectedDate).rangeStr}
+                    </p>
+                  </>
+                )}
+                {mobileViewMode === 'anual' && (
+                  <h3 className="text-sm font-black text-slate-900 tracking-tight leading-tight">
+                    Año {new Date(selectedDate).getFullYear()}
+                  </h3>
+                )}
+              </div>
+              <button 
+                onClick={handleNext} 
+                className="w-10 h-10 rounded-xl bg-slate-50 font-extrabold text-[15px] text-slate-800 flex items-center justify-center active:scale-95 hover:bg-slate-100 transition-all border border-slate-100"
+              >
+                &gt;
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Indicadores en Cards Apilados para Móvil */}
+        <div className="block sm:hidden space-y-3">
+          {Object.entries(mobileGroupedData).map(([tallerName, areasMap]) => {
+            const borderColors: Record<string, string> = {
+              'SALA BLANCA': 'border-indigo-600 text-indigo-700 bg-indigo-50/50',
+              'ENVASADO': 'border-cyan-500 text-cyan-700 bg-cyan-50/50',
+              'EXPEDICIONES': 'border-amber-500 text-amber-700 bg-amber-50/50',
+              'MOVIMIENTOS': 'border-slate-500 text-slate-700 bg-slate-50/50'
+            };
+            const borderColor = borderColors[tallerName] || 'border-slate-400 text-slate-700 bg-slate-50/50';
+
+            return (
+              <div key={tallerName} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 overflow-hidden">
+                <div className={`border-l-4 px-3 py-1.5 rounded-r-lg font-black text-[12px] uppercase tracking-wider mb-3 w-full ${borderColor}`}>
+                  {tallerName}
+                </div>
+                
+                <div className="space-y-4">
+                  {Object.entries(areasMap).map(([areaName, rows]) => (
+                    <div key={areaName} className="space-y-1.5">
+                      <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-tight border-b border-slate-100 pb-0.5">
+                        {areaName}
+                      </h4>
+                      <div className="pl-1 space-y-1">
+                        {rows.map(row => {
+                          const isPPHOrColgada = row.indicatorId.startsWith('pph') || row.indicatorId === 'cantidad_colgada';
+                          const val = row.value;
+                          const isEmpty = val === null || val === undefined || val === '';
+                          const formattedVal = isEmpty ? '—' : (isPPHOrColgada ? val : `${val}%`);
+                          const numVal = parseFloat(val);
+                          const colObj = getWorkshopObjective(row.id, row.indicatorId, selectedDate);
+                          const hasObj = colObj !== undefined && colObj !== null && colObj !== 0;
+                          const formattedObj = hasObj ? (isPPHOrColgada ? colObj : `${colObj}%`) : '';
+
+                          let isGood = false;
+                          if (row.indicatorId.startsWith('merma') || row.indicatorId === 'subproducto') {
+                            isGood = !isNaN(numVal) && numVal <= colObj;
+                          } else {
+                            isGood = !isNaN(numVal) && numVal >= colObj;
+                          }
+
+                          const valColor = isEmpty ? 'text-slate-400' : (isGood ? 'text-emerald-600' : 'text-red-500');
+                          const statusEmoji = isEmpty ? '' : (isGood ? '✅' : '🔴');
+
+                          return (
+                            <div key={row.indicatorId} className="flex items-end justify-between py-1 border-b border-dashed border-slate-50 last:border-b-0">
+                              <span className="text-slate-500 font-bold uppercase text-[10px] tracking-wider shrink-0">
+                                {row.indicatorName}
+                              </span>
+                              <div className="flex-1 border-b border-dotted border-slate-200 mx-2 mb-1.5 opacity-60" />
+                              <span className={`font-black text-[11px] shrink-0 ${valColor}`}>
+                                {formattedVal}{hasObj ? ` / obj: ${formattedObj}` : ''}{statusEmoji ? ` ${statusEmoji}` : ''}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Tables (Desktop Only) */}
+        <div className="hidden sm:block space-y-2">
+          {renderTable('Rendimiento Diario (%)', last7Days.map(d => d.split('-').slice(1).reverse().join('/')), dailyStats)}
+          {renderTable('Rendimiento Semanal (%)', last7Weeks.map(w => `S${w.week}`), weeklyStats)}
+        </div>
 
         {/* Weekly Workshop Charts */}
         <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm">

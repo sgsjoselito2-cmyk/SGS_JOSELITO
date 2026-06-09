@@ -21,6 +21,7 @@ export interface Activity {
   afectaCalidad?: boolean;
   tiempoTeoricoManual?: number; 
   jefeEquipo?: string; // nombre del jefe de esta actividad
+  turnoId?: string;
 }
 
 export interface ActionPlanItem {
@@ -60,6 +61,9 @@ export interface OEEObjectives {
   area: string;
   indicator_id?: string; // Standardized to snake_case
   valid_from: string; // ISO Date string (YYYY-MM-DD)
+  showInTop5?: boolean;
+  showInTop15?: boolean;
+  showInTop60?: boolean;
 }
 
 export interface KPIStats {

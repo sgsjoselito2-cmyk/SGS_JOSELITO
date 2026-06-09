@@ -36,10 +36,10 @@ import {
 } from 'lucide-react';
 import { Activity, MasterSpeed, IncidenceMaster, TaskType, OEEObjectives, User, Bodega, TipoProducto, MovimientoBodega } from './types';
 import BodegasModule from './components/BodegasModule';
-import { getInitialMasterSpeeds, getInitialOperarios, getInitialIncidenceMaster, INITIAL_OEE_OBJECTIVES, AREA_NAMES, INITIAL_ACTION_PLAN_TOP15, JOSELITO_LOGO } from './constants';
+import { INITIAL_WORKSHOP_INDICATORS, getInitialMasterSpeeds, getInitialOperarios, getInitialIncidenceMaster, INITIAL_OEE_OBJECTIVES, AREA_NAMES, INITIAL_ACTION_PLAN_TOP15, JOSELITO_LOGO } from './constants';
 import { supabase, isConfigured, debugConfig } from './lib/supabase';
 import { Session } from '@supabase/supabase-js';
-import { calcDuration } from './src/utils';
+import { calcDuration } from './src/utils/index';
 
 interface Toast {
   id: string;
@@ -83,36 +83,6 @@ const App: React.FC = () => {
   const [responsibles, setResponsibles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
-
-  const [bodegas, setBodegas] = useState<Bodega[]>([]);
-  const [tiposProducto, setTiposProducto] = useState<TipoProducto[]>([]);
-  const [movimientosBodega, setMovimientosBodega] = useState<MovimientoBodega[]>([]);
-
-  const [globalUsers, setGlobalUsers] = useState<User[]>([]);
-  const [top15Users, setTop15Users] = useState<User[]>([]);
-  const [top60Users, setTop60Users] = useState<User[]>([]);
-  const [showGlobalUserConfig, setShowGlobalUserConfig] = useState(false);
-  const [showGlobalPinModal, setShowGlobalPinModal] = useState(false);
-  const [showPasswordConfig, setShowPasswordConfig] = useState(false);
-  const [showTop60PinModal, setShowTop60PinModal] = useState(false);
-  const [top60Pin, setTop60Pin] = useState('');
-  const [top60PinError, setTop60PinError] = useState(false);
-  const [globalPin, setGlobalPin] = useState('');
-  const [globalPinError, setGlobalPinError] = useState(false);
-  const [passwords, setPasswords] = useState({
-    jefeEquipo: '1234',
-    jefeTaller: '1234',
-    directorOperaciones: '1234',
-    asistenciaTecnica: '1234'
-  });
-
-  const [top60SubView, setTop60SubView] = useState<'plan' | 'dashboard'>('dashboard');
-  const [top60Access, setTop60Access] = useState<'cmi' | 'preparacion' | null>(null);
-  const [top15SubView, setTop15SubView] = useState<'plan' | 'indicators'>('indicators');
-  const [isGlobalHelpOpen, setIsGlobalHelpOpen] = useState(false);
-  const [isConnectionHelpOpen, setIsConnectionHelpOpen] = useState(false);
-  const isFetchingRef = useRef(false);
-
   // Helper para guardar en localStorage de forma segura
   const safeLocalStorageSetItem = useCallback((key: string, value: string) => {
     try {
@@ -171,6 +141,41 @@ const App: React.FC = () => {
       return defaultValue;
     }
   }, []);
+
+  const [workshopIndicators, setWorkshopIndicators] = useState(() => safeParse('zitron_workshop_indicators', INITIAL_WORKSHOP_INDICATORS));
+
+  useEffect(() => {
+    safeLocalStorageSetItem('zitron_workshop_indicators', JSON.stringify(workshopIndicators));
+  }, [workshopIndicators, safeLocalStorageSetItem]);
+
+  const [bodegas, setBodegas] = useState<Bodega[]>([]);
+  const [tiposProducto, setTiposProducto] = useState<TipoProducto[]>([]);
+  const [movimientosBodega, setMovimientosBodega] = useState<MovimientoBodega[]>([]);
+
+  const [globalUsers, setGlobalUsers] = useState<User[]>([]);
+  const [top15Users, setTop15Users] = useState<User[]>([]);
+  const [top60Users, setTop60Users] = useState<User[]>([]);
+  const [showGlobalUserConfig, setShowGlobalUserConfig] = useState(false);
+  const [showGlobalPinModal, setShowGlobalPinModal] = useState(false);
+  const [showPasswordConfig, setShowPasswordConfig] = useState(false);
+  const [showTop60PinModal, setShowTop60PinModal] = useState(false);
+  const [top60Pin, setTop60Pin] = useState('');
+  const [top60PinError, setTop60PinError] = useState(false);
+  const [globalPin, setGlobalPin] = useState('');
+  const [globalPinError, setGlobalPinError] = useState(false);
+  const [passwords, setPasswords] = useState({
+    jefeEquipo: '1234',
+    jefeTaller: '1234',
+    directorOperaciones: '1234',
+    asistenciaTecnica: '1234'
+  });
+
+  const [top60SubView, setTop60SubView] = useState<'plan' | 'dashboard'>('dashboard');
+  const [top60Access, setTop60Access] = useState<'cmi' | 'preparacion' | null>(null);
+  const [top15SubView, setTop15SubView] = useState<'plan' | 'indicators'>('indicators');
+  const [isGlobalHelpOpen, setIsGlobalHelpOpen] = useState(false);
+  const [isConnectionHelpOpen, setIsConnectionHelpOpen] = useState(false);
+  const isFetchingRef = useRef(false);
   const [lastConnectionError, setLastConnectionError] = useState<string | null>(null);
   const [showForceClose, setShowForceClose] = useState(false);
 
@@ -243,6 +248,10 @@ const App: React.FC = () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user) fetchUserLevel(session.user.id, session.user.email);
+      setIsAuthLoading(false);
+    }).catch(err => {
+      console.warn("Supabase auth session check failed:", err);
+      setSession(null);
       setIsAuthLoading(false);
     });
 
@@ -797,7 +806,10 @@ const App: React.FC = () => {
                 grouped[o.area].push({
                   ...o,
                   indicator_id: o.indicator_id || o.indicatorId,
-                  valid_from: o.valid_from || o.validFrom
+                  valid_from: o.valid_from || o.validFrom,
+                  showInTop5: o.show_in_top5 || false,
+                  showInTop15: o.show_in_top15 || false,
+                  showInTop60: o.show_in_top60 || false
                 });
               }
             });
@@ -1627,7 +1639,10 @@ const App: React.FC = () => {
           rendimiento: parseFloat(String(obj.rendimiento)) || 0,
           calidad: parseFloat(String(obj.calidad)) || 0,
           productividad: parseFloat(String(obj.productividad)) || 0,
-          objetivo: parseFloat(String(obj.objetivo)) || 0
+          objetivo: parseFloat(String(obj.objetivo)) || 0,
+          showInTop5: obj.showInTop5 !== undefined ? !!obj.showInTop5 : true,
+          showInTop15: obj.showInTop15 !== undefined ? !!obj.showInTop15 : true,
+          showInTop60: obj.showInTop60 !== undefined ? !!obj.showInTop60 : true
         };
 
         if (!groupedUpdates[areaId]) {
@@ -1649,7 +1664,10 @@ const App: React.FC = () => {
           merma1: obj.merma1 || 0,
           merma2: obj.merma2 || 0,
           subproducto: obj.subproducto || 0,
-          pph: obj.pph || 0
+          pph: obj.pph || 0,
+          show_in_top5: newObj.showInTop5,
+          show_in_top15: newObj.showInTop15,
+          show_in_top60: newObj.showInTop60
         });
       });
 
@@ -1770,6 +1788,13 @@ const App: React.FC = () => {
 
       let finalActs = [...updatedActs];
       if (act.formato) {
+        const activeOpenAct = activities.find(a => 
+          (!a.horaFin || String(a.horaFin).trim() === "") &&
+          a.fecha === dateStr &&
+          a.operarios?.some((u: string) => (act.operarios || []).includes(u))
+        );
+        const turboIdToUse = activeOpenAct?.turnoId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `turno-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
+
         (act.operarios || []).forEach((op: string) => {
           const newAct = {
             id: `act-${selectedArea}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -1780,7 +1805,8 @@ const App: React.FC = () => {
             fecha: dateStr,
             area: selectedArea,
             afectaCalidad: act.afectaCalidad,
-            tiempoTeoricoManual: act.tiempoTeoricoManual
+            tiempoTeoricoManual: act.tiempoTeoricoManual,
+            turnoId: turboIdToUse
           };
           finalActs.push(newAct);
           // Only send fields that exist in the DB table
@@ -1888,6 +1914,24 @@ const App: React.FC = () => {
 
       // Add new activities
       if (newActs && newActs.length > 0) {
+        const allNewOps: string[] = [];
+        newActs.forEach(act => {
+          if (act.operarios) {
+            act.operarios.forEach((op: string) => {
+              if (!allNewOps.includes(op)) {
+                allNewOps.push(op);
+              }
+            });
+          }
+        });
+
+        const activeOpenAct = activities.find(a => 
+          (!a.horaFin || String(a.horaFin).trim() === "") &&
+          a.fecha === dateStr &&
+          a.operarios?.some((u: string) => allNewOps.includes(u))
+        );
+        const turboIdToUse = activeOpenAct?.turnoId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `turno-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
+
         const toInsert: any[] = [];
         newActs.forEach((act, actIdx) => {
           (act.operarios || []).forEach((op: string, opIdx: number) => {
@@ -1900,7 +1944,8 @@ const App: React.FC = () => {
               fecha: dateStr,
               area: selectedArea,
               afectaCalidad: act.afectaCalidad,
-              tiempoTeoricoManual: act.tiempoTeoricoManual
+              tiempoTeoricoManual: act.tiempoTeoricoManual,
+              turnoId: turboIdToUse
             });
           });
         });
@@ -2508,7 +2553,8 @@ const App: React.FC = () => {
     forceClose: boolean = false, 
     aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, 
     mermasToSave?: any[],
-    jefe_equipo_filter?: string | null
+    jefe_equipo_filter?: string | null,
+    turnoIdFilter?: string | null
   ) => {
     if (!selectedArea) return;
     setIsLoading(true);
@@ -2518,10 +2564,12 @@ const App: React.FC = () => {
     // Filter activities by the selected shift date
     const areaActivities = activities.filter(a => a.area === selectedArea && a.fecha === fecha);
 
-    // If filtering by coach, separate out activities to keep vs archive
-    const filteredActivities = jefe_equipo_filter
-      ? areaActivities.filter(a => a.jefeEquipo === jefe_equipo_filter)
-      : areaActivities;
+    // If filtering by turnoId, use it; otherwise fallback to coach or keep all for this date
+    const filteredActivities = turnoIdFilter
+      ? areaActivities.filter(a => a.turnoId === turnoIdFilter)
+      : jefe_equipo_filter
+        ? areaActivities.filter(a => a.jefeEquipo === jefe_equipo_filter)
+        : areaActivities;
     
     const remainingActivities = activities.filter(a => !filteredActivities.some(fa => fa.id === a.id));
 
@@ -2836,21 +2884,22 @@ const App: React.FC = () => {
                     mermas={mermas}
                     selectedDate={selectedDate}
                     setSelectedDate={setSelectedDate}
+                    workshopIndicators={workshopIndicators}
                   />
                 )}
                 
                 {/* Group Dashboards */}
                 {selectedArea === 'sala-blanca-dashboard' && (
-                  <SalaBlancaDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} selectedDate={selectedDate} setSelectedDate={setSelectedDate} />
+                  <SalaBlancaDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} selectedDate={selectedDate} setSelectedDate={setSelectedDate} workshopIndicators={workshopIndicators} />
                 )}
                 {selectedArea === 'envasado-dashboard' && (
-                  <EnvasadoDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} selectedDate={selectedDate} setSelectedDate={setSelectedDate} />
+                  <EnvasadoDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} selectedDate={selectedDate} setSelectedDate={setSelectedDate} workshopIndicators={workshopIndicators} />
                 )}
                 {selectedArea === 'expediciones-dashboard' && (
-                  <ExpedicionesDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} selectedDate={selectedDate} setSelectedDate={setSelectedDate} />
+                  <ExpedicionesDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} selectedDate={selectedDate} setSelectedDate={setSelectedDate} workshopIndicators={workshopIndicators} />
                 )}
                 {selectedArea === 'movimientos-dashboard' && (
-                  <MovimientosDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} selectedDate={selectedDate} setSelectedDate={setSelectedDate} />
+                  <MovimientosDashboard history={history} activities={activities} allObjectives={allObjectives} mermas={mermas} selectedDate={selectedDate} setSelectedDate={setSelectedDate} workshopIndicators={workshopIndicators} />
                 )}
               </>
             )}
@@ -2901,6 +2950,7 @@ const App: React.FC = () => {
                         masterSpeeds={masterSpeeds}
                         incidenceMaster={incidenceMaster}
                         allObjectives={allObjectives}
+                        workshopIndicators={workshopIndicators}
                         mermas={mermas}
                         selectedDate={selectedDate}
                         setSelectedDate={setSelectedDate}
@@ -3025,6 +3075,8 @@ const App: React.FC = () => {
                 passwords={passwords}
                 responsibles={responsibles}
                 setResponsibles={setResponsibles}
+                workshopIndicators={workshopIndicators}
+                setWorkshopIndicators={setWorkshopIndicators}
               />
             )}
             {activeTab === 'database' && (

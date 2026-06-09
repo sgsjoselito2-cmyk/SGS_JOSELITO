@@ -26,6 +26,8 @@ interface ConfigPanelProps {
     directorOperaciones: string;
     asistenciaTecnica: string;
   };
+  workshopIndicators: Record<string, {id: string, name: string, formula?: string}[]>;
+  setWorkshopIndicators: React.Dispatch<React.SetStateAction<Record<string, {id: string, name: string, formula?: string}[]>>>;
 }
 
 const ConfigPanel: React.FC<ConfigPanelProps> = ({ 
@@ -43,7 +45,9 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
   onlyPeople = false,
   responsibles = [],
   setResponsibles,
-  passwords
+  passwords,
+  workshopIndicators,
+  setWorkshopIndicators
 }) => {
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [showPassModal, setShowPassModal] = useState(false);
@@ -72,7 +76,25 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
   const [localMasterObjectives, setLocalMasterObjectives] = useState<Record<string, OEEObjectives>>({});
   const [initKey, setInitKey] = useState('');
   const [objectiveValidFrom, setObjectiveValidFrom] = useState(new Date().toISOString().split('T')[0]);
+
+  // Estado local para notificaciones, modal
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'info' | 'error' } | null>(null);
+  const [modalConfig, setModalConfig] = useState<{
+    isOpen: boolean;
+    type: 'prompt' | 'confirm';
+    title: string;
+    message: string;
+    inputs?: { label: string; value: string; key: string; type?: 'text' | 'select'; options?: { label: string; value: string }[] }[];
+    onConfirm: (vals?: Record<string, string>) => void;
+    onCancel: () => void;
+  }>({
+    isOpen: false,
+    type: 'confirm',
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    onCancel: () => {},
+  });
 
   useEffect(() => {
     // Generate a unique footprint key based on selected area, selected date, and allObjectives metadata
@@ -365,54 +387,78 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
     'env-envasado', 'env-empaquetado', 'expedicion', 'preparacion-exp', 'movimiento-jamones'
   ];
 
-  const workshopIndicators: Record<string, {id: string, name: string}[]> = {
-    'sb-loncheado': [
-      { id: 'disponibilidad', name: 'Disponibilidad' },
-      { id: 'rendimiento', name: 'Rendimiento' },
-      { id: 'calidad', name: 'Calidad' },
-      { id: 'merma1', name: 'Merma 1' },
-      { id: 'merma2', name: 'Merma 2' },
-      { id: 'subproducto', name: 'Subproducto' }
-    ],
-    'sb-preparacion': [
-      { id: 'pph', name: 'PPH' }
-    ],
-    'sb-empaquetado-loncheado': [
-      { id: 'pph_blister_emp', name: 'PPH blister empaquetado' },
-      { id: 'pph_sin_blister_cuchillo', name: 'PPH sin blister cuchillo' },
-      { id: 'pph_sin_marcar', name: 'PPH sin marcar' },
-      { id: 'pph_empaquetado_jabu', name: 'PPH empaquetado Jabu' }
-    ],
-    'sb-empaquetado-deshuesado': [
-      { id: 'pph', name: 'PPH' }
-    ],
-    'env-envasado': [
-      { id: 'pph', name: 'PPH' },
-      { id: 'disponibilidad', name: 'Disponibilidad' },
-      { id: 'rendimiento', name: 'Rendimiento' },
-      { id: 'calidad', name: 'Calidad' },
-      { id: 'productividad', name: 'Productividad (OEE)' }
-    ],
-    'env-empaquetado': [
-      { id: 'pph', name: 'PPH' },
-      { id: 'disponibilidad', name: 'Disponibilidad' },
-      { id: 'rendimiento', name: 'Rendimiento' },
-      { id: 'calidad', name: 'Calidad' },
-      { id: 'productividad', name: 'Productividad (OEE)' }
-    ],
-    'movimiento-jamones': [
-      { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },
-      { id: 'pph_paletas', name: 'PPH COLGAR PALETAS' },
-      { id: 'pph_manteca', name: 'PPH COLGAR JAMONES MANTECA' },
-      { id: 'cantidad_colgada', name: 'CANTIDAD COLGADA' },
-      { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' }
-    ],
-    'default': [
-      { id: 'disponibilidad', name: 'Disponibilidad' },
-      { id: 'rendimiento', name: 'Rendimiento' },
-      { id: 'calidad', name: 'Calidad' },
-      { id: 'productividad', name: 'Productividad (OEE)' }
-    ]
+
+  const onAddIndicator = (wsId: string) => {
+    setModalConfig({
+      isOpen: true,
+      type: 'prompt',
+      title: 'Añadir Indicador',
+      message: `Introducir detalles para ${AREA_NAMES[wsId] || wsId}`,
+      inputs: [
+        { label: 'Nombre:', value: '', key: 'name' },
+        { 
+          label: 'Tipo de Indicador:', 
+          value: 'pph', 
+          key: 'id', 
+          type: 'select',
+          options: [
+            { label: 'PPH', value: 'pph' },
+            { label: 'OEE', value: 'productividad' },
+            { label: 'Disponibilidad', value: 'disponibilidad' },
+            { label: 'Rendimiento', value: 'rendimiento' },
+            { label: 'Calidad', value: 'calidad' },
+          ]
+        },
+        { label: 'Fórmula (ej: (campoA / 60) * campoB):', value: '', key: 'formula' }
+      ],
+      onConfirm: (vals) => {
+        if (vals?.name && vals?.id) {
+          setWorkshopIndicators(prev => ({
+            ...prev,
+            [wsId]: [...(prev[wsId] || prev.default), { id: vals.id, name: vals.name, formula: vals.formula }]
+          }));
+          
+          if (selectedArea === 'TOP 60' && onUpdateAllObjectives) {
+            const key = `${wsId}_${vals.id}`;
+            onUpdateAllObjectives({
+              ...localMasterObjectives,
+              [key]: {
+                disponibilidad: 0,
+                rendimiento: 0,
+                calidad: 0,
+                productividad: 0,
+                objetivo: 0,
+                area: wsId,
+                indicator_id: vals.id,
+                valid_from: objectiveValidFrom,
+                showInTop5: false,
+                showInTop15: false,
+                showInTop60: false
+              }
+            }, objectiveValidFrom);
+          }
+        }
+        setModalConfig(prev => ({ ...prev, isOpen: false }));
+      },
+      onCancel: () => setModalConfig(prev => ({ ...prev, isOpen: false }))
+    });
+  };
+
+  const onDeleteIndicator = (wsId: string, indicatorId: string) => {
+    setModalConfig({
+      isOpen: true,
+      type: 'confirm',
+      title: 'Eliminar Indicador',
+      message: '¿Estás seguro de eliminar este indicador?',
+      onConfirm: () => {
+        setWorkshopIndicators(prev => ({
+          ...prev,
+          [wsId]: (prev[wsId] || prev.default).filter(ind => ind.id !== indicatorId)
+        }));
+        setModalConfig(prev => ({ ...prev, isOpen: false }));
+      },
+      onCancel: () => setModalConfig(prev => ({ ...prev, isOpen: false }))
+    });
   };
 
   const handleUpdateMasterCell = (areaId: string, indicator_id: string, field: keyof OEEObjectives, value: number) => {
@@ -431,6 +477,26 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
       ...prev,
       [key]: updated
     }));
+  };
+
+  const handleToggleDashboard = (areaId: string, indicator_id: string, dashboardField: 'showInTop5' | 'showInTop15' | 'showInTop60', currentValue: boolean) => {
+    const key = `${areaId}_${indicator_id}`;
+    const current = localMasterObjectives[key] || { 
+      disponibilidad: 0, rendimiento: 0, calidad: 0, productividad: 0, objetivo: 0, area: areaId, indicator_id: indicator_id, valid_from: objectiveValidFrom 
+    };
+    const newValue = !currentValue;
+    const updatedObj = { ...current, [dashboardField]: newValue };
+    
+    const updatedMap = {
+      ...localMasterObjectives,
+      [key]: updatedObj
+    };
+    
+    setLocalMasterObjectives(updatedMap);
+    
+    if (onUpdateAllObjectives) {
+      onUpdateAllObjectives(updatedMap, objectiveValidFrom);
+    }
   };
 
   const saveMasterObjectives = () => {
@@ -467,6 +533,111 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 ))}
               </div>
               {pinError && <p className="text-center text-red-500 font-black text-[14px] uppercase mt-3 animate-bounce">❌ PIN INCORRECTO</p>}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* MODAL GESTIÓN INDICADORES */}
+      {modalConfig.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl">
+            <h3 className="text-xl font-black uppercase text-slate-800 mb-2">{modalConfig.title}</h3>
+            <p className="text-slate-600 mb-6">{modalConfig.message}</p>
+            {modalConfig.type === 'prompt' && modalConfig.inputs?.map(input => (
+              <div key={input.key} className="mb-4">
+                <label className="block text-xs font-bold uppercase text-slate-500 mb-1">{input.label}</label>
+                {input.type === 'select' ? (
+                  <select
+                    className="w-full bg-slate-100 rounded-lg p-2 font-bold text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-500"
+                    value={input.value}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setModalConfig(prev => ({
+                        ...prev,
+                        inputs: prev.inputs?.map(i => i.key === input.key ? {...i, value: val} : i)
+                      }));
+                    }}
+                  >
+                    {input.options?.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <>
+                  {input.key === 'formula' && (
+                    <div className="mb-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                      <p className="text-xs font-bold text-slate-500 uppercase mb-2">Campos disponibles:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {['disponibilidad', 'rendimiento', 'calidad', 'productividad', 'pph', 'cantidad_colgada'].map(field => (
+                          <button 
+                            key={field}
+                            type="button"
+                            onClick={() => {
+                              const val = input.value + field;
+                              setModalConfig(prev => ({
+                                ...prev,
+                                inputs: prev.inputs?.map(i => i.key === input.key ? {...i, value: val} : i)
+                              }));
+                            }}
+                            className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold hover:bg-blue-200"
+                          >
+                            {field}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs font-bold text-slate-500 uppercase mt-3 mb-2">Operadores:</p>
+                      <div className="flex gap-2">
+                        {['+', '-', '*', '/', '(', ')'].map(op => (
+                          <button 
+                            key={op}
+                            type="button"
+                            onClick={() => {
+                              const val = input.value + op;
+                              setModalConfig(prev => ({
+                                ...prev,
+                                inputs: prev.inputs?.map(i => i.key === input.key ? {...i, value: val} : i)
+                              }));
+                            }}
+                            className="bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs font-bold hover:bg-slate-300"
+                          >
+                            {op}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <input
+                    type="text"
+                    className="w-full bg-slate-100 rounded-lg p-2 font-bold text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-500"
+                    value={input.value}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setModalConfig(prev => ({
+                        ...prev,
+                        inputs: prev.inputs?.map(i => i.key === input.key ? {...i, value: val} : i)
+                      }));
+                    }}
+                  />
+                  </>
+                )}
+              </div>
+            ))}
+            <div className="flex gap-4 mt-8">
+              <button onClick={modalConfig.onCancel} className="flex-1 rounded-xl bg-slate-200 text-slate-700 py-3 font-black text-sm uppercase transition-all active:scale-95">Cancelar</button>
+              <button 
+                onClick={() => {
+                  if (modalConfig.type === 'prompt') {
+                    const vals = modalConfig.inputs?.reduce((acc, curr) => ({...acc, [curr.key]: curr.value}), {});
+                    modalConfig.onConfirm(vals);
+                  } else {
+                    modalConfig.onConfirm();
+                  }
+                }} 
+                className="flex-1 rounded-xl bg-blue-600 text-white py-3 font-black text-sm uppercase transition-all active:scale-95"
+              >
+                Confirmar
+              </button>
             </div>
           </div>
         </div>
@@ -547,6 +718,9 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                   <th className="p-4 text-[14px] font-black uppercase tracking-widest border-b border-slate-800 text-center">Calidad (%)</th>
                   <th className="p-4 text-[14px] font-black uppercase tracking-widest border-b border-slate-800 text-center">Prod. (%)</th>
                   <th className="p-4 text-[14px] font-black uppercase tracking-widest border-b border-slate-800 text-center">Objetivo</th>
+                  <th className="p-2 text-[12px] font-black uppercase tracking-widest border-b border-slate-800 text-center">TOP 5</th>
+                  <th className="p-2 text-[12px] font-black uppercase tracking-widest border-b border-slate-800 text-center">TOP 15</th>
+                  <th className="p-2 text-[12px] font-black uppercase tracking-widest border-b border-slate-800 text-center">TOP 60</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
@@ -555,8 +729,11 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                   return (
                     <React.Fragment key={wsId}>
                       <tr className="bg-slate-50">
-                        <td colSpan={6} className="p-2 text-[14px] font-black text-slate-800 uppercase tracking-widest pl-4 border-b border-slate-200">
+                        <td colSpan={9} className="p-2 text-[14px] font-black text-slate-800 uppercase tracking-widest pl-4 border-b border-slate-200 flex justify-between items-center">
                           {AREA_NAMES[wsId]}
+                          {isAdminMode && (
+                            <button type="button" onClick={() => onAddIndicator(wsId)} className="bg-blue-600 text-white rounded-lg px-2 py-1 text-xs font-black uppercase">+</button>
+                          )}
                         </td>
                       </tr>
                       {indicators.map(ind => {
@@ -566,17 +743,20 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                           ? { disponibilidad: 90, rendimiento: 50, calidad: 100, productividad: 45, objetivo: 45 }
                           : { disponibilidad: 90, rendimiento: 70, calidad: 99, productividad: 62.4, objetivo: 62 };
                         
-                        const obj = localMasterObjectives[key] || { 
+                        const obj = (localMasterObjectives[key] || { 
                           disponibilidad: isOEE ? defaultObj.disponibilidad : 0, 
                           rendimiento: isOEE ? defaultObj.rendimiento : 0, 
                           calidad: isOEE ? defaultObj.calidad : 0, 
                           productividad: isOEE ? defaultObj.productividad : 0, 
                           objetivo: isOEE ? defaultObj.objetivo : 0 
-                        };
+                        }) as OEEObjectives;
                         return (
                           <tr key={key} className="hover:bg-slate-50 transition-colors">
                             <td className="p-4 pl-8 text-[13px] font-bold text-slate-500 uppercase tracking-tight border-r border-slate-100 italic">
-                              {ind.name}
+                              {ind.name}                
+                              {isAdminMode && (
+                                <button type="button" onClick={() => onDeleteIndicator(wsId, ind.id)} className="bg-red-500 text-white rounded-lg px-2 py-1 text-xs font-black uppercase float-right">x</button>
+                              )}
                             </td>
                             <td className="p-2 border-r border-slate-100">
                               {isOEE && (
@@ -614,7 +794,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                             <td className="p-4 text-center text-[13px] font-black text-slate-400 border-r border-slate-100">
                               {isOEE ? `${obj.productividad}%` : '-'}
                             </td>
-                            <td className="p-2">
+                            <td className="p-2 border-r border-slate-100">
                               <input 
                                 type="number" 
                                 disabled={!isAdminMode}
@@ -622,6 +802,33 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                                 onChange={(e) => handleUpdateMasterCell(wsId, ind.id, 'objetivo', parseFloat(e.target.value) || 0)}
                                 className={`w-full bg-transparent border-none text-center text-[14px] font-black focus:ring-0 ${isAdminMode ? 'text-indigo-600 cursor-pointer' : 'text-slate-500'}`}
                                 placeholder="Definir..."
+                              />
+                            </td>
+                            <td className="p-2 border-r border-slate-100 text-center">
+                              <input 
+                                type="checkbox"
+                                disabled={!isAdminMode}
+                                checked={obj.showInTop5 !== undefined ? !!obj.showInTop5 : true}
+                                onChange={() => handleToggleDashboard(wsId, ind.id, 'showInTop5', obj.showInTop5 !== undefined ? !!obj.showInTop5 : true)}
+                                className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer disabled:cursor-not-allowed mx-auto"
+                              />
+                            </td>
+                            <td className="p-2 border-r border-slate-100 text-center">
+                              <input 
+                                type="checkbox"
+                                disabled={!isAdminMode}
+                                checked={obj.showInTop15 !== undefined ? !!obj.showInTop15 : true}
+                                onChange={() => handleToggleDashboard(wsId, ind.id, 'showInTop15', obj.showInTop15 !== undefined ? !!obj.showInTop15 : true)}
+                                className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer disabled:cursor-not-allowed mx-auto"
+                              />
+                            </td>
+                            <td className="p-2 text-center">
+                              <input 
+                                type="checkbox"
+                                disabled={!isAdminMode}
+                                checked={obj.showInTop60 !== undefined ? !!obj.showInTop60 : true}
+                                onChange={() => handleToggleDashboard(wsId, ind.id, 'showInTop60', obj.showInTop60 !== undefined ? !!obj.showInTop60 : true)}
+                                className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer disabled:cursor-not-allowed mx-auto"
                               />
                             </td>
                           </tr>

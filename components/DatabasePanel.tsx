@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Activity, TaskType, User } from '../types';
-import { calcDuration, cleanText, normalizeDate } from '../src/utils';
+import { calcDuration, cleanText, normalizeDate } from '../src/utils/index';
 import { 
   Lock, 
   Check, 

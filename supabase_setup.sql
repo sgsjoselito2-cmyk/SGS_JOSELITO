@@ -68,6 +68,9 @@ CREATE TABLE IF NOT EXISTS oee_objectives (
     pph NUMERIC DEFAULT 0,
     indicator_id TEXT,
     valid_from DATE NOT NULL,
+    show_in_top5 BOOLEAN DEFAULT TRUE,
+    show_in_top15 BOOLEAN DEFAULT TRUE,
+    show_in_top60 BOOLEAN DEFAULT TRUE,
     last_modified TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -419,3 +422,8 @@ GRANT ALL ON TABLE tipos_producto TO anon;
 GRANT ALL ON TABLE tipos_producto TO authenticated;
 GRANT ALL ON TABLE movimientos_bodega TO anon;
 GRANT ALL ON TABLE movimientos_bodega TO authenticated;
+
+-- Migration to add dashboard visibility toggles to oee_objectives table
+ALTER TABLE oee_objectives ADD COLUMN IF NOT EXISTS show_in_top5 BOOLEAN DEFAULT TRUE;
+ALTER TABLE oee_objectives ADD COLUMN IF NOT EXISTS show_in_top15 BOOLEAN DEFAULT TRUE;
+ALTER TABLE oee_objectives ADD COLUMN IF NOT EXISTS show_in_top60 BOOLEAN DEFAULT TRUE;

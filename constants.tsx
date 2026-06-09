@@ -132,3 +132,53 @@ export const getInitialIncidenceMaster = (areaId: string): IncidenceMaster[] => 
 };
 
 export const INITIAL_INCIDENCE_MASTER: IncidenceMaster[] = getInitialIncidenceMaster('sb-preparacion');
+
+export const INITIAL_WORKSHOP_INDICATORS: Record<string, {id: string, name: string, formula?: string}[]> = {
+  'sb-loncheado': [
+    { id: 'disponibilidad', name: 'Disponibilidad' },
+    { id: 'rendimiento', name: 'Rendimiento' },
+    { id: 'calidad', name: 'Calidad' },
+    { id: 'merma1', name: 'Merma 1' },
+    { id: 'merma2', name: 'Merma 2' },
+    { id: 'subproducto', name: 'Subproducto' }
+  ],
+  'sb-preparacion': [
+    { id: 'pph', name: 'PPH' }
+  ],
+  'sb-empaquetado-loncheado': [
+    { id: 'pph_blister_emp', name: 'PPH blister empaquetado' },
+    { id: 'pph_sin_blister_cuchillo', name: 'PPH sin blister cuchillo' },
+    { id: 'pph_sin_marcar', name: 'PPH sin marcar' },
+    { id: 'pph_empaquetado_jabu', name: 'PPH empaquetado Jabu' }
+  ],
+  'sb-empaquetado-deshuesado': [
+    { id: 'pph', name: 'PPH' }
+  ],
+  'env-envasado': [
+    { id: 'pph', name: 'PPH' },
+    { id: 'disponibilidad', name: 'Disponibilidad' },
+    { id: 'rendimiento', name: 'Rendimiento' },
+    { id: 'calidad', name: 'Calidad' },
+    { id: 'productividad', name: 'Productividad (OEE)' }
+  ],
+  'env-empaquetado': [
+    { id: 'pph', name: 'PPH' },
+    { id: 'disponibilidad', name: 'Disponibilidad' },
+    { id: 'rendimiento', name: 'Rendimiento' },
+    { id: 'calidad', name: 'Calidad' },
+    { id: 'productividad', name: 'Productividad (OEE)' }
+  ],
+  'movimiento-jamones': [
+    { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },
+    { id: 'pph_paletas', name: 'PPH COLGAR PALETAS' },
+    { id: 'pph_manteca', name: 'PPH COLGAR JAMONES MANTECA' },
+    { id: 'cantidad_colgada', name: 'CANTIDAD COLGADA' },
+    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' }
+  ],
+  'default': [
+    { id: 'disponibilidad', name: 'Disponibilidad' },
+    { id: 'rendimiento', name: 'Rendimiento' },
+    { id: 'calidad', name: 'Calidad' },
+    { id: 'productividad', name: 'Productividad (OEE)' }
+  ]
+};

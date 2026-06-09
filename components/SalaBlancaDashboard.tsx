@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Activity, OEEObjectives, TaskType } from '../types';
 import { calculateStats, getWeekNumber } from './Dashboard';
-import { calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals } from '../src/utils';
+import { calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals } from '../src/utils/index';
 import { INITIAL_OEE_OBJECTIVES } from '../constants';
 
 const parseLocalDate = (dateStr: string) => {
@@ -30,9 +30,10 @@ interface Props {
   mermas?: any[];
   selectedDate?: string;
   setSelectedDate?: (d: string) => void;
+  workshopIndicators: Record<string, {id: string, name: string, formula?: string}[]>;
 }
 
-const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, areas, title, subtitle, mermas = [], selectedDate: propDate, setSelectedDate: propSetDate }) => {
+const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, areas, title, subtitle, mermas = [], selectedDate: propDate, setSelectedDate: propSetDate, workshopIndicators }) => {
   const [localDate, setLocalDate] = useState(new Date().toISOString().split('T')[0]);
   const selectedDate = propDate || localDate;
   const setSelectedDate = propSetDate || setLocalDate;
@@ -151,58 +152,16 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
       
       // Determine indicators for this area
       let areaIndicators: any[] = [];
-
-      if (area.id === 'sb-preparacion') {
-        areaIndicators = [
-          { id: 'pph', label: 'PPH PESAR', objKey: 'pph' }
-        ];
-      } else if (area.id === 'sb-loncheado') {
-        areaIndicators = [
-          { id: 'disponibilidad', label: 'DISPONIBILIDAD (%)', objKey: 'disponibilidad' as const },
-          { id: 'rendimiento',  label: 'RENDIMIENTO (%)',  objKey: 'rendimiento' as const },
-          { id: 'calidad',      label: 'CALIDAD (%)', objKey: 'calidad' as const }
-        ];
-      } else if (area.id === 'sb-empaquetado-loncheado') {
-        areaIndicators = [
-          { id: 'pph_blister_emp', label: 'PPH blister empaquetado', objKey: 'pph_blister_emp' },
-          { id: 'pph_sin_blister_cuchillo', label: 'PPH sin blister cuchillo', objKey: 'pph_sin_blister_cuchillo' },
-          { id: 'pph_sin_marcar', label: 'PPH sin marcar', objKey: 'pph_sin_marcar' },
-          { id: 'pph_empaquetado_jabu', label: 'PPH empaquetado Jabu', objKey: 'pph_empaquetado_jabu' }
-        ];
-      } else if (area.id === 'sb-empaquetado-deshuesado') {
-        areaIndicators = [
-          { id: 'pph', label: 'PPH', objKey: 'pph' }
-        ];
-      } else if (area.id === 'env-envasado') {
-        areaIndicators = [
-          { id: 'pph', label: 'PPH ENVASADO', objKey: 'pph' as const },
-          { id: 'disponibilidad', label: 'DISPONIBILIDAD (%)', objKey: 'disponibilidad' as const },
-          { id: 'rendimiento',  label: 'RENDIMIENTO (%)',  objKey: 'rendimiento' as const },
-          { id: 'calidad',      label: 'CALIDAD (%)', objKey: 'calidad' as const }
-        ];
-      } else if (area.id === 'env-empaquetado') {
-        areaIndicators = [
-          { id: 'pph', label: 'PPH EMPAQUETADO', objKey: 'pph' as const },
-          { id: 'disponibilidad', label: 'DISPONIBILIDAD (%)', objKey: 'disponibilidad' as const },
-          { id: 'rendimiento',  label: 'RENDIMIENTO (%)',  objKey: 'rendimiento' as const },
-          { id: 'calidad',      label: 'CALIDAD (%)', objKey: 'calidad' as const }
-        ];
-      } else if (area.id === 'movimiento-jamones') {
-        areaIndicators = [
-          { id: 'pph_jamones', label: 'PPH COLGAR JAMONES', objKey: 'pph_jamones' },
-          { id: 'pph_paletas', label: 'PPH COLGAR PALETAS', objKey: 'pph_paletas' },
-          { id: 'pph_manteca', label: 'PPH COLGAR JAMONES MANTECA', objKey: 'pph_manteca' },
-          { id: 'cantidad_colgada', label: 'CANTIDAD COLGADA', objKey: 'cantidad_colgada' },
-          { id: 'disponibilidad', label: 'DISPONIBILIDAD (%)', objKey: 'disponibilidad' as const }
-        ];
-      } else {
-        // Default for other dashboards (Expediciones) that use GroupDashboard
-        areaIndicators = [
-          { id: 'disponibilidad', label: 'DISPONIBILIDAD (%)', objKey: 'disponibilidad' as const },
-          { id: 'rendimiento',  label: 'RENDIMIENTO (%)',  objKey: 'rendimiento' as const },
-          { id: 'calidad',      label: 'CALIDAD (%)', objKey: 'calidad' as const }
-        ];
+      let configuredIndicators = workshopIndicators[area.id] || workshopIndicators.default;
+      if (area.id === 'sb-loncheado') {
+        configuredIndicators = configuredIndicators.filter(ind => ind.id !== 'merma1');
       }
+      
+      areaIndicators = configuredIndicators.map(ind => ({
+        id: ind.id,
+        label: ind.name.toUpperCase(),
+        objKey: ind.id
+      }));
 
       const rowsForArea: any[] = [];
       areaIndicators.forEach(ind => {
@@ -495,6 +454,7 @@ export const SalaBlancaDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'subt
       { id: 'sb-empaquetado-deshuesado', name: 'EMP. DESHUESADO' },
     ]}
     mermas={props.mermas}
+    workshopIndicators={props.workshopIndicators}
   />
 );
 
@@ -506,6 +466,7 @@ export const EnvasadoDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'subtit
       { id: 'env-envasado',    name: 'ENVASADO' },
       { id: 'env-empaquetado', name: 'EMPAQUETADO' },
     ]}
+    workshopIndicators={props.workshopIndicators}
   />
 );
 
@@ -517,6 +478,7 @@ export const ExpedicionesDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'su
       { id: 'expedicion',      name: 'EXPEDICIONES' },
       { id: 'preparacion-exp', name: 'PREP. EXPEDICIONES' },
     ]}
+    workshopIndicators={props.workshopIndicators}
   />
 );
 
@@ -591,6 +553,7 @@ export const MovimientosDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'sub
         title="Movimientos"
         subtitle="Logística Interna"
         areas={[{ id: 'movimiento-jamones', name: 'MOVIMIENTOS' }]}
+        workshopIndicators={props.workshopIndicators}
       />
     </div>
   );

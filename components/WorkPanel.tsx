@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { TaskType, Activity, IncidenceMaster, MasterSpeed, OEEObjectives, User } from '../types';
 import { AREA_COLUMNS } from '../constants';
-import { calcDuration, calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals } from '../src/utils';
+import { calcDuration, calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals } from '../src/utils/index';
 import HelpModal from './HelpModal';
 import { Check, X, Edit2, Trash2, Calendar, Star, Shield } from 'lucide-react';
 
@@ -17,7 +17,7 @@ interface WorkPanelProps {
   onEndTurn: (userNames: string[], closureData?: { cantidad: number, comentarios: string, id?: string }) => void;
   onUpdateActivity?: (activity: Activity) => void;
   onDeleteActivity?: (id: string, isHistory: boolean) => void;
-  onFinalizeShift: (fecha: string, forceClose?: boolean, aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, mermasToSave?: any[], jefe_equipo_filter?: string | null) => void;
+  onFinalizeShift: (fecha: string, forceClose?: boolean, aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, mermasToSave?: any[], jefe_equipo_filter?: string | null, turnoIdFilter?: string | null) => void;
   onRefresh: () => void;
   onAddMultipleActivities?: (newActivities: any[], closedActivitiesData: any[]) => void;
   isEndModalOpen: boolean;
@@ -307,7 +307,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
     }
   }, [selectedDate]);
   const [activeOperators, setActiveOperators] = useState<string[]>([]);
-  const [pendingShiftFinalization, setPendingShiftFinalization] = useState<{fecha: string, force: boolean, aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, mermasToSave?: any[]} | null>(null);
+  const [pendingShiftFinalization, setPendingShiftFinalization] = useState<{fecha: string, force: boolean, aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, mermasToSave?: any[], turnoIdFilter?: string | null} | null>(null);
 
   const handleEdit = (record: Activity) => {
     setEditingId(record.id);
@@ -405,7 +405,8 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
             pendingShiftFinalization.force,
             pendingShiftFinalization.aggregatedQuantities,
             pendingShiftFinalization.mermasToSave,
-            selectedArea === 'movimiento-jamones' ? jefeEquipoTurno : null
+            selectedArea === 'movimiento-jamones' ? jefeEquipoTurno : null,
+            pendingShiftFinalization.turnoIdFilter
           );
           if (selectedArea === 'movimiento-jamones') {
             setJefeEquipoTurno(null);
@@ -647,7 +648,10 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
     const oldestRecord = activities[0];
     const defaultDate = selectedDate || oldestRecord?.fecha || new Date().toISOString().split('T')[0];
     setShiftDate(defaultDate);
-    const openSessions = activities.filter(a => !a.horaFin || String(a.horaFin).trim() === "");
+    const openSessions = activities.filter(a => 
+      (!a.horaFin || String(a.horaFin).trim() === "") &&
+      a.operarios?.some(o => selectedUsers.includes(o))
+    );
     if (openSessions.length > 0) { 
       const allOps: string[] = [];
       openSessions.forEach(s => {
@@ -659,8 +663,22 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
     }
     else {
       setIsForcingClosure(false);
+      
+      const relevantActivities = activities.filter(a => 
+        a.fecha === defaultDate && 
+        a.operarios?.some(o => selectedUsers.includes(o))
+      );
+      const currentTurnId = relevantActivities.find(a => a.turnoId)?.turnoId;
+
       // Group production activities by format
-      const prodActivities = activities.filter(a => a.tipoTarea === TaskType.PRODUCCION);
+      const prodActivities = activities.filter(a => {
+        if (a.tipoTarea !== TaskType.PRODUCCION) return false;
+        if (a.fecha !== defaultDate) return false;
+        if (currentTurnId) {
+          return a.turnoId === currentTurnId;
+        }
+        return a.operarios?.some(o => selectedUsers.includes(o));
+      });
       const formats = Array.from(new Set(prodActivities.map(a => a.formato)));
       
       if (formats.length === 0) {
@@ -687,7 +705,19 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
   };
 
   const executeFinalizeShift = (aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, mermasToSave?: any[]) => {
-    setPendingShiftFinalization({ fecha: shiftDate, force: isForcingClosure, aggregatedQuantities, mermasToSave });
+    const relevantActivities = activities.filter(a => 
+      a.fecha === shiftDate && 
+      a.operarios?.some(o => selectedUsers.includes(o))
+    );
+    const currentTurnId = relevantActivities.find(a => a.turnoId)?.turnoId || null;
+
+    setPendingShiftFinalization({ 
+      fecha: shiftDate, 
+      force: isForcingClosure, 
+      aggregatedQuantities, 
+      mermasToSave,
+      turnoIdFilter: currentTurnId
+    });
     setShowPassModal(true);
     setShowShiftConfirmModal(false);
     setShowShiftConflictModal(false);

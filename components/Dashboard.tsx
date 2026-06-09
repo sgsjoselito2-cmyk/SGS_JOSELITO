@@ -7,7 +7,7 @@ import Markdown from 'react-markdown';
 import { GoogleGenAI } from "@google/genai";
 import { Activity, MasterSpeed, IncidenceMaster, OEEObjectives, TaskType } from '../types';
 import { generateContentWithRetry } from '../src/utils/aiUtils';
-import { calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals } from '../src/utils';
+import { calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals } from '../src/utils/index';
 import { X } from 'lucide-react';
 
 interface DashboardProps {
@@ -22,6 +22,7 @@ interface DashboardProps {
   mermas?: any[];
   selectedDate?: string;
   setSelectedDate?: (d: string) => void;
+  workshopIndicators: Record<string, {id: string, name: string, formula?: string}[]>;
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
@@ -274,7 +275,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   selectedArea,
   mermas = [],
   selectedDate: propDate,
-  setSelectedDate: propSetDate
+  setSelectedDate: propSetDate,
+  workshopIndicators
 }) => {
   const [localDate, setLocalDate] = useState(new Date().toISOString().split('T')[0]);
   const selectedDate = propDate || localDate;
@@ -623,51 +625,23 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [selectedDate, workshopName]);
 
   const renderScorecardTable = (title: string, data: any[]) => {
-    let indicators = [
-      { id: 'disponibilidad', objKey: 'disponibilidad', label: 'DISPONIBILIDAD (%)' },
-      { id: 'rendimiento', objKey: 'rendimiento', label: 'RENDIMIENTO (%)' },
-      { id: 'calidad', objKey: 'calidad', label: 'CALIDAD (%)' }
-    ];
+    const rawIndicators = workshopIndicators[selectedArea || 'default'] || workshopIndicators.default;
+    const indicators = rawIndicators.map(ind => {
+      const objs = (allObjectives && allObjectives[selectedArea || '']) || [];
+      const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+      const spec = sorted.find(o => o.indicator_id === ind.id);
+      return {
+        id: ind.id,
+        objKey: ind.id,
+        label: ind.name.toUpperCase(),
+        showInTop5: spec ? spec.showInTop5 === true : true
+      };
+    });
 
-    if (selectedArea === 'movimiento-jamones') {
-      indicators = indicators.filter(ind => ind.id !== 'rendimiento' && ind.id !== 'calidad');
-    }
-
-    if (selectedArea === 'sb-loncheado') {
-      indicators.push(
-        { id: 'merma1', objKey: 'merma1', label: 'MERMA 1 (%)' },
-        { id: 'merma2', objKey: 'merma2', label: 'MERMA 2 (%)' },
-        { id: 'subproducto', objKey: 'subproducto', label: 'SUBPRODUCTO (%)' }
-      );
-    }
-    if (selectedArea === 'sb-preparacion') {
-      indicators.unshift({ id: 'pph', objKey: 'pph', label: 'PPH PESAR' });
-    }
-    if (selectedArea === 'sb-empaquetado-loncheado') {
-      indicators.unshift(
-        { id: 'pph_blister_emp', objKey: 'pph_blister_emp', label: 'PPH BLISTER EMPAQUETADO' },
-        { id: 'pph_sin_blister_cuchillo', objKey: 'pph_sin_blister_cuchillo', label: 'PPH SIN BLISTER CUCHILLO' },
-        { id: 'pph_sin_marcar', objKey: 'pph_sin_marcar', label: 'PPH SIN MARCAR' },
-        { id: 'pph_empaquetado_jabu', objKey: 'pph_empaquetado_jabu', label: 'PPH EMPAQUETADO JABU' }
-      );
-    }
-    if (selectedArea === 'sb-empaquetado-deshuesado') {
-      indicators.unshift({ id: 'pph', objKey: 'pph', label: 'PPH' });
-    }
-    if (selectedArea === 'env-envasado') {
-      indicators.unshift({ id: 'pph', objKey: 'pph', label: 'PPH ENVASADO' });
-    }
-    if (selectedArea === 'env-empaquetado') {
-      indicators.unshift({ id: 'pph', objKey: 'pph', label: 'PPH EMPAQUETADO' });
-    }
-    if (selectedArea === 'movimiento-jamones') {
-      indicators.unshift(
-        { id: 'pph_jamones', objKey: 'pph_jamones', label: 'PPH COLGAR JAMONES' },
-        { id: 'pph_paletas', objKey: 'pph_paletas', label: 'PPH COLGAR PALETAS' },
-        { id: 'pph_manteca', objKey: 'pph_manteca', label: 'PPH COLGAR JAMONES MANTECA' },
-        { id: 'cantidad_colgada', objKey: 'cantidad_colgada', label: 'CANTIDAD COLGADA' }
-      );
-    }
+    const indicadoresFiltrados = indicators.filter(
+      ind => ind.showInTop5 === true
+    );
+    console.log('Indicadores TOP 5:', indicadoresFiltrados);
 
     return (
       <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm overflow-hidden max-h-[500px] overflow-y-auto">
@@ -680,7 +654,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             </tr>
           </thead>
           <tbody>
-            {indicators.map((indicator) => {
+            {indicadoresFiltrados.map((indicator) => {
               const staticObj = (oeeObjectives as any)[indicator.objKey || ''] || 0;
               const isLowerBetter = indicator.id.startsWith('merma') || indicator.id === 'subproducto';
               const isPPH = indicator.id.startsWith('pph') || indicator.id === 'cantidad_colgada';
@@ -745,8 +719,16 @@ const Dashboard: React.FC<DashboardProps> = ({
       kpis.push({ label: 'PPH COLGAR JAMONES MANTECA', val: stats.pph_manteca, obj: getObjectiveForDate('pph_manteca', selectedDate), color: 'indigo', key: 'pph_manteca' });
       kpis.push({ label: 'CANTIDAD COLGADA', val: stats.cantidad_colgada, obj: getObjectiveForDate('cantidad_colgada', selectedDate) || 2000, color: 'indigo', key: 'cantidad_colgada' });
     }
-    return kpis;
-  }, [selectedArea, stats, selectedDate]);
+    return kpis.filter(kpi => {
+      const objs = allObjectives[selectedArea || ''] || [];
+      const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+      const spec = sorted.find(o => o.indicator_id === kpi.key);
+      if (spec) {
+        return spec.showInTop5 !== undefined ? !!spec.showInTop5 : true;
+      }
+      return true;
+    });
+  }, [selectedArea, stats, selectedDate, allObjectives]);
 
   const formatDetailedStats = useMemo(() => {
     const formats = Array.from(new Set(dayData.filter(a => a.formato).map(a => a.formato))).sort();
@@ -798,23 +780,26 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-1 sm:gap-2 shrink-0">
-        <div className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center sm:gap-2 px-1 sm:px-3 text-center sm:text-left">
-          <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-tighter">Dispon.</span>
-          <span className="text-[12px] sm:text-base font-black text-slate-900 tracking-tighter leading-none">{stats.disponibilidad}{stats.disponibilidad !== '' ? '%' : ''}</span>
-        </div>
-        <div className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center sm:gap-2 px-1 sm:px-3 text-center sm:text-left">
-          <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-tighter">Rendim.</span>
-          <span className="text-[12px] sm:text-base font-black text-slate-900 tracking-tighter leading-none">{stats.rendimiento}{stats.rendimiento !== '' ? '%' : ''}</span>
-        </div>
-        <div className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center sm:gap-2 px-1 sm:px-3 text-center sm:text-left">
-          <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-tighter">Calidad</span>
-          <span className="text-[12px] sm:text-base font-black text-slate-900 tracking-tighter leading-none">{stats.calidad}{stats.calidad !== '' ? '%' : ''}</span>
-        </div>
-        <div className="bg-slate-900 p-2 rounded-xl border border-slate-800 shadow-md flex flex-col sm:flex-row items-center sm:gap-2 px-1 sm:px-3 text-center sm:text-left">
-          <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-tighter">OEE</span>
-          <span className="text-[12px] sm:text-base font-black text-white tracking-tighter leading-none">{stats.productividad}{stats.productividad !== '' ? '%' : ''}</span>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-1 sm:gap-2 shrink-0">
+        {[
+          { label: 'Dispon.', val: `${stats.disponibilidad}${stats.disponibilidad !== '' ? '%' : ''}`, key: 'disponibilidad' },
+          { label: 'Rendim.', val: `${stats.rendimiento}${stats.rendimiento !== '' ? '%' : ''}`, key: 'rendimiento' },
+          { label: 'Calidad', val: `${stats.calidad}${stats.calidad !== '' ? '%' : ''}`, key: 'calidad' },
+          { label: 'OEE', val: `${stats.productividad}${stats.productividad !== '' ? '%' : ''}`, key: 'productividad', isDark: true }
+        ].filter(kpi => {
+          const objs = allObjectives[selectedArea || ''] || [];
+          const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+          const spec = sorted.find(o => o.indicator_id === kpi.key);
+          if (spec) {
+            return spec.showInTop5 === true;
+          }
+          return true;
+        }).map(kpi => (
+          <div key={kpi.label} className={`${kpi.isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-100 text-slate-900'} p-2 rounded-xl border shadow-sm flex flex-col sm:flex-row items-center sm:gap-2 px-1 sm:px-3 text-center sm:text-left`}>
+            <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-tighter">{kpi.label}</span>
+            <span className="text-[12px] sm:text-base font-black tracking-tighter leading-none">{kpi.val}</span>
+          </div>
+        ))}
       </div>
 
       <div className="flex-1 overflow-y-auto pr-1 space-y-2 no-scrollbar pb-24">
@@ -824,7 +809,15 @@ const Dashboard: React.FC<DashboardProps> = ({
             { label: 'Rendimiento', val: stats.rendimiento, obj: getObjectiveForDate('rendimiento', selectedDate), color: 'emerald', key: 'rendimiento' },
             { label: 'Calidad', val: stats.calidad, obj: getObjectiveForDate('calidad', selectedDate), color: 'amber', key: 'calidad' },
             { label: 'OEE Global', val: stats.productividad, obj: getObjectiveForDate('productividad', selectedDate), color: 'slate', isGlobal: true, key: 'productividad' }
-          ].map(kpi => (
+          ].filter(kpi => {
+            const objs = allObjectives[selectedArea || ''] || [];
+            const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+            const spec = sorted.find(o => o.indicator_id === kpi.key);
+            if (spec) {
+              return spec.showInTop5 === true;
+            }
+            return true;
+          }).map(kpi => (
             <div key={kpi.label} className={`${kpi.isGlobal ? 'bg-slate-900 text-white' : 'bg-white'} p-2 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-100 shadow-md relative overflow-hidden group hover:shadow-lg transition-all flex flex-col justify-between`}>
               <div>
                 <h3 className={`${kpi.isGlobal ? 'text-slate-400' : 'text-slate-400'} text-[10px] sm:text-[13px] font-black uppercase tracking-widest mb-0.5`}>{kpi.label}</h3>
