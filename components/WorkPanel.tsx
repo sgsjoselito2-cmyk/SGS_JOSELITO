@@ -306,6 +306,42 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       setShiftDate(selectedDate);
     }
   }, [selectedDate]);
+
+  useEffect(() => {
+    if (showShiftClosureModal) {
+      const actividadesDia = activities.filter(a => 
+        a.fecha === shiftDate &&
+        a.area === selectedArea &&
+        ((a.tipoTarea as string) === 'P' || (a.tipoTarea as string) === TaskType.PRODUCCION)
+      );
+
+      const formatosDia = Array.from(new Set(
+        actividadesDia
+          .map(a => a.formato)
+          .filter(Boolean)
+      ));
+
+      setShiftClosureData(prev => {
+        const newData: Record<string, any> = {};
+        formatosDia.forEach(f => {
+          if (prev[f]) {
+            newData[f] = prev[f];
+          } else {
+            const pedirMerma = selectedArea === 'sb-loncheado';
+            newData[f] = {
+              cantidad: '0', 
+              cantidadNok: '0',
+              esProduccion: true,
+              ...(pedirMerma ? {
+                kgEntrada: '', kgTacos: '', kgPieles: '', kgHueco: '', mediaCombi: '', nEnvases: ''
+              } : {})
+            };
+          }
+        });
+        return newData;
+      });
+    }
+  }, [shiftDate, showShiftClosureModal, activities, selectedArea]);
   const [activeOperators, setActiveOperators] = useState<string[]>([]);
   const [pendingShiftFinalization, setPendingShiftFinalization] = useState<{fecha: string, force: boolean, aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, mermasToSave?: any[], turnoIdFilter?: string | null} | null>(null);
 
@@ -376,6 +412,14 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       // Then by start time (most recent first)
       return (b.horaInicio || "").localeCompare(a.horaInicio || "");
     });
+  }, [activities]);
+
+  const pendingDates = useMemo(() => {
+    const fechaHoy = new Date().toISOString().split('T')[0];
+    const oldDates = activities
+      .map(a => a.fecha)
+      .filter((fecha): fecha is string => !!fecha && fecha < fechaHoy);
+    return Array.from(new Set(oldDates)).sort();
   }, [activities]);
 
   const calculatedTheoreticalTime = useMemo(() => {
@@ -640,17 +684,12 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
     });
   };
 
-  const handleShiftFinalizeRequest = () => {
-    if (activities.length === 0) {
-      setValidationError("⚠️ El diario está vacío.");
-      return;
-    }
-    const oldestRecord = activities[0];
-    const defaultDate = selectedDate || oldestRecord?.fecha || new Date().toISOString().split('T')[0];
-    setShiftDate(defaultDate);
+  const handleShiftFinalizeRequestForDate = (fechaCierre: string) => {
+    setShiftDate(fechaCierre);
     const openSessions = activities.filter(a => 
-      (!a.horaFin || String(a.horaFin).trim() === "") &&
-      a.operarios?.some(o => selectedUsers.includes(o))
+      a.fecha === fechaCierre &&
+      a.area === selectedArea &&
+      (!a.horaFin || String(a.horaFin).trim() === "")
     );
     if (openSessions.length > 0) { 
       const allOps: string[] = [];
@@ -665,25 +704,26 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       setIsForcingClosure(false);
       
       const relevantActivities = activities.filter(a => 
-        a.fecha === defaultDate && 
-        a.operarios?.some(o => selectedUsers.includes(o))
+        a.fecha === fechaCierre && 
+        a.area === selectedArea
       );
       const currentTurnId = relevantActivities.find(a => a.turnoId)?.turnoId;
 
-      // Group production activities by format
+      // Group production activities by format for this shift date and area
       const prodActivities = activities.filter(a => {
-        if (a.tipoTarea !== TaskType.PRODUCCION) return false;
-        if (a.fecha !== defaultDate) return false;
+        if (a.fecha !== fechaCierre) return false;
+        if (a.area !== selectedArea) return false;
+        if ((a.tipoTarea as string) !== 'P' && (a.tipoTarea as string) !== TaskType.PRODUCCION) return false;
         if (currentTurnId) {
           return a.turnoId === currentTurnId;
         }
-        return a.operarios?.some(o => selectedUsers.includes(o));
+        return true;
       });
-      const formats = Array.from(new Set(prodActivities.map(a => a.formato)));
+      const formats = Array.from(new Set(prodActivities.map(a => a.formato).filter(Boolean)));
       
       if (formats.length === 0) {
-        // No hay actividades de producción, mostramos el modal de confirmación con selector de fecha
-        setShowShiftConfirmModal(true);
+        setShiftClosureData({});
+        setShowShiftClosureModal(true);
         return;
       }
 
@@ -702,6 +742,11 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       setShiftClosureData(initialData);
       setShowShiftClosureModal(true);
     }
+  };
+
+  const handleShiftFinalizeRequest = () => {
+    const fechaHoy = new Date().toISOString().split('T')[0];
+    handleShiftFinalizeRequestForDate(fechaHoy);
   };
 
   const executeFinalizeShift = (aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, mermasToSave?: any[]) => {
@@ -833,6 +878,30 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
         />
       </div>
 
+      {/* Banner de días pendientes */}
+      {pendingDates.length > 0 && (
+        <div key="pending-banner" className="bg-amber-50 border-2 border-amber-300 rounded-xl p-3 mb-1 shrink-0 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2 text-amber-800 font-black text-[12px] sm:text-[13px] uppercase tracking-wider mb-2">
+            <span>⚠️ Tienes {pendingDates.length} día(s) pendiente(s) de cerrar</span>
+          </div>
+          <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto no-scrollbar">
+            {pendingDates.map(dateStr => (
+              <div key={dateStr} className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-amber-100 shadow-xs">
+                <span className="font-extrabold text-slate-700 text-xs sm:text-[13px] uppercase">
+                  {getFormattedShiftDate(dateStr)} — {dateStr}
+                </span>
+                <button 
+                  onClick={() => handleShiftFinalizeRequestForDate(dateStr)} 
+                  className="px-3 py-1.5 text-[11px] sm:text-xs font-black text-white bg-amber-600 hover:bg-amber-700 active:scale-95 rounded-lg transition-all uppercase tracking-wider shadow-sm"
+                >
+                  CERRAR ESTE DÍA
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {selectedArea === 'movimiento-jamones' && jefeEquipoTurno && flowStep === 3 && (
         <div className="bg-gradient-to-r from-blue-900 to-indigo-955 p-3 sm:p-4 rounded-2xl shadow-md border border-slate-800 flex items-center justify-between gap-3 shrink-0 text-white select-none">
           <div className="flex items-center gap-2.5">
@@ -911,125 +980,143 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
               <p className="text-slate-400 text-[11px] font-bold uppercase tracking-widest mt-0.5">Introduce las cantidades por formato</p>
             </div>
             
-            <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
               <div>
-                <label className="block text-[9px] font-black text-slate-500 uppercase mb-0.5 tracking-widest">Fecha del Turno</label>
-                <input 
-                  type="date" 
-                  value={shiftDate}
-                  onChange={(e) => setShiftDate(e.target.value)}
-                  className="border-2 border-slate-200 p-1.5 rounded-lg font-bold text-[13px] focus:border-blue-500 outline-none bg-white shadow-sm"
-                />
+                <span className="text-xs font-black text-slate-700 uppercase tracking-widest block">
+                  FECHA DEL TURNO: <span className="text-blue-600 font-extrabold">{getFormattedShiftDate(shiftDate)}</span>
+                </span>
               </div>
               <div className="text-right">
                  <span className="text-[9px] font-black text-slate-400 uppercase block leading-none">Local</span>
-                 <span className="text-[11px] font-bold text-slate-500">{getFormattedShiftDate(shiftDate)}</span>
+                 <span className="text-[11px] font-black text-slate-500 uppercase">{shiftDate}</span>
               </div>
             </div>
 
             <div className="max-h-[65vh] overflow-y-auto p-5 space-y-4">
-              {Object.keys(shiftClosureData).map(formato => {
-                const d = shiftClosureData[formato];
-                const showMerma = isLoncheadoArea && d.esProduccion;
-                const kgEntrada = safeParse(d.kgEntrada || '0') || 0;
-                const kgTacos = safeParse(d.kgTacos || '0') || 0;
-                const kgPieles = safeParse(d.kgPieles || '0') || 0;
-                const kgHueco = safeParse(d.kgHueco || '0') || 0;
-                
-                const formatInfo = masterSpeeds.find(ms => ms.formato === formato);
-                const formatPeso = formatInfo?.peso || 0;
-                const cantOk = safeParse(d.cantidad || '0') || 0;
-                const cantNok = safeParse(d.cantidadNok || '0') || 0;
+              {Object.keys(shiftClosureData).length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">
+                    No hay actividades de producción para esta fecha
+                  </p>
+                </div>
+              ) : (
+                Object.keys(shiftClosureData).map(formato => {
+                  const d = shiftClosureData[formato];
+                  const showMerma = isLoncheadoArea && d.esProduccion;
+                  const kgEntrada = safeParse(d.kgEntrada || '0') || 0;
+                  const kgTacos = safeParse(d.kgTacos || '0') || 0;
+                  const kgPieles = safeParse(d.kgPieles || '0') || 0;
+                  const kgHueco = safeParse(d.kgHueco || '0') || 0;
+                  
+                  const formatInfo = masterSpeeds.find(ms => ms.formato === formato);
+                  const formatPeso = formatInfo?.peso || 0;
+                  const cantOk = safeParse(d.cantidad || '0') || 0;
+                  const cantNok = safeParse(d.cantidadNok || '0') || 0;
 
-                const mediaCombi = formatPeso;
-                const nEnvases = cantOk + cantNok;
-                const kgSalida = nEnvases * mediaCombi;
-                const kgMerma = kgEntrada - kgTacos - kgPieles - kgHueco - kgSalida;
-                const pctMerma1 = kgEntrada > 0 ? (kgMerma / kgEntrada * 100) : 0;
-                const pctMerma2 = kgEntrada > 0 ? ((kgMerma + kgTacos + kgPieles + kgHueco) / kgEntrada) * 100 : 0;
-                return (
-                  <div key={formato} className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                    <h3 className="font-black text-slate-900 uppercase mb-3 text-[13px] tracking-wide">{formato}</h3>
-                    {/* Cantidades */}
-                    <div className="mb-3 grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Cantidad OK</label>
-                        <input type="text" inputMode="decimal" value={d.cantidad}
-                          onChange={(e) => setShiftClosureData(prev => ({ ...prev, [formato]: { ...prev[formato], cantidad: e.target.value } }))}
-                          className="w-full border-2 border-slate-200 p-2 rounded-xl font-bold text-[14px] focus:border-slate-900 outline-none" placeholder="0" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-black text-red-500 uppercase mb-1">CANTIDAD A REPROCESAR</label>
-                        <input type="text" inputMode="decimal" value={d.cantidadNok || ''}
-                          onChange={(e) => setShiftClosureData(prev => ({ ...prev, [formato]: { ...prev[formato], cantidadNok: e.target.value } }))}
-                          className="w-full border-2 border-red-50 p-2 rounded-xl font-bold text-[14px] focus:border-red-400 outline-none text-red-600" placeholder="0" />
-                      </div>
-                    </div>
-                    {/* Merma - só Loncheado e produção */}
-                    {showMerma && (
-                      <div className="border-t border-slate-200 pt-3 mt-1">
-                        <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2">Merma</p>
-                        <div className="grid grid-cols-3 gap-2 mb-2">
-                          {[
-                            { label: 'Kg Entrada', key: 'kgEntrada' },
-                            { label: 'Kg Tacos', key: 'kgTacos' },
-                            { label: 'Kg Pieles', key: 'kgPieles' },
-                            { label: 'Kg Hueco', key: 'kgHueco' },
-                          ].map(({ label, key }) => (
-                            <div key={key}>
-                              <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">{label}</label>
-                              <input type="text" inputMode="decimal"
-                                value={(d as any)[key] || ''}
-                                onChange={(e) => setShiftClosureData(prev => ({ ...prev, [formato]: { ...prev[formato], [key]: e.target.value } }))}
-                                className="w-full border-2 border-slate-200 p-1.5 rounded-lg font-bold text-[13px] focus:border-amber-400 outline-none"
-                                placeholder="0" />
-                            </div>
-                          ))}
-                          <div>
-                            <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">Media combinada</label>
-                            <input type="number" readOnly
-                              value={mediaCombi}
-                              className="w-full border-2 border-slate-100 bg-slate-100 p-1.5 rounded-lg font-bold text-[13px] outline-none text-slate-500" />
-                          </div>
-                          <div>
-                            <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">nº envases</label>
-                            <input type="number" readOnly
-                              value={nEnvases}
-                              className="w-full border-2 border-slate-100 bg-slate-100 p-1.5 rounded-lg font-bold text-[13px] outline-none text-slate-500" />
-                          </div>
+                  const mediaCombi = formatPeso;
+                  const nEnvases = cantOk + cantNok;
+                  const kgSalida = nEnvases * mediaCombi;
+                  const kgMerma = kgEntrada - kgTacos - kgPieles - kgHueco - kgSalida;
+                  const pctMerma1 = kgEntrada > 0 ? (kgMerma / kgEntrada * 100) : 0;
+                  const pctMerma2 = kgEntrada > 0 ? ((kgMerma + kgTacos + kgPieles + kgHueco) / kgEntrada) * 105 : 0;
+                  return (
+                    <div key={formato} className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                      <h3 className="font-black text-slate-900 uppercase mb-3 text-[13px] tracking-wide">{formato}</h3>
+                      {/* Cantidades */}
+                      <div className="mb-3 grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Cantidad OK</label>
+                          <input type="text" inputMode="decimal" value={d.cantidad}
+                            onChange={(e) => setShiftClosureData(prev => ({ ...prev, [formato]: { ...prev[formato], cantidad: e.target.value } }))}
+                            className="w-full border-2 border-slate-200 p-2 rounded-xl font-bold text-[14px] focus:border-slate-900 outline-none" placeholder="0" />
                         </div>
-                        {/* Resultados calculados */}
-                        {kgEntrada > 0 && (
-                          <div className="grid grid-cols-4 gap-2 mt-2">
-                            <div className="bg-white rounded-lg p-2 border border-slate-200 text-center">
-                              <p className="text-[8px] font-black text-slate-400 uppercase">Kg Envasados</p>
-                              <p className="text-[13px] font-black text-slate-900">{kgSalida.toFixed(1)}</p>
+                        <div>
+                          <label className="block text-[10px] font-black text-red-500 uppercase mb-1">CANTIDAD A REPROCESAR</label>
+                          <input type="text" inputMode="decimal" value={d.cantidadNok || ''}
+                            onChange={(e) => setShiftClosureData(prev => ({ ...prev, [formato]: { ...prev[formato], cantidadNok: e.target.value } }))}
+                            className="w-full border-2 border-red-50 p-2 rounded-xl font-bold text-[14px] focus:border-red-400 outline-none text-red-600" placeholder="0" />
+                        </div>
+                      </div>
+                      {/* Merma - só Loncheado e produção */}
+                      {showMerma && (
+                        <div className="border-t border-slate-200 pt-3 mt-1">
+                          <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2">Merma</p>
+                          <div className="grid grid-cols-3 gap-2 mb-2">
+                            {[
+                              { label: 'Kg Entrada', key: 'kgEntrada' },
+                              { label: 'Kg Tacos', key: 'kgTacos' },
+                              { label: 'Kg Pieles', key: 'kgPieles' },
+                              { label: 'Kg Hueco', key: 'kgHueco' },
+                            ].map(({ label, key }) => (
+                              <div key={key}>
+                                <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">{label}</label>
+                                <input type="text" inputMode="decimal"
+                                  value={(d as any)[key] || ''}
+                                  onChange={(e) => setShiftClosureData(prev => ({ ...prev, [formato]: { ...prev[formato], [key]: e.target.value } }))}
+                                  className="w-full border-2 border-slate-200 p-1.5 rounded-lg font-bold text-[13px] focus:border-amber-400 outline-none"
+                                  placeholder="0" />
+                              </div>
+                            ))}
+                            <div>
+                              <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">Media combinada</label>
+                              <input type="number" readOnly
+                                value={mediaCombi}
+                                className="w-full border-2 border-slate-100 bg-slate-100 p-1.5 rounded-lg font-bold text-[13px] outline-none text-slate-500" />
                             </div>
-                            <div className="bg-white rounded-lg p-2 border border-slate-200 text-center">
-                              <p className="text-[8px] font-black text-slate-400 uppercase">Kg Merma</p>
-                              <p className="text-[13px] font-black text-amber-600">{kgMerma.toFixed(1)}</p>
-                            </div>
-                            <div className={`rounded-lg p-2 border text-center ${pctMerma1 > 5 ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
-                              <p className="text-[8px] font-black text-slate-400 uppercase">% Merma 1</p>
-                              <p className={`text-[13px] font-black ${pctMerma1 > 5 ? 'text-red-600' : 'text-emerald-600'}`}>{pctMerma1.toFixed(1)}%</p>
-                            </div>
-                            <div className={`rounded-lg p-2 border text-center ${pctMerma2 > 5 ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
-                              <p className="text-[8px] font-black text-slate-400 uppercase">% Merma 2</p>
-                              <p className={`text-[13px] font-black ${pctMerma2 > 5 ? 'text-red-600' : 'text-emerald-600'}`}>{pctMerma2.toFixed(1)}%</p>
+                            <div>
+                              <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">nº envases</label>
+                              <input type="number" readOnly
+                                value={nEnvases}
+                                className="w-full border-2 border-slate-100 bg-slate-100 p-1.5 rounded-lg font-bold text-[13px] outline-none text-slate-500" />
                             </div>
                           </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                          {/* Resultados calculados */}
+                          {kgEntrada > 0 && (
+                            <div className="grid grid-cols-4 gap-2 mt-2">
+                              <div className="bg-white rounded-lg p-2 border border-slate-200 text-center">
+                                <p className="text-[8px] font-black text-slate-400 uppercase">Kg Envasados</p>
+                                <p className="text-[13px] font-black text-slate-900">{kgSalida.toFixed(1)}</p>
+                              </div>
+                              <div className="bg-white rounded-lg p-2 border border-slate-200 text-center">
+                                <p className="text-[8px] font-black text-slate-400 uppercase">Kg Merma</p>
+                                <p className="text-[13px] font-black text-amber-600">{kgMerma.toFixed(1)}</p>
+                              </div>
+                              <div className={`rounded-lg p-2 border text-center ${pctMerma1 > 5 ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                                <p className="text-[8px] font-black text-slate-400 uppercase">% Merma 1</p>
+                                <p className={`text-[13px] font-black ${pctMerma1 > 5 ? 'text-red-600' : 'text-emerald-600'}`}>{pctMerma1.toFixed(1)}%</p>
+                              </div>
+                              <div className={`rounded-lg p-2 border text-center ${pctMerma2 > 5 ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                                <p className="text-[8px] font-black text-slate-400 uppercase">% Merma 2</p>
+                                <p className={`text-[13px] font-black ${pctMerma2 > 5 ? 'text-red-600' : 'text-emerald-600'}`}>{pctMerma2.toFixed(1)}%</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
             <div className="flex gap-3 p-4 border-t border-slate-100">
-              <button onClick={() => setShowShiftClosureModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-400 font-black rounded-xl uppercase text-[12px]">Cancelar</button>
-              <button onClick={() => handleConfirmClosure()} className="flex-[2] py-3 bg-blue-600 text-white font-black rounded-xl uppercase text-[12px] hover:bg-blue-700 transition-colors">
-                Confirmar Cierre
-              </button>
+              <button id="btn-cancel-closure" onClick={() => setShowShiftClosureModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-400 font-black rounded-xl uppercase text-[12px]">Cancelar</button>
+              {Object.keys(shiftClosureData).length === 0 ? (
+                <button 
+                  id="btn-close-no-qty"
+                  onClick={() => executeFinalizeShift({}, [])} 
+                  className="flex-[2] py-3 bg-blue-600 text-white font-black rounded-xl uppercase text-[12px] hover:bg-blue-700 transition-colors"
+                >
+                  Cerrar sin cantidades
+                </button>
+              ) : (
+                <button 
+                  id="btn-confirm-closure"
+                  onClick={() => handleConfirmClosure()} 
+                  className="flex-[2] py-3 bg-blue-600 text-white font-black rounded-xl uppercase text-[12px] hover:bg-blue-700 transition-colors"
+                >
+                  Confirmar Cierre
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1049,12 +1136,9 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
             <div className="p-10 space-y-8">
               <div className="space-y-3">
                 <label className="text-[14px] font-black text-slate-400 uppercase tracking-widest ml-1">FECHA DEL TURNO</label>
-                <input 
-                  type="date" 
-                  value={shiftDate}
-                  onChange={(e) => setShiftDate(e.target.value)}
-                  className={`w-full p-4 bg-slate-50 border-2 rounded-2xl font-black outline-none focus:ring-4 ring-blue-50 transition-all text-sm ${isForcingClosure ? 'text-amber-600 border-amber-100' : 'text-blue-600 border-slate-100'}`}
-                />
+                <div className={`w-full p-4 bg-slate-50 border-2 rounded-2xl font-black text-sm text-center ${isForcingClosure ? 'text-amber-600 border-amber-200' : 'text-blue-600 border-blue-200'}`}>
+                  {getFormattedShiftDate(shiftDate)} ({shiftDate})
+                </div>
               </div>
               <div className={`p-4 rounded-2xl border ${isForcingClosure ? 'bg-amber-50 border-amber-100' : 'bg-blue-50 border-blue-100'}`}>
                 <p className={`text-[13px] font-bold text-center uppercase tracking-widest leading-relaxed ${isForcingClosure ? 'text-amber-800' : 'text-blue-700'}`}>
