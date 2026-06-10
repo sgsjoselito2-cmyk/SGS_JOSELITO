@@ -110,6 +110,24 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
       ...history.map(h => ({ ...h, isHistory: true }))
     ];
 
+    // Filter by area to align with Dashboard and App.tsx targetAreas
+    const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
+    const envAreas = ['env-envasado', 'env-empaquetado'];
+    const expAreas = ['expedicion', 'preparacion-exp'];
+    const movAreas = ['movimiento-jamones'];
+
+    if (selectedArea === 'sala-blanca-dashboard') {
+      combined = combined.filter(r => sbAreas.includes(r.area));
+    } else if (selectedArea === 'envasado-dashboard') {
+      combined = combined.filter(r => envAreas.includes(r.area));
+    } else if (selectedArea === 'expediciones-dashboard') {
+      combined = combined.filter(r => expAreas.includes(r.area));
+    } else if (selectedArea === 'movimientos-dashboard') {
+      combined = combined.filter(r => movAreas.includes(r.area));
+    } else if (selectedArea && !['TOP 5', 'TOP 15', 'TOP 60', 'root-menu', 'menu'].includes(selectedArea)) {
+      combined = combined.filter(r => r.area === selectedArea);
+    }
+
     const seen = new Set();
     combined = combined.filter(r => {
       const key = `${r.isHistory ? 'h' : 'a'}-${r.id}`;
@@ -118,8 +136,11 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
       return true;
     });
 
-    return combined.filter(r => r.fecha === filterDate && r.tipoTarea === TaskType.PRODUCCION);
-  }, [activities, history, filterDate]);
+    return combined.filter(r => 
+      r.fecha === filterDate && 
+      (r.tipoTarea === TaskType.PRODUCCION || (r.tipoTarea as string) === 'P')
+    );
+  }, [activities, history, filterDate, selectedArea]);
 
   const uniqueFormatsInDay = useMemo(() => {
     return Array.from(new Set(prodActsOfDay.map(a => a.formato || 'SIN FORMATO')));
@@ -801,7 +822,10 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
           {isAdminMode && (
             <button 
               type="button"
-              onClick={handleCorrectTurnClick}
+              onClick={() => {
+                console.log('CORREGIR TURNO pulsado');
+                handleCorrectTurnClick();
+              }}
               className="px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl text-[13px] sm:text-[14px] font-black uppercase tracking-widest border-2 bg-amber-600 border-amber-500 text-white shadow-lg hover:bg-amber-700 transition-all active:scale-95"
             >
               CORREGIR TURNO

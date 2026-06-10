@@ -471,25 +471,48 @@ const App: React.FC = () => {
     let successCount = 0;
     let lastErrorMsg = null;
 
+    const markAsSynced = (id: string) => {
+      console.log(`Operation ${id} marked as synced (duplicate key bypass)`);
+    };
+
     for (const op of queue) {
       try {
         const sanitizedData = sanitizeData(op.data);
         console.log(`Syncing ${op.type} on ${op.table}...`, sanitizedData);
         let result;
-        if (op.type === 'insert') {
-          result = await supabase.from(op.table).insert(sanitizedData);
-        } else if (op.type === 'update') {
-          result = await supabase.from(op.table).update(sanitizedData).eq(op.filter!.column, op.filter!.value);
-        } else if (op.type === 'delete') {
-          if (op.filter?.value === 'all') {
-            result = await supabase.from(op.table).delete().neq('id', '_none_');
-          } else {
-            result = await supabase.from(op.table).delete().eq(op.filter!.column, op.filter!.value);
+        
+        if (op.table === 'activities') {
+          if (op.type === 'insert' || op.type === 'upsert') {
+            const dataToUpsert = Array.isArray(sanitizedData) ? sanitizedData : [sanitizedData];
+            result = await supabase.from('activities').upsert(dataToUpsert, { 
+              onConflict: 'id',
+              ignoreDuplicates: false 
+            });
+          } else if (op.type === 'update') {
+            result = await supabase.from(op.table).update(sanitizedData).eq(op.filter!.column, op.filter!.value);
+          } else if (op.type === 'delete') {
+            if (op.filter?.value === 'all') {
+              result = await supabase.from(op.table).delete().neq('id', '_none_');
+            } else {
+              result = await supabase.from(op.table).delete().eq(op.filter!.column, op.filter!.value);
+            }
           }
-        } else if (op.type === 'upsert') {
-          // Fix for upsert: ensure it's an array if multiple, or single object
-          const dataToUpsert = Array.isArray(sanitizedData) ? sanitizedData : [sanitizedData];
-          result = await supabase.from(op.table).upsert(dataToUpsert, { onConflict: op.filter?.column });
+        } else {
+          if (op.type === 'insert') {
+            result = await supabase.from(op.table).insert(sanitizedData);
+          } else if (op.type === 'update') {
+            result = await supabase.from(op.table).update(sanitizedData).eq(op.filter!.column, op.filter!.value);
+          } else if (op.type === 'delete') {
+            if (op.filter?.value === 'all') {
+              result = await supabase.from(op.table).delete().neq('id', '_none_');
+            } else {
+              result = await supabase.from(op.table).delete().eq(op.filter!.column, op.filter!.value);
+            }
+          } else if (op.type === 'upsert') {
+            // Fix for upsert: ensure it's an array if multiple, or single object
+            const dataToUpsert = Array.isArray(sanitizedData) ? sanitizedData : [sanitizedData];
+            result = await supabase.from(op.table).upsert(dataToUpsert, { onConflict: op.filter?.column });
+          }
         }
 
         if (result?.error) throw result.error;
@@ -497,6 +520,12 @@ const App: React.FC = () => {
         localStorage.removeItem('zitron_last_sync_error');
         setLastConnectionError(null);
       } catch (e: any) {
+        if (e?.code === '23505') {
+          // Duplicate key — registro ya existe, marcar como sync
+          markAsSynced(op.id);
+          successCount++;
+          continue;
+        }
         console.error("Sync error for operation:", op, e);
         lastErrorMsg = e.message || "Error desconocido";
         remaining.push(op);
@@ -575,21 +604,45 @@ const App: React.FC = () => {
     if (isOnline && isConfigured && syncQueueRef.current.length === 0) {
       try {
         let result;
-        if (op.type === 'insert') {
-          result = await supabase.from(op.table).insert(sanitizedData);
-        } else if (op.type === 'update') {
-          result = await supabase.from(op.table).update(sanitizedData).eq(op.filter!.column, op.filter!.value);
-        } else if (op.type === 'delete') {
-          if (op.filter?.value === 'all') {
-            result = await supabase.from(op.table).delete().neq('id', '_none_');
-          } else {
-            result = await supabase.from(op.table).delete().eq(op.filter!.column, op.filter!.value);
+        if (op.table === 'activities') {
+          if (op.type === 'insert' || op.type === 'upsert') {
+            result = await supabase.from('activities').upsert(sanitizedData, {
+              onConflict: 'id',
+              ignoreDuplicates: false
+            });
+          } else if (op.type === 'update') {
+            result = await supabase.from(op.table).update(sanitizedData).eq(op.filter!.column, op.filter!.value);
+          } else if (op.type === 'delete') {
+            if (op.filter?.value === 'all') {
+              result = await supabase.from(op.table).delete().neq('id', '_none_');
+            } else {
+              result = await supabase.from(op.table).delete().eq(op.filter!.column, op.filter!.value);
+            }
           }
-        } else if (op.type === 'upsert') {
-          result = await supabase.from(op.table).upsert(sanitizedData, { onConflict: op.filter?.column });
+        } else {
+          if (op.type === 'insert') {
+            result = await supabase.from(op.table).insert(sanitizedData);
+          } else if (op.type === 'update') {
+            result = await supabase.from(op.table).update(sanitizedData).eq(op.filter!.column, op.filter!.value);
+          } else if (op.type === 'delete') {
+            if (op.filter?.value === 'all') {
+              result = await supabase.from(op.table).delete().neq('id', '_none_');
+            } else {
+              result = await supabase.from(op.table).delete().eq(op.filter!.column, op.filter!.value);
+            }
+          } else if (op.type === 'upsert') {
+            result = await supabase.from(op.table).upsert(sanitizedData, { onConflict: op.filter?.column });
+          }
         }
 
         if (result?.error) {
+          if (result.error.code === '23505') {
+            console.log(`Duplicate key (23505) in executeOrQueue on ${op.table}. Marking as synced.`);
+            if (!silent) {
+              addToast(`DATOS SINCRONIZADOS: ${op.table.toUpperCase()}`, "success");
+            }
+            return true;
+          }
           console.error(`Sync Error [${op.table}]:`, result.error);
           const errorMsg = result.error.message || "Error desconocido de Supabase";
           safeLocalStorageSetItem('zitron_last_sync_error', errorMsg);
@@ -603,6 +656,13 @@ const App: React.FC = () => {
         }
         return true;
       } catch (e: any) {
+        if (e?.code === '23505') {
+          console.log(`Duplicate key (23505) in executeOrQueue catch on ${op.table}. Marking as synced.`);
+          if (!silent) {
+            addToast(`DATOS SINCRONIZADOS: ${op.table.toUpperCase()}`, "success");
+          }
+          return true;
+        }
         console.error("Operation failed deeply:", e);
         const msg = e.message || "Error de conexión (Failed to fetch)";
         
@@ -2159,13 +2219,40 @@ const App: React.FC = () => {
     if (!selectedArea) return;
     setIsLoading(true);
 
-    const targetHistory = history.filter(h => h.fecha === fecha && h.tipoTarea === TaskType.PRODUCCION);
-    const targetActivities = activities.filter(a => a.fecha === fecha && a.tipoTarea === TaskType.PRODUCCION);
+    const getTargetAreas = (area: string): string[] => {
+      if (area === 'sala-blanca-dashboard') return ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
+      if (area === 'envasado-dashboard') return ['env-envasado', 'env-empaquetado'];
+      if (area === 'expediciones-dashboard') return ['expedicion', 'preparacion-exp'];
+      if (area === 'movimientos-dashboard') return ['movimiento-jamones'];
+      return [area];
+    };
 
-    const allProdActs = [
-      ...targetHistory,
-      ...targetActivities
-    ];
+    const isProduccionTask = (tipo: any): boolean => {
+      if (!tipo) return false;
+      const t = String(tipo).trim().toUpperCase();
+      return t === 'P' || t === 'PRODUCCION' || t === 'PRODUCCIÓN';
+    };
+
+    const targetAreas = getTargetAreas(selectedArea);
+
+    const targetHistory = history.filter(h => 
+      String(h.fecha).trim() === String(fecha).trim() && 
+      targetAreas.includes(h.area) &&
+      isProduccionTask(h.tipoTarea)
+    );
+    const targetActivities = activities.filter(a => 
+      String(a.fecha).trim() === String(fecha).trim() && 
+      targetAreas.includes(a.area) &&
+      isProduccionTask(a.tipoTarea)
+    );
+
+    // Deduplicate all production activities by ID to avoid any potential double-processing
+    const allProdActs = Array.from(
+      new Map(
+        [...targetHistory, ...targetActivities]
+          .map(a => [String(a.id), a])
+      ).values()
+    );
 
     if (allProdActs.length === 0) {
       addToast("No se encontraron actividades de producción para el día seleccionado.", "error");
@@ -2175,123 +2262,158 @@ const App: React.FC = () => {
 
     const updatedHistory: Activity[] = [];
     const updatedActivitiesList: Activity[] = [];
-
     const dbHistoryUpdates: any[] = [];
     const dbActivitiesUpdates: any[] = [];
 
-    // Group activities internally by format to apply correction separately for each format
     const uniqueFormats = Array.from(new Set(allProdActs.map(a => a.formato || 'SIN FORMATO')));
 
     uniqueFormats.forEach(formatId => {
       const formatActs = allProdActs.filter(a => (a.formato || 'SIN FORMATO') === formatId);
       const correction = corrections[formatId];
-      if (!correction) return; // Skip if no override given for this format
+      if (!correction) return;
 
       const { nuevoOk, nuevoNok } = correction;
-
       const currentTotalOk = formatActs.reduce((sum, a) => sum + (a.cantidad || 0), 0);
       const currentTotalNok = formatActs.reduce((sum, a) => sum + (a.cantidadNok || 0), 0);
-
-      const ratioOk = currentTotalOk > 0 ? (nuevoOk / currentTotalOk) : 0;
-      const ratioNok = currentTotalNok > 0 ? (nuevoNok / currentTotalNok) : 0;
 
       formatActs.forEach(act => {
         let finalOk = 0;
         let finalNok = 0;
 
         if (currentTotalOk > 0) {
-          finalOk = Math.round((act.cantidad || 0) * ratioOk);
+          finalOk = Math.round((act.cantidad || 0) * (nuevoOk / currentTotalOk));
         } else {
           finalOk = Math.round(nuevoOk / formatActs.length);
         }
 
         if (currentTotalNok > 0) {
-          finalNok = Math.round((act.cantidadNok || 0) * ratioNok);
+          finalNok = Math.round((act.cantidadNok || 0) * (nuevoNok / currentTotalNok));
         } else {
           finalNok = Math.round(nuevoNok / formatActs.length);
         }
 
-        const updatedAct = {
-          ...act,
+        const updatedAct = { ...act, cantidad: finalOk, cantidadNok: finalNok };
+        const isHist = history.some(h => String(h.id) === String(act.id));
+
+        const dbRow = {
+          id: act.id,
+          operarios: act.operarios || [],
+          formato: act.formato || '',
+          tipoTarea: act.tipoTarea || '',
+          horaInicio: act.horaInicio || '',
+          horaFin: act.horaFin || '',
+          duracionMin: act.duracionMin || 0,
           cantidad: finalOk,
-          cantidadNok: finalNok
+          cantidadNok: finalNok,
+          comentarios: act.comentarios || '',
+          fecha: act.fecha || '',
+          area: act.area || selectedArea,
+          afectaCalidad: act.afectaCalidad || false,
+          tiempoTeoricoManual: act.tiempoTeoricoManual || 0,
+          jefe_equipo: (act as any).jefeEquipo || null
         };
 
-        const isHist = targetHistory.some(h => h.id === act.id);
         if (isHist) {
           updatedHistory.push(updatedAct);
-          dbHistoryUpdates.push({
-            id: act.id,
-            operarios: act.operarios || [],
-            formato: act.formato || '',
-            tipoTarea: act.tipoTarea || '',
-            horaInicio: act.horaInicio || '',
-            horaFin: act.horaFin || '',
-            duracionMin: act.duracionMin || 0,
-            cantidad: finalOk,
-            cantidadNok: finalNok,
-            comentarios: act.comentarios || '',
-            fecha: act.fecha || '',
-            area: act.area,
-            afectaCalidad: act.afectaCalidad || false,
-            tiempoTeoricoManual: act.tiempoTeoricoManual || 0,
-            jefe_equipo: act.jefeEquipo || null,
-            last_modified: new Date().toISOString()
-          });
+          dbHistoryUpdates.push(dbRow);
         } else {
           updatedActivitiesList.push(updatedAct);
-          dbActivitiesUpdates.push({
-            id: act.id,
-            operarios: act.operarios || [],
-            formato: act.formato || '',
-            tipoTarea: act.tipoTarea || '',
-            horaInicio: act.horaInicio || '',
-            horaFin: act.horaFin || '',
-            duracionMin: act.duracionMin || 0,
-            cantidad: finalOk,
-            cantidadNok: finalNok,
-            comentarios: act.comentarios || '',
-            fecha: act.fecha || '',
-            area: act.area,
-            afectaCalidad: act.afectaCalidad || false,
-            tiempoTeoricoManual: act.tiempoTeoricoManual || 0,
-            jefe_equipo: act.jefeEquipo || null,
-            last_modified: new Date().toISOString()
-          });
+          dbActivitiesUpdates.push(dbRow);
         }
       });
     });
 
+    // Update frontend state & offline storage first for responsive UI
     if (updatedHistory.length > 0) {
       setHistory(prev => {
         const next = prev.map(item => {
-          const matching = updatedHistory.find(u => u.id === item.id);
+          const matching = updatedHistory.find(u => String(u.id) === String(item.id));
           return matching ? matching : item;
         });
-        safeLocalStorageSetItem(`zitron_${selectedArea}_history`, JSON.stringify(next));
+        
+        // Save to localStorage for specific sub-areas
+        const affectedAreas = Array.from(new Set(updatedHistory.map(h => h.area)));
+        affectedAreas.forEach(area => {
+          const areaNext = next.filter(item => item.area === area);
+          safeLocalStorageSetItem(`zitron_${area}_history`, JSON.stringify(areaNext));
+        });
+        
+        // Save to localStorage for selectedArea (may be a dashboard, e.g. 'sala-blanca-dashboard')
+        const currentAreaNext = next.filter(item => {
+          if (selectedArea === 'sala-blanca-dashboard') return ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'].includes(item.area);
+          if (selectedArea === 'envasado-dashboard') return ['env-envasado', 'env-empaquetado'].includes(item.area);
+          if (selectedArea === 'expediciones-dashboard') return ['expedicion', 'preparacion-exp'].includes(item.area);
+          if (selectedArea === 'movimientos-dashboard') return ['movimiento-jamones'].includes(item.area);
+          return item.area === selectedArea;
+        });
+        safeLocalStorageSetItem(`zitron_${selectedArea}_history`, JSON.stringify(currentAreaNext));
+        
         return next;
       });
+
+      // Keep globalHistoryRef in sync
+      const currentGlobalHist = globalHistoryRef.current || [];
+      const nextGlobalHist = currentGlobalHist.map(item => {
+        const matching = updatedHistory.find(u => String(u.id) === String(item.id));
+        return matching ? matching : item;
+      });
+      globalHistoryRef.current = nextGlobalHist;
     }
 
     if (updatedActivitiesList.length > 0) {
       setActivities(prev => {
         const next = prev.map(item => {
-          const matching = updatedActivitiesList.find(u => u.id === item.id);
+          const matching = updatedActivitiesList.find(u => String(u.id) === String(item.id));
           return matching ? matching : item;
         });
-        safeLocalStorageSetItem(`zitron_${selectedArea}_activities`, JSON.stringify(next));
+        
+        // Save to localStorage for specific sub-areas
+        const affectedAreas = Array.from(new Set(updatedActivitiesList.map(a => a.area)));
+        affectedAreas.forEach(area => {
+          const areaNext = next.filter(item => item.area === area);
+          safeLocalStorageSetItem(`zitron_${area}_activities`, JSON.stringify(areaNext));
+        });
+        
+        // Save to localStorage for selectedArea (may be a dashboard, e.g. 'sala-blanca-dashboard')
+        const currentAreaNext = next.filter(item => {
+          if (selectedArea === 'sala-blanca-dashboard') return ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'].includes(item.area);
+          if (selectedArea === 'envasado-dashboard') return ['env-envasado', 'env-empaquetado'].includes(item.area);
+          if (selectedArea === 'expediciones-dashboard') return ['expedicion', 'preparacion-exp'].includes(item.area);
+          if (selectedArea === 'movimientos-dashboard') return ['movimiento-jamones'].includes(item.area);
+          return item.area === selectedArea;
+        });
+        safeLocalStorageSetItem(`zitron_${selectedArea}_activities`, JSON.stringify(currentAreaNext));
+        
         return next;
       });
+
+      // Keep globalActivitiesRef in sync
+      const currentGlobalActs = globalActivitiesRef.current || [];
+      const nextGlobalActs = currentGlobalActs.map(item => {
+        const matching = updatedActivitiesList.find(u => String(u.id) === String(item.id));
+        return matching ? matching : item;
+      });
+      globalActivitiesRef.current = nextGlobalActs;
     }
+
+    // Deduplicate DB rows to avoid 'ON CONFLICT DO UPDATE command cannot affect row a second time'
+    const uniqueHistoryUpdates = Array.from(
+      new Map(dbHistoryUpdates.map(a => [String(a.id), a])).values()
+    );
+    const uniqueActivitiesUpdates = Array.from(
+      new Map(dbActivitiesUpdates.map(a => [String(a.id), a])).values()
+    );
 
     let updatedCount = 0;
     try {
-      if (dbHistoryUpdates.length > 0) {
+      if (uniqueHistoryUpdates.length > 0) {
         if (isOnline && isConfigured) {
-          const { error } = await supabase.from('history').upsert(dbHistoryUpdates);
+          const { error } = await supabase
+            .from('history')
+            .upsert(uniqueHistoryUpdates, { onConflict: 'id' });
           if (error) throw error;
         } else {
-          dbHistoryUpdates.forEach(row => {
+          uniqueHistoryUpdates.forEach(row => {
             executeOrQueue({
               table: 'history',
               type: 'upsert',
@@ -2300,15 +2422,17 @@ const App: React.FC = () => {
             }, true);
           });
         }
-        updatedCount += dbHistoryUpdates.length;
+        updatedCount += uniqueHistoryUpdates.length;
       }
 
-      if (dbActivitiesUpdates.length > 0) {
+      if (uniqueActivitiesUpdates.length > 0) {
         if (isOnline && isConfigured) {
-          const { error } = await supabase.from('activities').upsert(dbActivitiesUpdates);
+          const { error } = await supabase
+            .from('activities')
+            .upsert(uniqueActivitiesUpdates, { onConflict: 'id' });
           if (error) throw error;
         } else {
-          dbActivitiesUpdates.forEach(row => {
+          uniqueActivitiesUpdates.forEach(row => {
             executeOrQueue({
               table: 'activities',
               type: 'upsert',
@@ -2317,13 +2441,13 @@ const App: React.FC = () => {
             }, true);
           });
         }
-        updatedCount += dbActivitiesUpdates.length;
+        updatedCount += uniqueActivitiesUpdates.length;
       }
 
       addToast(`Corrección aplicada — ${updatedCount} registros actualizados`, "success");
     } catch (e: any) {
-      console.error("Error applying correction in Supabase:", e);
-      addToast(`Error al sincronizar con Supabase: ${e.message}`, "error");
+      console.error("Error applying correction:", e);
+      addToast(`Error al sincronizar: ${e.message}`, "error");
     } finally {
       setIsLoading(false);
     }
@@ -2565,33 +2689,49 @@ const App: React.FC = () => {
     const areaActivities = activities.filter(a => a.area === selectedArea && a.fecha === fecha);
 
     // If filtering by turnoId, use it; otherwise fallback to coach or keep all for this date
-    const filteredActivities = turnoIdFilter
-      ? areaActivities.filter(a => a.turnoId === turnoIdFilter)
-      : jefe_equipo_filter
-        ? areaActivities.filter(a => a.jefeEquipo === jefe_equipo_filter)
-        : areaActivities;
+    const filteredActivities = areaActivities;
     
     const remainingActivities = activities.filter(a => !filteredActivities.some(fa => fa.id === a.id));
 
     try {
       const readyToArchive: Activity[] = filteredActivities.map(a => {
+        const durMin = a.horaFin
+          ? ((a.duracionMin && a.duracionMin > 0) ? a.duracionMin : calcDuration(a.horaInicio, a.horaFin))
+          : calcDuration(a.horaInicio, timeStr);
+
         let cantidad = a.cantidad || 0;
         let cantidadNok = a.cantidadNok || 0;
         
         if (aggregatedQuantities && aggregatedQuantities[a.formato]) {
-          // Proportional distribution based on duration (or just assign if only one activity)
-          // Simplified: assign to all activities of the same format
-          const sameFormatCount = filteredActivities.filter(act => act.formato === a.formato).length || 1;
-          cantidad = aggregatedQuantities[a.formato].cantidad / sameFormatCount;
-          cantidadNok = (aggregatedQuantities[a.formato].cantidadNok || 0) / sameFormatCount;
+          const actsFormato = filteredActivities.filter(
+            act => act.formato === a.formato && 
+            (act.tipoTarea === TaskType.PRODUCCION || (act.tipoTarea as string) === 'P')
+          );
+          const totalMin = actsFormato.reduce(
+            (sum, act) => {
+              const actDur = act.horaFin
+                ? ((act.duracionMin && act.duracionMin > 0) ? act.duracionMin : calcDuration(act.horaInicio, act.horaFin))
+                : calcDuration(act.horaInicio, timeStr);
+              return sum + actDur;
+            }, 0
+          );
+          const peso = totalMin > 0
+            ? durMin / totalMin
+            : 1 / (actsFormato.length || 1);
+            
+          cantidad = Math.round(
+            aggregatedQuantities[a.formato].cantidad * peso
+          );
+          cantidadNok = Math.round(
+            (aggregatedQuantities[a.formato].cantidadNok || 0) * peso
+          );
         }
 
         if (!a.horaFin) {
-          const duration = calcDuration(a.horaInicio, timeStr);
           return { 
             ...a, 
             horaFin: timeStr, 
-            duracionMin: duration, 
+            duracionMin: durMin, 
             cantidad,
             cantidadNok,
             comentarios: a.comentarios ? `${a.comentarios} (CIERRE TURNO)` : "CIERRE TURNO", 
@@ -2599,7 +2739,6 @@ const App: React.FC = () => {
             area: selectedArea 
           };
         }
-        const durMin = (a.duracionMin && a.duracionMin > 0) ? a.duracionMin : calcDuration(a.horaInicio, a.horaFin || timeStr);
         return { ...a, fecha, area: selectedArea, cantidad, cantidadNok, duracionMin: durMin };
       });
 
@@ -2616,7 +2755,7 @@ const App: React.FC = () => {
       const archiveData = readyToArchive.map(a => {
         const act = a as any;
         return { 
-          id: `hist-${act.id}`,
+          id: act.id,
           operarios: act.operarios || [],
           formato: act.formato || '',
           tipoTarea: act.tipoTarea || '',
@@ -2634,20 +2773,19 @@ const App: React.FC = () => {
         };
       });
 
+      const idsACerrar = filteredActivities.map(a => a.id);
+
       executeOrQueue({
         table: 'history',
         type: 'upsert',
         data: archiveData,
         filter: { column: 'id' }
       }).then(() => {
-        // Delete only the archived activities from the active activities table in Supabase
-        filteredActivities.forEach(a => {
-          executeOrQueue({
-            table: 'activities',
-            type: 'delete',
-            filter: { column: 'id', value: a.id }
-          }, true);
-        });
+        executeOrQueue({
+          table: 'activities',
+          type: 'delete',
+          filter: { column: 'id', value: idsACerrar }
+        }, true);
       });
 
       // Guardar mermas se existirem

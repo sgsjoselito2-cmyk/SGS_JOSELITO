@@ -703,27 +703,18 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
     else {
       setIsForcingClosure(false);
       
-      const relevantActivities = activities.filter(a => 
-        a.fecha === fechaCierre && 
-        a.area === selectedArea
+      const prodActivities = activities.filter(a =>
+        a.fecha === fechaCierre &&
+        a.area === selectedArea &&
+        ((a.tipoTarea as any) === TaskType.PRODUCCION || (a.tipoTarea as any) === 'P')
       );
-      const currentTurnId = relevantActivities.find(a => a.turnoId)?.turnoId;
 
-      // Group production activities by format for this shift date and area
-      const prodActivities = activities.filter(a => {
-        if (a.fecha !== fechaCierre) return false;
-        if (a.area !== selectedArea) return false;
-        if ((a.tipoTarea as string) !== 'P' && (a.tipoTarea as string) !== TaskType.PRODUCCION) return false;
-        if (currentTurnId) {
-          return a.turnoId === currentTurnId;
-        }
-        return true;
-      });
-      const formats = Array.from(new Set(prodActivities.map(a => a.formato).filter(Boolean)));
+      const formats = Array.from(new Set(
+        prodActivities.map(a => a.formato).filter(Boolean)
+      ));
       
       if (formats.length === 0) {
-        setShiftClosureData({});
-        setShowShiftClosureModal(true);
+        setShowShiftConfirmModal(true);
         return;
       }
 
