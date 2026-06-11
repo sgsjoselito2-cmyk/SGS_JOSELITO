@@ -106,7 +106,6 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
     if (!filterDate) return [];
     
     let combined = [
-      ...activities.map(a => ({ ...a, isHistory: false })),
       ...history.map(h => ({ ...h, isHistory: true }))
     ];
 
@@ -140,7 +139,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
       r.fecha === filterDate && 
       (r.tipoTarea === TaskType.PRODUCCION || (r.tipoTarea as string) === 'P')
     );
-  }, [activities, history, filterDate, selectedArea]);
+  }, [history, filterDate, selectedArea]);
 
   const uniqueFormatsInDay = useMemo(() => {
     return Array.from(new Set(prodActsOfDay.map(a => a.formato || 'SIN FORMATO')));
@@ -219,7 +218,6 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
 
   const allRecords = useMemo(() => {
     let combined = [
-      ...activities.map(a => ({ ...a, isHistory: false })),
       ...history.map(h => ({ ...h, isHistory: true }))
     ];
 
@@ -268,7 +266,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
       if (dateA !== dateB) return dateB.localeCompare(dateA);
       return (b.horaInicio || '').localeCompare(a.horaInicio || '');
     });
-  }, [activities, history, filterDate, filterTask, filterType, selectedArea]);
+  }, [history, filterDate, filterTask, filterType, selectedArea]);
 
   const areaTitleSuffix = useMemo(() => {
     if (selectedArea === 'sala-blanca-dashboard') return ' - SALA BLANCA';

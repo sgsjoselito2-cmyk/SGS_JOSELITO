@@ -2780,12 +2780,20 @@ const App: React.FC = () => {
         type: 'upsert',
         data: archiveData,
         filter: { column: 'id' }
-      }).then(() => {
+      }).then(async () => {
         executeOrQueue({
           table: 'activities',
           type: 'delete',
           filter: { column: 'id', value: idsACerrar }
         }, true);
+
+        const idsToDelete = filteredActivities.map(a => a.id);
+        await supabase.from('activities')
+          .delete()
+          .in('id', idsToDelete);
+        setActivities(prev => 
+          prev.filter(a => !idsToDelete.includes(a.id))
+        );
       });
 
       // Guardar mermas se existirem
