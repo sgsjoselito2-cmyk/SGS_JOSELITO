@@ -40,7 +40,48 @@ const getIntervals = (acts: Activity[]) => acts
   .filter(a => a.horaInicio && a.horaFin)
   .map(a => ({ start: a.horaInicio, end: a.horaFin! }));
 
-export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] = []) => {
+const evaluateFormula = (formula: string, vars: Record<string, number>): number => {
+  if (!formula) return 0;
+  let expr = formula.toLowerCase();
+  
+  // Sort variables by length descending to prevent substring issues
+  const keys = Object.keys(vars).sort((a, b) => b.length - a.length);
+  
+  keys.forEach(key => {
+    const value = vars[key] ?? 0;
+    const regex = new RegExp(`\\b${key}\\b`, 'g');
+    expr = expr.replace(regex, value.toString());
+  });
+
+  // Safe checks: only digits, spaces, operators, dots, commas, parenthesis, Math functions
+  const words = expr.match(/[a-zA-Z_]+/g) || [];
+  words.forEach(w => {
+    if (w !== 'math' && w !== 'abs' && w !== 'round' && w !== 'floor' && w !== 'ceil' && w !== 'max' && w !== 'min') {
+      expr = expr.replace(new RegExp(`\\b${w}\\b`, 'g'), '0');
+    }
+  });
+
+  // Prepend math with Math. for evaluation if needed
+  expr = expr.replace(/\b(abs|round|floor|ceil|max|min)\b/g, 'Math.$1');
+
+  try {
+    const fn = new Function(`return (${expr});`);
+    const val = fn();
+    return typeof val === 'number' && !isNaN(val) && isFinite(val) ? val : 0;
+  } catch (e) {
+    console.warn(`Error evaluating custom formula expression [${expr}] from template [${formula}]:`, e);
+    return 0;
+  }
+};
+
+export const calculateStats = (
+  data: Activity[],
+  areaId?: string,
+  mermas: any[] = [],
+  workshopIndicators?: Record<string, {id: string, name: string, formula?: string}[]>,
+  activities: Activity[] = [],
+  history: Activity[] = []
+) => {
   let totalPersonMinutes = 0;
   let totalParts = 0;
   let totalPartsNok = 0;
@@ -237,7 +278,7 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
   const hasData = data.length > 0;
   const hasMermas = isLoncheadoArea && mermas && mermas.length > 0;
 
-  return {
+  const statsObj: any = {
     disponibilidad: hasData ? finalAvailability.toFixed(1) : '',
     rendimiento: hasData ? finalPerformance.toFixed(1) : '',
     calidad: hasData ? finalQuality.toFixed(1) : '',
@@ -262,6 +303,67 @@ export const calculateStats = (data: Activity[], areaId?: string, mermas: any[] 
     tiempo_esperas: uniqueTimeE,
     tiempo_averias: uniqueTimeA
   };
+
+  // 2. El CÁLCULO del indicador personalizado usa también AMBAS tablas para obtener los valores:
+  //    const datosCalculo = [...activities, ...history]
+  //      .filter(a => a.area === area && a.fecha === fecha);
+  const targetArea = areaId;
+  const targetFecha = data.find(a => a.fecha)?.fecha || '';
+  
+  const datosCalculo = (targetArea && targetFecha && (activities.length > 0 || history.length > 0))
+    ? [...activities, ...history].filter(a => a.area === targetArea && a.fecha === targetFecha)
+    : data;
+
+  const baseVars: Record<string, number> = {
+    disponibilidad: parseFloat(statsObj.disponibilidad) || 0,
+    rendimiento: parseFloat(statsObj.rendimiento) || 0,
+    calidad: parseFloat(statsObj.calidad) || 0,
+    pph: parseFloat(statsObj.pph) || 0,
+    cantidad: totalParts,
+    cantidadnok: totalPartsNok,
+    personas: 0,
+    horas: (uniqueTimeP || 0) / 60
+  };
+
+  const productionActsForVars = datosCalculo.filter(a => a.tipoTarea === 'P' || a.tipoTarea === TaskType.PRODUCCION);
+  baseVars.personas = new Set(productionActsForVars.flatMap(a => a.operarios || [])).size || 0;
+
+  // Add dynamic format fields from variables
+  const formatsUnique = [...new Set(
+    datosCalculo
+      .filter(a => (a.tipoTarea === 'P' || a.tipoTarea === TaskType.PRODUCCION) && a.formato)
+      .map(a => a.formato!)
+  )];
+
+  formatsUnique.forEach(f => {
+    const varName = f.replace(/\s+/g, '_').toLowerCase();
+    const formatQty = datosCalculo
+      .filter(a => (a.tipoTarea === 'P' || a.tipoTarea === TaskType.PRODUCCION) && a.formato === f)
+      .reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
+    baseVars[varName] = formatQty;
+  });
+
+  // Try to load workshopIndicators from localStorage if not explicitly passed
+  let resolvedIndicators = workshopIndicators;
+  if (!resolvedIndicators && typeof window !== 'undefined') {
+    try {
+      const fromStore = localStorage.getItem('zitron_workshop_indicators');
+      if (fromStore) {
+        resolvedIndicators = JSON.parse(fromStore);
+      }
+    } catch (_) {}
+  }
+
+  const rawIndicators = (resolvedIndicators && targetArea) ? (resolvedIndicators[targetArea] || resolvedIndicators.default || []) : [];
+  rawIndicators.forEach((ind: any) => {
+    if (ind.formula) {
+      const val = evaluateFormula(ind.formula, baseVars);
+      // store the result as a key in the stats object
+      statsObj[ind.id] = val.toFixed(1);
+    }
+  });
+
+  return statsObj;
 };
 
 const Dashboard: React.FC<DashboardProps> = ({ 
@@ -387,7 +489,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // Filtered data for selected date
   const dayData = useMemo(() => allData.filter(a => a.fecha === selectedDate), [allData, selectedDate]);
-  const stats = useMemo(() => calculateStats(dayData, selectedArea, mermas.filter(m => m.fecha === selectedDate)), [dayData, selectedArea, selectedDate, mermas]);
+  const stats = useMemo(() => calculateStats(dayData, selectedArea, mermas.filter(m => m.fecha === selectedDate), workshopIndicators, activities, history), [dayData, selectedArea, selectedDate, mermas, workshopIndicators, activities, history]);
 
   // Scorecard Data
   const scorecardData = useMemo(() => {
@@ -401,7 +503,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       const data = allData.filter(a => a.fecha === dateStr);
       return { 
         label: dateStr, 
-        total: calculateStats(data, selectedArea, mermas.filter(m => m.fecha === dateStr)),
+        total: calculateStats(data, selectedArea, mermas.filter(m => m.fecha === dateStr), workshopIndicators, activities, history),
       };
     });
 
@@ -423,7 +525,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       });
       return { 
         label: `S${weekNum}`, 
-        total: calculateStats(data, selectedArea, weekMermas),
+        total: calculateStats(data, selectedArea, weekMermas, workshopIndicators, activities, history),
       };
     });
 
@@ -441,15 +543,15 @@ const Dashboard: React.FC<DashboardProps> = ({
       annual: [
         { 
           label: prevYear.toString(), 
-          total: calculateStats(prevYearData, selectedArea, prevYearMermas),
+          total: calculateStats(prevYearData, selectedArea, prevYearMermas, workshopIndicators, activities, history),
         },
         { 
           label: currentYear.toString(), 
-          total: calculateStats(currentYearData, selectedArea, currentYearMermas),
+          total: calculateStats(currentYearData, selectedArea, currentYearMermas, workshopIndicators, activities, history),
         }
       ]
     };
-  }, [allData, selectedDate, selectedArea, mermas]);
+  }, [allData, selectedDate, selectedArea, mermas, workshopIndicators, activities, history]);
 
   const isTimeBased = false;
 

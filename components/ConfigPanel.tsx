@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Database, Activity as ActivityIcon, Upload } from 'lucide-react';
 import Papa from 'papaparse';
 import { isConfigured, supabase } from '../lib/supabase';
-import { MasterSpeed, IncidenceMaster, TaskType, OEEObjectives, User } from '../types';
+import { MasterSpeed, IncidenceMaster, TaskType, OEEObjectives, User, Activity } from '../types';
 import { AREA_NAMES, AREA_COLUMNS, getInitialMasterSpeeds, getInitialIncidenceMaster, getInitialOperarios } from '../constants';
 
 interface ConfigPanelProps {
@@ -28,6 +28,8 @@ interface ConfigPanelProps {
   };
   workshopIndicators: Record<string, {id: string, name: string, formula?: string}[]>;
   setWorkshopIndicators: React.Dispatch<React.SetStateAction<Record<string, {id: string, name: string, formula?: string}[]>>>;
+  activities?: Activity[];
+  history?: Activity[];
 }
 
 const ConfigPanel: React.FC<ConfigPanelProps> = ({ 
@@ -47,7 +49,9 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
   setResponsibles,
   passwords,
   workshopIndicators,
-  setWorkshopIndicators
+  setWorkshopIndicators,
+  activities = [],
+  history = []
 }) => {
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [showPassModal, setShowPassModal] = useState(false);
@@ -84,6 +88,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
     type: 'prompt' | 'confirm';
     title: string;
     message: string;
+    wsId?: string;
     inputs?: { label: string; value: string; key: string; type?: 'text' | 'select'; options?: { label: string; value: string }[] }[];
     onConfirm: (vals?: Record<string, string>) => void;
     onCancel: () => void;
@@ -92,6 +97,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
     type: 'confirm',
     title: '',
     message: '',
+    wsId: undefined,
     onConfirm: () => {},
     onCancel: () => {},
   });
@@ -394,6 +400,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
       type: 'prompt',
       title: 'Añadir Indicador',
       message: `Introducir detalles para ${AREA_NAMES[wsId] || wsId}`,
+      wsId,
       inputs: [
         { label: 'Nombre:', value: '', key: 'name' },
         { 
@@ -565,48 +572,93 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                   </select>
                 ) : (
                   <>
-                  {input.key === 'formula' && (
-                    <div className="mb-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                      <p className="text-xs font-bold text-slate-500 uppercase mb-2">Campos disponibles:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {['disponibilidad', 'rendimiento', 'calidad', 'productividad', 'pph', 'cantidad_colgada'].map(field => (
-                          <button 
-                            key={field}
-                            type="button"
-                            onClick={() => {
-                              const val = input.value + field;
-                              setModalConfig(prev => ({
-                                ...prev,
-                                inputs: prev.inputs?.map(i => i.key === input.key ? {...i, value: val} : i)
-                              }));
-                            }}
-                            className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold hover:bg-blue-200"
-                          >
-                            {field}
-                          </button>
-                        ))}
+                  {input.key === 'formula' && (() => {
+                    const wsIdForFormula = modalConfig.wsId || '';
+                    const camposBase = ['disponibilidad', 'rendimiento', 'calidad', 'pph', 'cantidad', 'cantidadNok', 'personas', 'horas'];
+                    const todosLosActs = [...(activities || []), ...(history || [])];
+                    const formatosArea = [...new Set(
+                      todosLosActs
+                        .filter(a => a.area === wsIdForFormula && a.tipoTarea === 'P')
+                        .map(a => a.formato)
+                        .filter(Boolean)
+                    )].map(f => f.replace(/\s+/g, '_').toLowerCase());
+                    
+                    return (
+                      <div className="mb-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                        <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                          <div className="mb-3">
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">CAMPOS BASE:</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {camposBase.map(field => (
+                                <button 
+                                  key={field}
+                                  type="button"
+                                  onClick={() => {
+                                    const val = input.value + field;
+                                    setModalConfig(prev => ({
+                                      ...prev,
+                                      inputs: prev.inputs?.map(i => i.key === input.key ? {...i, value: val} : i)
+                                    }));
+                                  }}
+                                  className="bg-blue-100 text-blue-700 hover:bg-blue-200 px-2 py-1 rounded-lg text-xs font-black transition-colors"
+                                >
+                                  {field}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="mb-3 border-t border-slate-200/60 pt-2 pr-1">
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">FORMATOS:</p>
+                            {formatosArea.length > 0 ? (
+                              <div className="flex flex-wrap gap-1.5">
+                                {formatosArea.map(field => (
+                                  <button 
+                                    key={field}
+                                    type="button"
+                                    onClick={() => {
+                                      const val = input.value + field;
+                                      setModalConfig(prev => ({
+                                        ...prev,
+                                        inputs: prev.inputs?.map(i => i.key === input.key ? {...i, value: val} : i)
+                                      }));
+                                    }}
+                                    className="bg-purple-100 text-purple-700 hover:bg-purple-200 px-2 py-1 rounded-lg text-xs font-black transition-colors"
+                                  >
+                                    {field}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-xs font-bold text-slate-400 italic">No hay formatos de producción registrados</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="border-t border-slate-200/60 pt-2">
+                          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">OPERADORES:</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {['+', '-', '*', '/', '(', ')'].map(op => (
+                              <button 
+                                key={op}
+                                type="button"
+                                onClick={() => {
+                                  const val = input.value + op;
+                                  setModalConfig(prev => ({
+                                    ...prev,
+                                    inputs: prev.inputs?.map(i => i.key === input.key ? {...i, value: val} : i)
+                                  }));
+                                }}
+                                className="bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1 rounded-lg text-xs font-black transition-colors"
+                              >
+                                {op}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-xs font-bold text-slate-500 uppercase mt-3 mb-2">Operadores:</p>
-                      <div className="flex gap-2">
-                        {['+', '-', '*', '/', '(', ')'].map(op => (
-                          <button 
-                            key={op}
-                            type="button"
-                            onClick={() => {
-                              const val = input.value + op;
-                              setModalConfig(prev => ({
-                                ...prev,
-                                inputs: prev.inputs?.map(i => i.key === input.key ? {...i, value: val} : i)
-                              }));
-                            }}
-                            className="bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs font-bold hover:bg-slate-300"
-                          >
-                            {op}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                   <input
                     type="text"
                     className="w-full bg-slate-100 rounded-lg p-2 font-bold text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-500"

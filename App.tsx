@@ -3235,6 +3235,7 @@ const App: React.FC = () => {
                 setResponsibles={setResponsibles}
                 workshopIndicators={workshopIndicators}
                 setWorkshopIndicators={setWorkshopIndicators}
+                activities={activities}
               />
             )}
             {activeTab === 'database' && (
