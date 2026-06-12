@@ -1009,193 +1009,197 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
 
 
       {/* SECCIÓN: MAESTRO DE TAREAS */}
-      <section className={`p-10 rounded-[4rem] border shadow-2xl flex flex-col min-h-[600px] transition-colors ${isAdminMode ? 'bg-slate-900 border-indigo-800 text-white' : 'bg-white border-slate-100'}`}>
-         <div className="flex items-center gap-4 mb-8">
-            <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center shadow-inner">
-               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
-            </div>
-            <div>
-               <h2 className="text-2xl font-black uppercase tracking-tighter text-indigo-600">Maestro de Formatos</h2>
-               <div className="flex items-center gap-4 mt-1">
-                 <p className="text-[14px] font-black uppercase tracking-widest opacity-50">Definición de tiempos estándar por GAP</p>
-                 {!isConfigured && (
-                   <span className="px-2 py-0.5 bg-amber-100 text-amber-600 rounded text-[10px] font-black uppercase tracking-widest animate-pulse">
-                     Modo Local (Sin Cloud)
-                   </span>
-                 )}
-                 {isAdminMode && (
-                   <div className="flex gap-2 ml-auto">
-                     <button 
-                       onClick={handleForceSync}
-                       className="px-3 py-1 bg-indigo-500/10 text-indigo-400 rounded-lg text-[15px] font-black uppercase tracking-widest hover:bg-indigo-500/20 transition-all flex items-center gap-1 border border-indigo-500/20"
-                     >
-                       <Database className="w-2 h-2" />
-                       Sincronizar
-                     </button>
-                     <button 
-                       onClick={handleResetMasterData}
-                       className="px-3 py-1 bg-red-500/10 text-red-400 rounded-lg text-[15px] font-black uppercase tracking-widest hover:bg-red-500/20 transition-all border border-red-500/20"
-                     >
-                       Restablecer
-                     </button>
-                   </div>
-                 )}
-               </div>
-            </div>
-         </div>
+      {selectedArea !== 'TOP 15' && selectedArea !== 'TOP 60' && (
+        <section className={`p-10 rounded-[4rem] border shadow-2xl flex flex-col min-h-[600px] transition-colors ${isAdminMode ? 'bg-slate-900 border-indigo-800 text-white' : 'bg-white border-slate-100'}`}>
+           <div className="flex items-center gap-4 mb-8">
+              <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center shadow-inner">
+                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+              </div>
+              <div>
+                 <h2 className="text-2xl font-black uppercase tracking-tighter text-indigo-600">Maestro de Formatos</h2>
+                 <div className="flex items-center gap-4 mt-1">
+                   <p className="text-[14px] font-black uppercase tracking-widest opacity-50">Definición de tiempos estándar por GAP</p>
+                   {!isConfigured && (
+                     <span className="px-2 py-0.5 bg-amber-100 text-amber-600 rounded text-[10px] font-black uppercase tracking-widest animate-pulse">
+                       Modo Local (Sin Cloud)
+                     </span>
+                   )}
+                   {isAdminMode && (
+                     <div className="flex gap-2 ml-auto">
+                       <button 
+                         onClick={handleForceSync}
+                         className="px-3 py-1 bg-indigo-500/10 text-indigo-400 rounded-lg text-[15px] font-black uppercase tracking-widest hover:bg-indigo-500/20 transition-all flex items-center gap-1 border border-indigo-500/20"
+                       >
+                         <Database className="w-2 h-2" />
+                         Sincronizar
+                       </button>
+                       <button 
+                         onClick={handleResetMasterData}
+                         className="px-3 py-1 bg-red-500/10 text-red-400 rounded-lg text-[15px] font-black uppercase tracking-widest hover:bg-red-500/20 transition-all border border-red-500/20"
+                       >
+                         Restablecer
+                       </button>
+                     </div>
+                   )}
+                 </div>
+              </div>
+           </div>
 
-         {isAdminMode && (
-           <div className="flex flex-col gap-4 mb-10">
-             <div className="flex flex-col md:flex-row gap-4">
-               <input 
-                 type="text" 
-                 placeholder="NOMBRE DEL FORMATO..." 
-                 value={newTaskName} 
-                 onChange={(e) => setNewTaskName(e.target.value)} 
-                 className="flex-[2] bg-white/10 border-4 border-slate-100 rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-widest outline-none focus:border-indigo-500 transition-all text-slate-900 bg-slate-50"
-               />
-             </div>
-             
-             <div className="flex flex-col md:flex-row gap-4">
-               <div className="flex flex-1 gap-4">
-                  <div className="flex-1 flex flex-col gap-1">
-                    <label className="text-[15px] font-black uppercase tracking-widest text-slate-400 ml-2">
-                      Unidades Hora
-                    </label>
-                    <input 
-                      type="number" 
-                      placeholder="U/H" 
-                      value={newTaskTime} 
-                      onChange={(e) => setNewTaskTime(e.target.value)} 
-                      className="w-full bg-white/10 border-4 border-slate-100 rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-widest outline-none focus:border-indigo-500 transition-all text-slate-900 bg-slate-50 text-center"
-                    />
-                  </div>
-                  <div className="flex-1 flex flex-col gap-1">
-                    <label className="text-[15px] font-black uppercase tracking-widest text-slate-400 ml-2">
-                       Peso (Kg)
-                    </label>
-                    <input 
-                      type="number" 
-                      step="0.001"
-                      placeholder="KG" 
-                      value={newTaskPeso} 
-                      onChange={(e) => setNewTaskPeso(e.target.value)} 
-                      className="w-full bg-white/10 border-4 border-slate-100 rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-widest outline-none focus:border-indigo-500 transition-all text-slate-900 bg-slate-50 text-center"
-                    />
-                  </div>
-                  <div className="flex-1 flex flex-col gap-1">
-                    <label className="text-[15px] font-black uppercase tracking-widest text-slate-400 ml-2">
-                      Unidad
-                    </label>
-                    <select 
-                      value={newTaskUnidad} 
-                      onChange={(e) => setNewTaskUnidad(e.target.value as 'kg' | 'unidades')} 
-                      className="w-full bg-white/10 border-4 border-slate-100 rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-widest outline-none focus:border-indigo-500 transition-all text-slate-900 bg-slate-50"
-                    >
-                      <option value="unidades">Unidades</option>
-                      <option value="kg">Kg</option>
-                    </select>
-                  </div>
+           {isAdminMode && (
+             <div className="flex flex-col gap-4 mb-10">
+               <div className="flex flex-col md:flex-row gap-4">
+                 <input 
+                   type="text" 
+                   placeholder="NOMBRE DEL FORMATO..." 
+                   value={newTaskName} 
+                   onChange={(e) => setNewTaskName(e.target.value)} 
+                   className="flex-[2] bg-white/10 border-4 border-slate-100 rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-widest outline-none focus:border-indigo-500 transition-all text-slate-900 bg-slate-50"
+                 />
                </div>
                
-               <div className="flex gap-3 mt-auto">
-                 <button 
-                   type="button" 
-                   onClick={onAddTask} 
-                   className="flex-1 bg-indigo-600 text-white px-8 rounded-2xl font-black text-xs uppercase shadow-xl shadow-indigo-200 active:scale-95 transition-all hover:bg-indigo-700 h-[60px]"
-                 >
-                   Añadir Formato
-                 </button>
-                 <button 
-                   type="button" 
-                   onClick={() => {
-                     if (selectedArea && confirm('¿Cargar formatos por defecto para este GAP? Se borrarán las actuales.')) {
-                       setMasterSpeeds(getInitialMasterSpeeds(selectedArea));
-                     }
-                   }} 
-                   className="bg-slate-100 text-slate-400 px-6 rounded-2xl font-black text-[13px] uppercase tracking-widest hover:bg-slate-200 transition-all h-[60px]"
-                 >
-                   Reset
-                 </button>
-               </div>
-             </div>
-           </div>
-         )}
-              <div className="grid grid-cols-1 gap-3 max-h-[500px] overflow-y-auto pr-2">
-            <div className="flex items-center justify-between px-5 py-2 text-[13px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 mb-2">
-              <div className="flex-[2]">Formato</div>
-              <div className="flex-1 text-center">Unidades Hora</div>
-              <div className="flex-1 text-center">Peso</div>
-              <div className="flex-1 text-center">Unidad</div>
-              {isAdminMode && <div className="w-24"></div>}
-            </div>
-            {masterSpeeds
-              .filter(ms => ms.area === selectedArea)
-              .map(task => (
-               <div key={task.id} className={`flex items-center justify-between p-5 rounded-[2rem] border transition-all ${isAdminMode ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-slate-50 border-slate-100 hover:border-indigo-200 hover:bg-white'}`}>
-                  {editingId === task.id ? (
-                    <div className="flex flex-1 gap-4 items-center">
-                      <input 
-                        type="text" 
-                        value={editValue} 
-                        onChange={(e) => setEditValue(e.target.value)}
-                        className="flex-[2] bg-slate-800 border border-white/20 rounded-lg px-3 py-2 text-xs font-black uppercase text-white outline-none"
-                        autoFocus
-                      />
+               <div className="flex flex-col md:flex-row gap-4">
+                 <div className="flex flex-1 gap-4">
+                    <div className="flex-1 flex flex-col gap-1">
+                      <label className="text-[15px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                        Unidades Hora
+                      </label>
                       <input 
                         type="number" 
-                        value={editTime} 
-                        onChange={(e) => setEditTime(e.target.value)}
-                        className="flex-1 bg-slate-800 border border-white/20 rounded-lg px-2 py-2 text-[14px] font-black uppercase text-white outline-none text-center"
+                        placeholder="U/H" 
+                        value={newTaskTime} 
+                        onChange={(e) => setNewTaskTime(e.target.value)} 
+                        className="w-full bg-white/10 border-4 border-slate-100 rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-widest outline-none focus:border-indigo-500 transition-all text-slate-900 bg-slate-50 text-center"
                       />
+                    </div>
+                    <div className="flex-1 flex flex-col gap-1">
+                      <label className="text-[15px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                         Peso (Kg)
+                      </label>
                       <input 
                         type="number" 
                         step="0.001"
-                        value={editPeso} 
-                        onChange={(e) => setEditPeso(e.target.value)}
-                        className="flex-1 bg-slate-800 border border-white/20 rounded-lg px-2 py-2 text-[14px] font-black uppercase text-white outline-none text-center"
+                        placeholder="KG" 
+                        value={newTaskPeso} 
+                        onChange={(e) => setNewTaskPeso(e.target.value)} 
+                        className="w-full bg-white/10 border-4 border-slate-100 rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-widest outline-none focus:border-indigo-500 transition-all text-slate-900 bg-slate-50 text-center"
                       />
+                    </div>
+                    <div className="flex-1 flex flex-col gap-1">
+                      <label className="text-[15px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                        Unidad
+                      </label>
                       <select 
-                        value={editUnidad} 
-                        onChange={(e) => setEditUnidad(e.target.value as 'kg' | 'unidades')} 
-                        className="flex-1 bg-slate-800 border border-white/20 rounded-lg px-2 py-2 text-[14px] font-black uppercase text-white outline-none text-center"
+                        value={newTaskUnidad} 
+                        onChange={(e) => setNewTaskUnidad(e.target.value as 'kg' | 'unidades')} 
+                        className="w-full bg-white/10 border-4 border-slate-100 rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-widest outline-none focus:border-indigo-500 transition-all text-slate-900 bg-slate-50"
                       >
                         <option value="unidades">Unidades</option>
                         <option value="kg">Kg</option>
                       </select>
-                      <div className="flex gap-2">
-                        <button onClick={saveEditTask} className="p-2 bg-emerald-500 rounded-lg text-white hover:bg-emerald-600">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg>
-                        </button>
-                        <button onClick={() => setEditingId(null)} className="p-2 bg-slate-500 rounded-lg text-white hover:bg-slate-600">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"/></svg>
-                        </button>
-                      </div>
                     </div>
-                  ) : (
-                    <>
-                      <div className="flex flex-1 items-center">
-                        <div className="flex-[2] text-xs font-black uppercase tracking-tight">{task.formato}</div>
-                        <div className="flex-1 text-xs font-black uppercase tracking-tight text-center">{task.tiempoTeorico}</div>
-                        <div className="flex-1 text-xs font-black uppercase tracking-tight text-center">{task.peso || 0}</div>
-                        <div className="flex-1 text-xs font-black uppercase tracking-tight text-center">{task.unidad || 'unidades'}</div>
-                      </div>
-                      {isAdminMode && (
-                        <div className="flex gap-2 ml-4">
-                          <button type="button" onClick={() => startEditTask(task)} className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center hover:bg-indigo-500 hover:text-white transition-all">
-                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                 </div>
+                 
+                 <div className="flex gap-3 mt-auto">
+                   <button 
+                     type="button" 
+                     onClick={onAddTask} 
+                     className="flex-1 bg-indigo-600 text-white px-8 rounded-2xl font-black text-xs uppercase shadow-xl shadow-indigo-200 active:scale-95 transition-all hover:bg-indigo-700 h-[60px]"
+                   >
+                     Añadir Formato
+                   </button>
+                   <button 
+                     type="button" 
+                     onClick={() => {
+                       if (selectedArea && confirm('¿Cargar formatos por defecto para este GAP? Se borrarán las actuales.')) {
+                         setMasterSpeeds(getInitialMasterSpeeds(selectedArea));
+                       }
+                     }} 
+                     className="bg-slate-100 text-slate-400 px-6 rounded-2xl font-black text-[13px] uppercase tracking-widest hover:bg-slate-200 transition-all h-[60px]"
+                   >
+                     Reset
+                   </button>
+                 </div>
+               </div>
+             </div>
+           )}
+                <div className="grid grid-cols-1 gap-3 max-h-[500px] overflow-y-auto pr-2">
+              <div className="flex items-center justify-between px-5 py-2 text-[13px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 mb-2">
+                <div className="flex-[2]">Formato</div>
+                <div className="flex-1 text-center">Unidades Hora</div>
+                <div className="flex-1 text-center">Peso</div>
+                <div className="flex-1 text-center">Unidad</div>
+                {isAdminMode && <div className="w-24"></div>}
+              </div>
+              {masterSpeeds
+                .filter(ms => ms.area === selectedArea)
+                .map(task => (
+                 <div key={task.id} className={`flex items-center justify-between p-5 rounded-[2rem] border transition-all ${isAdminMode ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-slate-50 border-slate-100 hover:border-indigo-200 hover:bg-white'}`}>
+                    {editingId === task.id ? (
+                      <div className="flex flex-1 gap-4 items-center">
+                        <input 
+                          type="text" 
+                          value={editValue} 
+                          onChange={(e) => setEditValue(e.target.value)}
+                          className="flex-[2] bg-slate-800 border border-white/20 rounded-lg px-3 py-2 text-xs font-black uppercase text-white outline-none"
+                          autoFocus
+                        />
+                        <input 
+                          type="number" 
+                          value={editTime} 
+                          onChange={(e) => setEditTime(e.target.value)}
+                          className="flex-1 bg-slate-800 border border-white/20 rounded-lg px-2 py-2 text-[14px] font-black uppercase text-white outline-none text-center"
+                        />
+                        <input 
+                          type="number" 
+                          step="0.001"
+                          value={editPeso} 
+                          onChange={(e) => setEditPeso(e.target.value)}
+                          className="flex-1 bg-slate-800 border border-white/20 rounded-lg px-2 py-2 text-[14px] font-black uppercase text-white outline-none text-center"
+                        />
+                        <select 
+                          value={editUnidad} 
+                          onChange={(e) => setEditUnidad(e.target.value as 'kg' | 'unidades')} 
+                          className="flex-1 bg-slate-800 border border-white/20 rounded-lg px-2 py-2 text-[14px] font-black uppercase text-white outline-none text-center"
+                        >
+                          <option value="unidades">Unidades</option>
+                          <option value="kg">Kg</option>
+                        </select>
+                        <div className="flex gap-2">
+                          <button onClick={saveEditTask} className="p-2 bg-emerald-500 rounded-lg text-white hover:bg-emerald-600">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg>
                           </button>
-                          <button type="button" onClick={() => onDeleteTask(task.id)} className="w-10 h-10 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all">
-                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                          <button onClick={() => setEditingId(null)} className="p-2 bg-slate-500 rounded-lg text-white hover:bg-slate-600">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"/></svg>
                           </button>
                         </div>
-                      )}
-                    </>
-                  )}
-               </div>
-            ))}
-         </div>
-      </section>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-1 items-center">
+                          <div className="flex-[2] text-xs font-black uppercase tracking-tight">{task.formato}</div>
+                          <div className="flex-1 text-xs font-black uppercase tracking-tight text-center">{task.tiempoTeorico}</div>
+                          <div className="flex-1 text-xs font-black uppercase tracking-tight text-center">{task.peso || 0}</div>
+                          <div className="flex-1 text-xs font-black uppercase tracking-tight text-center">{task.unidad || 'unidades'}</div>
+                        </div>
+                        {isAdminMode && (
+                          <div className="flex gap-2 ml-4">
+                            <button type="button" onClick={() => startEditTask(task)} className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center hover:bg-indigo-500 hover:text-white transition-all">
+                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                            </button>
+                            <button type="button" onClick={() => onDeleteTask(task.id)} className="w-10 h-10 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all">
+                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                 </div>
+              ))}
+           </div>
+        </section>
+      )}
+
+
 
       {/* SECCIÓN: RESPONSABLES */}
       {(selectedArea === 'TOP 15' || selectedArea === 'TOP 60') && setResponsibles && (
