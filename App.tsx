@@ -493,6 +493,8 @@ const App: React.FC = () => {
           } else if (op.type === 'delete') {
             if (op.filter?.value === 'all') {
               result = await supabase.from(op.table).delete().neq('id', '_none_');
+            } else if (Array.isArray(op.filter?.value)) {
+              result = await supabase.from(op.table).delete().in(op.filter!.column, op.filter!.value);
             } else {
               result = await supabase.from(op.table).delete().eq(op.filter!.column, op.filter!.value);
             }
@@ -505,6 +507,8 @@ const App: React.FC = () => {
           } else if (op.type === 'delete') {
             if (op.filter?.value === 'all') {
               result = await supabase.from(op.table).delete().neq('id', '_none_');
+            } else if (Array.isArray(op.filter?.value)) {
+              result = await supabase.from(op.table).delete().in(op.filter!.column, op.filter!.value);
             } else {
               result = await supabase.from(op.table).delete().eq(op.filter!.column, op.filter!.value);
             }
@@ -615,6 +619,8 @@ const App: React.FC = () => {
           } else if (op.type === 'delete') {
             if (op.filter?.value === 'all') {
               result = await supabase.from(op.table).delete().neq('id', '_none_');
+            } else if (Array.isArray(op.filter?.value)) {
+              result = await supabase.from(op.table).delete().in(op.filter!.column, op.filter!.value);
             } else {
               result = await supabase.from(op.table).delete().eq(op.filter!.column, op.filter!.value);
             }
@@ -627,6 +633,8 @@ const App: React.FC = () => {
           } else if (op.type === 'delete') {
             if (op.filter?.value === 'all') {
               result = await supabase.from(op.table).delete().neq('id', '_none_');
+            } else if (Array.isArray(op.filter?.value)) {
+              result = await supabase.from(op.table).delete().in(op.filter!.column, op.filter!.value);
             } else {
               result = await supabase.from(op.table).delete().eq(op.filter!.column, op.filter!.value);
             }
@@ -1004,8 +1012,12 @@ const App: React.FC = () => {
 
       // Filter the aggregated data for the selected area and deduplicate by ID
       const prefix = `zitron_${selectedArea}_`;
-      let localActivities = Array.from(new Map(aggregatedActivities.filter(a => a && a.id && a.area === selectedArea).map(a => [a.id, a])).values());
       let localHistory = Array.from(new Map(aggregatedHistory.filter(a => a && a.id && a.area === selectedArea).map(a => [a.id, a])).values());
+      let localActivities = Array.from(new Map(aggregatedActivities.filter(a => a && a.id && a.area === selectedArea).map(a => [a.id, a])).values());
+      
+      // Self-healing fallback: filter out activities that have already been finalized and exist in history
+      const historyIds = new Set(localHistory.map(h => h.id));
+      localActivities = localActivities.filter(a => !historyIds.has(a.id));
       let localOperarios: any[] = [];
       let localSpeeds: any[] = [];
       let localIncidences: any[] = [];
