@@ -297,12 +297,17 @@ const App: React.FC = () => {
           setIsBackendReady(true);
           setBackendError(null);
         } else if (isMounted) {
-          setBackendError(`HTTP ${res.status}`);
+          // El health check es opcional: si falla (por ejemplo 404 en Vercel), continuamos normalmente
+          console.warn(`Backend health-v2 returned HTTP ${res.status}. Falling back to direct Supabase connection.`);
+          setIsBackendReady(true);
+          setBackendError(null);
         }
       } catch (e: any) {
         if (isMounted) {
-          console.warn("Backend not ready yet or unreachable...");
-          setBackendError(e.message || "Error de red");
+          // El health check es opcional: si hay error o red inalcanzable, continuamos normalmente
+          console.warn("Backend health-v2 unreachable, falling back to direct Supabase connection.", e.message || e);
+          setIsBackendReady(true);
+          setBackendError(null);
         }
       }
     };

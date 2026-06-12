@@ -576,12 +576,18 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                     const wsIdForFormula = modalConfig.wsId || '';
                     const camposBase = ['disponibilidad', 'rendimiento', 'calidad', 'pph', 'cantidad', 'cantidadNok', 'personas', 'horas'];
                     const todosLosActs = [...(activities || []), ...(history || [])];
+                    const sanitizeFieldName = (formato: string) =>
+                      formato
+                        .toLowerCase()
+                        .replace(/\s+/g, '_')
+                        .replace(/[^a-z0-9_]/g, '');
+
                     const formatosArea = [...new Set(
                       todosLosActs
                         .filter(a => a.area === wsIdForFormula && a.tipoTarea === 'P')
                         .map(a => a.formato)
                         .filter(Boolean)
-                    )].map(f => f.replace(/\s+/g, '_').toLowerCase());
+                    )].map(f => sanitizeFieldName(f));
                     
                     return (
                       <div className="mb-2 p-3 bg-slate-50 rounded-xl border border-slate-200">

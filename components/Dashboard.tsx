@@ -40,15 +40,27 @@ const getIntervals = (acts: Activity[]) => acts
   .filter(a => a.horaInicio && a.horaFin)
   .map(a => ({ start: a.horaInicio, end: a.horaFin! }));
 
+const sanitizeFieldName = (formato: string) =>
+  formato
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '');
+
 const evaluateFormula = (formula: string, vars: Record<string, number>): number => {
   if (!formula) return 0;
   let expr = formula.toLowerCase();
   
-  // Sort variables by length descending to prevent substring issues
-  const keys = Object.keys(vars).sort((a, b) => b.length - a.length);
+  // Normalize vars keys to lowercase
+  const lowerVars: Record<string, number> = {};
+  Object.entries(vars).forEach(([k, v]) => {
+    lowerVars[k.toLowerCase()] = v;
+  });
+
+  // Sort variables by length descending to prevent substring substitution issues (e.g. "cantidad" matching inside "cantidadnok")
+  const keys = Object.keys(lowerVars).sort((a, b) => b.length - a.length);
   
   keys.forEach(key => {
-    const value = vars[key] ?? 0;
+    const value = lowerVars[key] ?? 0;
     const regex = new RegExp(`\\b${key}\\b`, 'g');
     expr = expr.replace(regex, value.toString());
   });
@@ -65,8 +77,7 @@ const evaluateFormula = (formula: string, vars: Record<string, number>): number 
   expr = expr.replace(/\b(abs|round|floor|ceil|max|min)\b/g, 'Math.$1');
 
   try {
-    const fn = new Function(`return (${expr});`);
-    const val = fn();
+    const val = Function('"use strict"; return (' + expr + ')')();
     return typeof val === 'number' && !isNaN(val) && isFinite(val) ? val : 0;
   } catch (e) {
     console.warn(`Error evaluating custom formula expression [${expr}] from template [${formula}]:`, e);
@@ -336,7 +347,7 @@ export const calculateStats = (
   )];
 
   formatsUnique.forEach(f => {
-    const varName = f.replace(/\s+/g, '_').toLowerCase();
+    const varName = sanitizeFieldName(f);
     const formatQty = datosCalculo
       .filter(a => (a.tipoTarea === 'P' || a.tipoTarea === TaskType.PRODUCCION) && a.formato === f)
       .reduce((sum, a) => sum + Number(a.cantidad || 0), 0);

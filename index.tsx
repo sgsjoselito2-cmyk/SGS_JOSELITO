@@ -4,7 +4,9 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 
 console.log("Joselito App: Iniciando montaje del DOM...");
-fetch('/api/health-v2?from=index-tsx').then(r => console.log('index.tsx health check:', r.status));
+fetch('/api/health-v2?from=index-tsx')
+  .then(r => console.log('index.tsx health check:', r.status))
+  .catch(err => console.warn('index.tsx optional health check failed:', err));
 
 const rootElement = document.getElementById('root');
 
