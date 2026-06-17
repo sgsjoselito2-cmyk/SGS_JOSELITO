@@ -712,7 +712,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
       sourceStats = annualStats;
     }
 
-    const groups: Record<string, Record<string, { id: string, indicatorId: string, indicatorName: string, value: any }[]>> = {};
+    const groups: Record<string, Record<string, { id: string, indicatorId: string, indicatorName: string, value: any, values: any[] | null }[]>> = {};
     
     sourceStats.forEach(row => {
       if (!groups[row.taller]) {
@@ -727,7 +727,8 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
         id: row.id,
         indicatorId: row.indicatorId,
         indicatorName: row.indicatorName,
-        value: val
+        value: val,
+        values: row.values || null
       });
     });
     return groups;
@@ -983,14 +984,52 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
                           const statusEmoji = isEmpty ? '' : (isGood ? '✅' : '🔴');
 
                           return (
-                            <div key={row.indicatorId} className="flex items-end justify-between py-1 border-b border-dashed border-slate-50 last:border-b-0">
-                              <span className="text-slate-500 font-bold uppercase text-[10px] tracking-wider shrink-0">
-                                {row.indicatorName}
-                              </span>
-                              <div className="flex-1 border-b border-dotted border-slate-200 mx-2 mb-1.5 opacity-60" />
-                              <span className={`font-black text-[11px] shrink-0 ${valColor}`}>
-                                {formattedVal}{hasObj ? ` / obj: ${formattedObj}` : ''}{statusEmoji ? ` ${statusEmoji}` : ''}
-                              </span>
+                            <div key={row.indicatorId} className="flex flex-col py-1.5 border-b border-dashed border-slate-100 last:border-b-0">
+                              <div className="flex items-end justify-between">
+                                <span className="text-slate-500 font-bold uppercase text-[10px] tracking-wider shrink-0">
+                                  {row.indicatorName}
+                                </span>
+                                <div className="flex-1 border-b border-dotted border-slate-200 mx-2 mb-1.5 opacity-60 flex-shrink-0" />
+                                <span className={`font-black text-[11px] shrink-0 ${valColor}`}>
+                                  {formattedVal}{hasObj ? ` / obj: ${formattedObj}` : ''}{statusEmoji ? ` ${statusEmoji}` : ''}
+                                </span>
+                              </div>
+                              
+                              {/* Historial de últimos 7 periodos en miniatura */}
+                              {row.values && row.values.length > 0 && (
+                                <div className="flex items-center gap-1.5 mt-1 bg-slate-50 p-1 rounded-lg">
+                                  <span className="text-[7px] font-black uppercase text-slate-400 tracking-wider">Historial (7):</span>
+                                  <div className="flex gap-0.5 ml-auto overflow-x-auto no-scrollbar">
+                                    {row.values.map((v: any, vIdx: number) => {
+                                      const vIsEmpty = v === null || v === undefined || v === '';
+                                      const vFormatted = vIsEmpty ? '—' : (isPPHOrColgada ? v : `${v}%`);
+                                      const vNum = parseFloat(v);
+                                      const vColObj = getWorkshopObjective(row.id, row.indicatorId, mobileViewMode === 'semanal' ? undefined : last7Days[vIdx]);
+                                      
+                                      let vIsGood = false;
+                                      if (row.indicatorId.startsWith('merma') || row.indicatorId === 'subproducto') {
+                                        vIsGood = !isNaN(vNum) && vNum <= vColObj;
+                                      } else {
+                                        vIsGood = !isNaN(vNum) && vNum >= vColObj;
+                                      }
+                                      
+                                      const vColorClass = vIsEmpty 
+                                        ? 'bg-slate-100/60 text-slate-400 border-slate-100' 
+                                        : (vIsGood ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100');
+                                      
+                                      return (
+                                        <div 
+                                          key={vIdx} 
+                                          className={`text-[8px] font-black px-1 py-0.5 rounded border ${vColorClass} min-w-[22px] text-center ${vIdx === 6 ? 'ring-2 ring-slate-900 ring-offset-0.5' : 'opacity-70'}`}
+                                          title={mobileViewMode === 'semanal' ? `S${last7Weeks[vIdx].week}: ${vFormatted}` : `${last7Days[vIdx].split('-').reverse().slice(0, 2).join('/')}: ${vFormatted}`}
+                                        >
+                                          {vIsEmpty ? '-' : v}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           );
                         })}

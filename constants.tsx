@@ -138,6 +138,7 @@ export const INITIAL_WORKSHOP_INDICATORS: Record<string, {id: string, name: stri
     { id: 'disponibilidad', name: 'Disponibilidad' },
     { id: 'rendimiento', name: 'Rendimiento' },
     { id: 'calidad', name: 'Calidad' },
+    { id: 'productividad', name: 'Productividad (OEE)' },
     { id: 'merma1', name: 'Merma 1' },
     { id: 'merma2', name: 'Merma 2' },
     { id: 'subproducto', name: 'Subproducto' }

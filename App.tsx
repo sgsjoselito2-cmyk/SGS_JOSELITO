@@ -143,7 +143,14 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const [workshopIndicators, setWorkshopIndicators] = useState(() => safeParse('zitron_workshop_indicators', INITIAL_WORKSHOP_INDICATORS));
+  const [workshopIndicators, setWorkshopIndicators] = useState(() => {
+    const parsed = safeParse('zitron_workshop_indicators', INITIAL_WORKSHOP_INDICATORS);
+    if (parsed && parsed['sb-loncheado'] && !parsed['sb-loncheado'].some((ind: any) => ind.id === 'productividad')) {
+      parsed['sb-loncheado'].splice(3, 0, { id: 'productividad', name: 'Productividad (OEE)' });
+      localStorage.setItem('zitron_workshop_indicators', JSON.stringify(parsed));
+    }
+    return parsed;
+  });
 
   useEffect(() => {
     safeLocalStorageSetItem('zitron_workshop_indicators', JSON.stringify(workshopIndicators));
