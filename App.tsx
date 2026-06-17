@@ -73,6 +73,7 @@ const App: React.FC = () => {
     globalActivitiesRef.current = [...otherAreasActs, ...activities];
   }, [activities, selectedArea]);
   const loadDataRequestIdRef = useRef<number>(0);
+  const localMutationInProgressRef = useRef<boolean>(false);
   const globalObjectivesRef = useRef<Record<string, OEEObjectives[]>>({});
   const [operarios, setOperarios] = useState<User[]>([]);
   const [masterSpeeds, setMasterSpeeds] = useState<MasterSpeed[]>([]);
@@ -1163,6 +1164,10 @@ const App: React.FC = () => {
           filter: `area=eq.${selectedArea}`
         },
         (payload) => {
+          if (localMutationInProgressRef.current) {
+            console.log('Realtime activity change detected but ignored (local mutation in progress).');
+            return;
+          }
           console.log('Realtime activity change detected:', payload.eventType, payload);
           // If a deletion occurred, it might be a shift closure.
           // We trigger loadData to sync local state with Supabase.
@@ -1809,9 +1814,12 @@ const App: React.FC = () => {
   const handleAddActivity = async (act: any, cierre?: any) => {
     if (!selectedArea) return;
     setIsLoading(true);
+    localMutationInProgressRef.current = true;
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     const dateStr = now.toISOString().split('T')[0];
+
+    const databasePromises: Promise<any>[] = [];
 
     try {
       const updatedActs = activities.map(openAct => {
@@ -1851,12 +1859,13 @@ const App: React.FC = () => {
               area: closed.area || selectedArea,
               tiempoTeoricoManual: closed.tiempoTeoricoManual || 0
             };
-            executeOrQueue({
+            const p = executeOrQueue({
               table: 'activities',
               type: 'update',
               data: closedForDB,
               filter: { column: 'id', value: openAct.id }
             });
+            databasePromises.push(p);
           }
           return closed;
         }
@@ -1901,12 +1910,17 @@ const App: React.FC = () => {
             area: newAct.area,
             tiempoTeoricoManual: newAct.tiempoTeoricoManual || 0
           };
-          executeOrQueue({
+          const p = executeOrQueue({
             table: 'activities',
             type: 'insert',
             data: newActForDB
           });
+          databasePromises.push(p);
         });
+      }
+
+      if (databasePromises.length > 0) {
+        await Promise.all(databasePromises);
       }
 
       const deduplicatedActs = Array.from(new Map(finalActs.map(a => [a.id, a])).values());
@@ -1917,6 +1931,7 @@ const App: React.FC = () => {
     } catch (e) {
       addToast("Error al sincronizar con nube", "error");
     } finally {
+      localMutationInProgressRef.current = false;
       setIsLoading(false);
     }
   };
@@ -1924,9 +1939,12 @@ const App: React.FC = () => {
   const handleAddMultipleActivities = async (newActs: any[], closedActsData: any[]) => {
     if (!selectedArea) return;
     setIsLoading(true);
+    localMutationInProgressRef.current = true;
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     const dateStr = now.toISOString().split('T')[0];
+
+    const databasePromises: Promise<any>[] = [];
 
     try {
       let finalActs = [...activities];
@@ -1957,6 +1975,7 @@ const App: React.FC = () => {
                 ...openAct, 
                 horaFin: timeStr, 
                 duracionMin: Math.round(finalDuration * 10) / 10, 
+                offset: undefined,
                 cantidad: Number(Number(closeData.cantidad || 0).toFixed(1)), 
                 comentarios: closeData.comentarios || "" 
               };
@@ -1975,12 +1994,13 @@ const App: React.FC = () => {
                   area: closed.area || selectedArea,
                   tiempoTeoricoManual: closed.tiempoTeoricoManual || 0
                 };
-                executeOrQueue({
+                const p = executeOrQueue({
                   table: 'activities',
                   type: 'update',
                   data: closedForDB,
                   filter: { column: 'id', value: openAct.id }
                 });
+                databasePromises.push(p);
               }
               return closed;
             }
@@ -2036,17 +2056,23 @@ const App: React.FC = () => {
           horaInicio: newAct.horaInicio || '',
           horaFin: null,
           duracionMin: null,
+          offset: undefined,
           cantidad: 0,
           comentarios: '',
           fecha: newAct.fecha || '',
           area: newAct.area,
           tiempoTeoricoManual: newAct.tiempoTeoricoManual || 0
         }));
-        executeOrQueue({
+        const p = executeOrQueue({
           table: 'activities',
           type: 'insert',
           data: toInsertForDB
         });
+        databasePromises.push(p);
+      }
+
+      if (databasePromises.length > 0) {
+        await Promise.all(databasePromises);
       }
 
       const deduplicatedActs = Array.from(new Map(finalActs.map(a => [a.id, a])).values());
@@ -2057,6 +2083,7 @@ const App: React.FC = () => {
     } catch (e) {
       addToast("Error al procesar actividades", "error");
     } finally {
+      localMutationInProgressRef.current = false;
       setIsLoading(false);
     }
   };
@@ -2064,8 +2091,11 @@ const App: React.FC = () => {
   const handleEndTurn = async (users: string[], cierre: any) => {
     if (!selectedArea) return;
     setIsLoading(true);
+    localMutationInProgressRef.current = true;
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
+    const databasePromises: Promise<any>[] = [];
 
     try {
       const updatedActs = activities.map(openAct => {
@@ -2099,17 +2129,22 @@ const App: React.FC = () => {
               area: closed.area || selectedArea,
               tiempoTeoricoManual: closed.tiempoTeoricoManual || 0
             };
-            executeOrQueue({
+            const p = executeOrQueue({
               table: 'activities',
               type: 'update',
               data: closedForDB,
               filter: { column: 'id', value: openAct.id }
             });
+            databasePromises.push(p);
           }
           return closed;
         }
         return openAct;
       });
+
+      if (databasePromises.length > 0) {
+        await Promise.all(databasePromises);
+      }
 
       setActivities(updatedActs);
       safeLocalStorageSetItem(`zitron_${selectedArea}_activities`, JSON.stringify(updatedActs));
@@ -2118,6 +2153,7 @@ const App: React.FC = () => {
     } catch (e) {
       addToast("Error al finalizar", "error");
     } finally {
+      localMutationInProgressRef.current = false;
       setIsLoading(false);
     }
   };

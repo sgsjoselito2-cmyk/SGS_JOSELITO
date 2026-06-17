@@ -78,7 +78,36 @@ const evaluateFormula = (formula: string, vars: Record<string, number>): number 
 
   try {
     const val = Function('"use strict"; return (' + expr + ')')();
-    return typeof val === 'number' && !isNaN(val) && isFinite(val) ? val : 0;
+    if (typeof val === 'number' && !isNaN(val) && isFinite(val)) {
+      const norm = formula.toLowerCase().replace(/\s+/g, '');
+      const hasDisp = norm.includes('disponibilidad');
+      const hasRend = norm.includes('rendimiento');
+      const hasCal = norm.includes('calidad');
+      
+      const isProductOfThree = (
+        hasDisp && hasRend && hasCal &&
+        norm.includes('*') &&
+        !norm.includes('/') &&
+        !norm.includes('+') &&
+        !norm.includes('-')
+      );
+      
+      const isProductOfTwo = (
+        ((hasDisp && hasRend) || (hasDisp && hasCal) || (hasRend && hasCal)) &&
+        norm.includes('*') &&
+        !norm.includes('/') &&
+        !norm.includes('+') &&
+        !norm.includes('-')
+      ) && !isProductOfThree;
+      
+      if (isProductOfThree) {
+        return val / 10000;
+      } else if (isProductOfTwo) {
+        return val / 100;
+      }
+      return val;
+    }
+    return 0;
   } catch (e) {
     console.warn(`Error evaluating custom formula expression [${expr}] from template [${formula}]:`, e);
     return 0;
@@ -336,20 +365,20 @@ export const calculateStats = (
     horas: (uniqueTimeP || 0) / 60
   };
 
-  const productionActsForVars = datosCalculo.filter(a => a.tipoTarea === 'P' || a.tipoTarea === TaskType.PRODUCCION);
+  const productionActsForVars = datosCalculo.filter(a => (a.tipoTarea as any) === 'P' || (a.tipoTarea as any) === TaskType.PRODUCCION);
   baseVars.personas = new Set(productionActsForVars.flatMap(a => a.operarios || [])).size || 0;
 
   // Add dynamic format fields from variables
   const formatsUnique = [...new Set(
     datosCalculo
-      .filter(a => (a.tipoTarea === 'P' || a.tipoTarea === TaskType.PRODUCCION) && a.formato)
+      .filter(a => ((a.tipoTarea as any) === 'P' || (a.tipoTarea as any) === TaskType.PRODUCCION) && a.formato)
       .map(a => a.formato!)
   )];
 
   formatsUnique.forEach(f => {
     const varName = sanitizeFieldName(f);
     const formatQty = datosCalculo
-      .filter(a => (a.tipoTarea === 'P' || a.tipoTarea === TaskType.PRODUCCION) && a.formato === f)
+      .filter(a => ((a.tipoTarea as any) === 'P' || (a.tipoTarea as any) === TaskType.PRODUCCION) && a.formato === f)
       .reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
     baseVars[varName] = formatQty;
   });
