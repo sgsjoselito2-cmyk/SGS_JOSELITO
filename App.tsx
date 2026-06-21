@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { Activity, MasterSpeed, IncidenceMaster, TaskType, OEEObjectives, User, Bodega, TipoProducto, MovimientoBodega } from './types';
 import BodegasModule from './components/BodegasModule';
+import SavingsPanel from './components/SavingsPanel';
 import { INITIAL_WORKSHOP_INDICATORS, getInitialMasterSpeeds, getInitialOperarios, getInitialIncidenceMaster, INITIAL_OEE_OBJECTIVES, AREA_NAMES, INITIAL_ACTION_PLAN_TOP15, JOSELITO_LOGO } from './constants';
 import { supabase, isConfigured, debugConfig } from './lib/supabase';
 import { Session } from '@supabase/supabase-js';
@@ -49,7 +50,7 @@ interface Toast {
 
 const App: React.FC = () => {
   console.log("App: Component rendering...");
-  const [currentView, setCurrentView] = useState<'root-menu' | 'menu' | 'area' | 'bodegas'>('root-menu');
+  const [currentView, setCurrentView] = useState<'root-menu' | 'menu' | 'area' | 'bodegas' | 'ahorros'>('root-menu');
   const [session, setSession] = useState<Session | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [selectedWorkshop, setSelectedWorkshop] = useState<number | null>(null);
@@ -147,6 +148,18 @@ const App: React.FC = () => {
     const parsed = safeParse('zitron_workshop_indicators', INITIAL_WORKSHOP_INDICATORS);
     if (parsed && parsed['sb-loncheado'] && !parsed['sb-loncheado'].some((ind: any) => ind.id === 'productividad')) {
       parsed['sb-loncheado'].splice(3, 0, { id: 'productividad', name: 'Productividad (OEE)' });
+      localStorage.setItem('zitron_workshop_indicators', JSON.stringify(parsed));
+    }
+    
+    // Ensure expedicion indicators exist
+    if (parsed && !parsed['expedicion']) {
+      parsed['expedicion'] = INITIAL_WORKSHOP_INDICATORS['expedicion'];
+      localStorage.setItem('zitron_workshop_indicators', JSON.stringify(parsed));
+    }
+    
+    // Ensure preparacion-exp indicators exist
+    if (parsed && !parsed['preparacion-exp']) {
+      parsed['preparacion-exp'] = INITIAL_WORKSHOP_INDICATORS['preparacion-exp'];
       localStorage.setItem('zitron_workshop_indicators', JSON.stringify(parsed));
     }
     return parsed;
@@ -2917,7 +2930,7 @@ const App: React.FC = () => {
     setActiveTab(tab);
   };
 
-  const handleRootSelect = (opt: 'top5' | 'top15' | 'top60' | 'bodegas') => {
+  const handleRootSelect = (opt: 'top5' | 'top15' | 'top60' | 'bodegas' | 'ahorros') => {
     // Verificar niveles de acceso (N1: TOP 5, N2: TOP 15, N3: TOP 60)
     if (opt === 'top15' && userLevel < 2) {
       addToast("NIVEL INSUFICIENTE: Requiere acceso Nivel 2 (TOP 15)", "error");
@@ -2930,6 +2943,10 @@ const App: React.FC = () => {
 
     if (opt === 'bodegas') {
       setCurrentView('bodegas');
+      return;
+    }
+    if (opt === 'ahorros') {
+      setCurrentView('ahorros');
       return;
     }
 
@@ -3002,6 +3019,17 @@ const App: React.FC = () => {
         onSaveMovimiento={handleSaveMovimientoBodega}
         onUpdateBodegas={handleUpdateBodegas}
         onUpdateTiposProducto={handleUpdateTiposProducto}
+      />
+    );
+  }
+
+  if (currentView === 'ahorros') {
+    return (
+      <SavingsPanel
+        onBack={() => setCurrentView('root-menu')}
+        activities={activities}
+        history={history}
+        workshopIndicators={workshopIndicators}
       />
     );
   }

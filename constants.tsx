@@ -169,6 +169,12 @@ export const INITIAL_WORKSHOP_INDICATORS: Record<string, {id: string, name: stri
     { id: 'calidad', name: 'Calidad' },
     { id: 'productividad', name: 'Productividad (OEE)' }
   ],
+  'expedicion': [
+    { id: 'productividad', name: 'OEE EXPEDICIONES' }
+  ],
+  'preparacion-exp': [
+    { id: 'productividad', name: 'OEE PREPARACIÓN' }
+  ],
   'movimiento-jamones': [
     { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },
     { id: 'pph_paletas', name: 'PPH COLGAR PALETAS' },

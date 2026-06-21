@@ -2,7 +2,7 @@ import React from 'react';
 import { LayoutDashboard, BarChart3, Activity, Settings, Warehouse } from 'lucide-react';
 
 interface RootMenuProps {
-  onSelectOption: (opt: 'top5' | 'top15' | 'top60' | 'bodegas') => void;
+  onSelectOption: (opt: 'top5' | 'top15' | 'top60' | 'bodegas' | 'ahorros') => void;
   onOpenConfig?: () => void;
 }
 
@@ -12,6 +12,7 @@ const RootMenu: React.FC<RootMenuProps> = ({ onSelectOption, onOpenConfig }) => 
     { id: 'top15' as const, name: 'TOP 15', icon: BarChart3, description: 'Evolución Diaria/Semanal', color: 'bg-indigo-600' },
     { id: 'top60' as const, name: 'TOP 60', icon: LayoutDashboard, description: 'Cuadro de Mando Mensual', color: 'bg-slate-900' },
     { id: 'bodegas' as const, name: 'BODEGAS', icon: Warehouse, description: 'Movimientos de Bodega', color: 'bg-amber-600' },
+    { id: 'ahorros' as const, name: 'AHORROS', icon: BarChart3, description: 'Cálculo de Ahorros Operativos', color: 'bg-emerald-600' },
   ];
 
   return (
