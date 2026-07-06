@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Activity, TaskType, User } from '../types';
+import { Activity, TaskType, User, MasterSpeed } from '../types';
 import { calcDuration, cleanText, normalizeDate } from '../src/utils/index';
 import { 
   Lock, 
@@ -42,6 +42,7 @@ interface DatabasePanelProps {
     date: string, 
     corrections: Record<string, { nuevoOk: number; nuevoNok: number }>
   ) => Promise<void>;
+  masterSpeeds?: MasterSpeed[];
 }
 
 const DatabasePanel: React.FC<DatabasePanelProps> = ({
@@ -59,8 +60,10 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
   passwords,
   operarios,
   mermas = [],
-  onCorrectShift
+  onCorrectShift,
+  masterSpeeds = []
 }) => {
+  const [activeSubTab, setActiveSubTab] = useState<'registros' | 'pph'>('registros');
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [showPassModal, setShowPassModal] = useState(false);
   const [pin, setPin] = useState('');
@@ -96,6 +99,13 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
   const [filterDate, setFilterDate] = useState('');
   const [filterTask, setFilterTask] = useState('');
   const [filterType, setFilterType] = useState('');
+
+  // Filtros Análisis PPH
+  const [pphFilterType, setPphFilterType] = useState<'week' | 'range' | 'all'>('all');
+  const [pphYear, setPphYear] = useState<number>(new Date().getFullYear());
+  const [pphWeek, setPphWeek] = useState<number | 'all'>('all');
+  const [pphStartDate, setPphStartDate] = useState<string>('');
+  const [pphEndDate, setPphEndDate] = useState<string>('');
 
   // Corrección de Turno
   const [showCorrectionModal, setShowCorrectionModal] = useState(false);
@@ -286,6 +296,211 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
     }
     return [];
   }, [mermas, selectedArea]);
+
+  // --- ANÁLISIS PPH ---
+  const getWeekAndYear = (dateStr: string) => {
+    if (!dateStr) return { week: 0, year: 0 };
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return { week: 0, year: 0 };
+    
+    // UTC-based ISO week number
+    const utcDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    utcDate.setUTCDate(utcDate.getUTCDate() + 4 - (utcDate.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((utcDate.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return { week: weekNo, year: utcDate.getUTCFullYear() };
+  };
+
+  const pphCombinedActs = useMemo(() => {
+    const seen = new Set();
+    const unique: Activity[] = [];
+    const all = [...history, ...activities];
+    all.forEach(act => {
+      if (act && act.id) {
+        if (!seen.has(act.id)) {
+          seen.add(act.id);
+          unique.push(act);
+        }
+      } else if (act) {
+        unique.push(act);
+      }
+    });
+    return unique;
+  }, [history, activities]);
+
+  const pphFilteredByAreaAndTask = useMemo(() => {
+    return pphCombinedActs.filter(r => {
+      const isProd = r.tipoTarea === TaskType.PRODUCCION || (r.tipoTarea as string) === 'P';
+      if (!isProd) return false;
+
+      const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
+      const envAreas = ['env-envasado', 'env-empaquetado'];
+      const expAreas = ['expedicion', 'preparacion-exp'];
+      const movAreas = ['movimiento-jamones'];
+
+      if (selectedArea === 'sala-blanca-dashboard') {
+        return sbAreas.includes(r.area);
+      } else if (selectedArea === 'envasado-dashboard') {
+        return envAreas.includes(r.area);
+      } else if (selectedArea === 'expediciones-dashboard') {
+        return expAreas.includes(r.area);
+      } else if (selectedArea === 'movimientos-dashboard') {
+        return movAreas.includes(r.area);
+      } else if (selectedArea && !['TOP 5', 'TOP 15', 'TOP 60', 'root-menu', 'menu'].includes(selectedArea)) {
+        return r.area === selectedArea;
+      }
+      return true;
+    });
+  }, [pphCombinedActs, selectedArea]);
+
+  const pphPeriodFiltered = useMemo(() => {
+    return pphFilteredByAreaAndTask.filter(r => {
+      if (!r.fecha) return false;
+      
+      if (pphFilterType === 'week') {
+        const { week, year } = getWeekAndYear(r.fecha);
+        if (pphYear && year !== pphYear) return false;
+        if (pphWeek !== 'all' && week !== pphWeek) return false;
+      } else if (pphFilterType === 'range') {
+        if (pphStartDate && r.fecha < pphStartDate) return false;
+        if (pphEndDate && r.fecha > pphEndDate) return false;
+      }
+      return true;
+    });
+  }, [pphFilteredByAreaAndTask, pphFilterType, pphYear, pphWeek, pphStartDate, pphEndDate]);
+
+  interface PphGroupRow {
+    fecha: string;
+    formato: string;
+    duracion: number;
+    cantidad: number;
+    personas: number;
+    pph: number | null;
+    uhReal: number | null;
+    uhObjetivo: number | null;
+    rendimiento: number | null;
+  }
+
+  const pphData = useMemo(() => {
+    const groups: Record<string, Activity[]> = {};
+    pphPeriodFiltered.forEach(act => {
+      const key = `${act.fecha}_${act.formato || 'SIN FORMATO'}`;
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(act);
+    });
+
+    const rows: PphGroupRow[] = Object.keys(groups).map(key => {
+      const groupActs = groups[key];
+      const firstAct = groupActs[0];
+      const fecha = firstAct.fecha;
+      const formato = firstAct.formato || 'SIN FORMATO';
+
+      const uniqueIntervals: Record<string, Activity> = {};
+      groupActs.forEach(act => {
+        const intervalKey = `${act.horaInicio}_${act.horaFin || 'ACTIVO'}`;
+        if (!uniqueIntervals[intervalKey]) {
+          uniqueIntervals[intervalKey] = act;
+        }
+      });
+
+      let totalDuracion = 0;
+      let totalCantidad = 0;
+      Object.values(uniqueIntervals).forEach(act => {
+        const dur = act.duracionMin !== undefined && act.duracionMin !== null 
+          ? act.duracionMin 
+          : calcDuration(act.horaInicio, act.horaFin || '');
+        totalDuracion += dur;
+        totalCantidad += act.cantidad || 0;
+      });
+
+      const uniqueOperators = new Set<string>();
+      groupActs.forEach(act => {
+        if (Array.isArray(act.operarios)) {
+          act.operarios.forEach(op => {
+            if (op && op.trim()) uniqueOperators.add(op.trim());
+          });
+        } else if (typeof act.operarios === 'string') {
+          const opStr = act.operarios as string;
+          if (opStr.trim()) uniqueOperators.add(opStr.trim());
+        }
+      });
+      const totalPersonas = uniqueOperators.size;
+
+      let speedObj = masterSpeeds.find(ms => ms.formato === formato && ms.area === selectedArea);
+      if (!speedObj) {
+        const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
+        const envAreas = ['env-envasado', 'env-empaquetado'];
+        const expAreas = ['expedicion', 'preparacion-exp'];
+        const movAreas = ['movimiento-jamones'];
+        
+        if (selectedArea === 'sala-blanca-dashboard') {
+          speedObj = masterSpeeds.find(ms => ms.formato === formato && ms.area && sbAreas.includes(ms.area));
+        } else if (selectedArea === 'envasado-dashboard') {
+          speedObj = masterSpeeds.find(ms => ms.formato === formato && ms.area && envAreas.includes(ms.area));
+        } else if (selectedArea === 'expediciones-dashboard') {
+          speedObj = masterSpeeds.find(ms => ms.formato === formato && ms.area && expAreas.includes(ms.area));
+        } else if (selectedArea === 'movimientos-dashboard') {
+          speedObj = masterSpeeds.find(ms => ms.formato === formato && ms.area && movAreas.includes(ms.area));
+        }
+      }
+      if (!speedObj) {
+        speedObj = masterSpeeds.find(ms => ms.formato === formato);
+      }
+
+      const uhObjetivo = speedObj && speedObj.tiempoTeorico ? speedObj.tiempoTeorico : null;
+
+      if (totalDuracion === 0 || totalCantidad === 0) {
+        return {
+          fecha,
+          formato,
+          duracion: totalDuracion,
+          cantidad: totalCantidad,
+          personas: totalPersonas,
+          pph: null,
+          uhReal: null,
+          uhObjetivo,
+          rendimiento: null
+        };
+      }
+
+      const pph = totalPersonas > 0 ? (totalCantidad / (totalDuracion / 60)) / totalPersonas : 0;
+      const uhReal = pph * totalPersonas;
+      const rendimiento = uhObjetivo && uhObjetivo > 0 ? (uhReal / uhObjetivo) * 100 : null;
+
+      return {
+        fecha,
+        formato,
+        duracion: totalDuracion,
+        cantidad: totalCantidad,
+        personas: totalPersonas,
+        pph,
+        uhReal,
+        uhObjetivo,
+        rendimiento
+      };
+    });
+
+    const formatGroups: Record<string, PphGroupRow[]> = {};
+    rows.forEach(r => {
+      if (!formatGroups[r.formato]) {
+        formatGroups[r.formato] = [];
+      }
+      formatGroups[r.formato].push(r);
+    });
+
+    const sortedFormats = Object.keys(formatGroups).sort();
+    const result: { formato: string; rows: PphGroupRow[] }[] = sortedFormats.map(fmt => {
+      const sortedRows = formatGroups[fmt].sort((a, b) => a.fecha.localeCompare(b.fecha));
+      return {
+        formato: fmt,
+        rows: sortedRows
+      };
+    });
+
+    return result;
+  }, [pphPeriodFiltered, masterSpeeds, selectedArea]);
 
   const handleExportCSV = () => {
     const csv = Papa.unparse(allRecords.map(r => ({
@@ -838,8 +1053,36 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
           </button>
         </div>
       </div>
-      
-      {/* BARRA DE FILTROS */}
+
+      {/* SUB-TABS BAR */}
+      <div className="flex bg-slate-100 p-1.5 rounded-2xl sm:rounded-3xl max-w-md">
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('registros')}
+          className={`flex-1 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl font-black text-[12px] uppercase tracking-widest text-center transition-all duration-300 ${
+            activeSubTab === 'registros'
+              ? 'bg-white text-indigo-600 shadow-sm'
+              : 'text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          Histórico
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('pph')}
+          className={`flex-1 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl font-black text-[12px] uppercase tracking-widest text-center transition-all duration-300 ${
+            activeSubTab === 'pph'
+              ? 'bg-white text-indigo-600 shadow-sm'
+              : 'text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          Análisis PPH
+        </button>
+      </div>
+
+      {activeSubTab === 'registros' && (
+        <>
+          {/* BARRA DE FILTROS */}
       <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         <div className="space-y-1">
           <label className="text-[13px] font-black text-slate-400 uppercase tracking-widest ml-1">Fecha</label>
@@ -1122,6 +1365,247 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+        </>
+      )}
+
+      {/* SECCIÓN ANÁLISIS PPH */}
+      {activeSubTab === 'pph' && (
+        <div className="space-y-6">
+          {/* BARRA DE FILTROS PPH */}
+          <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-200 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[13px] font-black text-slate-400 uppercase tracking-widest mr-2">Filtrar Período:</span>
+              <button
+                type="button"
+                onClick={() => setPphFilterType('all')}
+                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+                  pphFilterType === 'all'
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Todo
+              </button>
+              <button
+                type="button"
+                onClick={() => setPphFilterType('week')}
+                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+                  pphFilterType === 'week'
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Por Semana
+              </button>
+              <button
+                type="button"
+                onClick={() => setPphFilterType('range')}
+                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+                  pphFilterType === 'range'
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Por Rango de Fechas
+              </button>
+            </div>
+
+            {pphFilterType === 'week' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 max-w-md animate-in slide-in-from-top duration-200">
+                <div className="space-y-1">
+                  <label className="text-[12px] font-black text-slate-400 uppercase tracking-widest ml-1">Año</label>
+                  <select
+                    value={pphYear}
+                    onChange={e => setPphYear(Number(e.target.value))}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-indigo-500 transition-all"
+                  >
+                    {[2024, 2025, 2026, 2027].map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[12px] font-black text-slate-400 uppercase tracking-widest ml-1">Semana de Año</label>
+                  <select
+                    value={pphWeek}
+                    onChange={e => setPphWeek(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-indigo-500 transition-all"
+                  >
+                    <option value="all">TODAS LAS SEMANAS</option>
+                    {Array.from({ length: 53 }, (_, i) => i + 1).map(w => (
+                      <option key={w} value={w}>Semana {w}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {pphFilterType === 'range' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 max-w-md animate-in slide-in-from-top duration-200">
+                <div className="space-y-1">
+                  <label className="text-[12px] font-black text-slate-400 uppercase tracking-widest ml-1">Desde Fecha</label>
+                  <input
+                    type="date"
+                    value={pphStartDate}
+                    onChange={e => setPphStartDate(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-indigo-500 transition-all"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[12px] font-black text-slate-400 uppercase tracking-widest ml-1">Hasta Fecha</label>
+                  <input
+                    type="date"
+                    value={pphEndDate}
+                    onChange={e => setPphEndDate(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-indigo-500 transition-all"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* TABLA PPH */}
+          <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto no-scrollbar max-h-[70vh] overflow-y-auto">
+              <table className="w-full text-left border-collapse">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-slate-50 border-b border-slate-200 shadow-sm">
+                    <th className="p-3 sm:p-4 text-[10px] sm:text-[12px] font-black text-slate-400 uppercase tracking-widest">FORMATO</th>
+                    <th className="p-3 sm:p-4 text-[10px] sm:text-[12px] font-black text-slate-400 uppercase tracking-widest">FECHA</th>
+                    <th className="p-3 sm:p-4 text-[10px] sm:text-[12px] font-black text-slate-400 uppercase tracking-widest">DURACIÓN (min)</th>
+                    <th className="p-3 sm:p-4 text-[10px] sm:text-[12px] font-black text-slate-400 uppercase tracking-widest">CANTIDAD</th>
+                    <th className="p-3 sm:p-4 text-[10px] sm:text-[12px] font-black text-slate-400 uppercase tracking-widest">PERSONAS</th>
+                    <th className="p-3 sm:p-4 text-[10px] sm:text-[12px] font-black text-slate-400 uppercase tracking-widest">PPH</th>
+                    <th className="p-3 sm:p-4 text-[10px] sm:text-[12px] font-black text-slate-400 uppercase tracking-widest">U/H REAL</th>
+                    <th className="p-3 sm:p-4 text-[10px] sm:text-[12px] font-black text-slate-400 uppercase tracking-widest">U/H OBJETIVO</th>
+                    <th className="p-3 sm:p-4 text-[10px] sm:text-[12px] font-black text-slate-400 uppercase tracking-widest">RENDIMIENTO</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {pphData.map(group => {
+                    const rowsWithData = group.rows.filter(r => r.pph !== null && r.pph !== undefined);
+                    let mediaPph = 0;
+                    let mediaUhReal = 0;
+                    let mediaRendimiento = 0;
+                    
+                    if (rowsWithData.length > 0) {
+                      mediaPph = rowsWithData.reduce((sum, r) => sum + (r.pph || 0), 0) / rowsWithData.length;
+                      mediaUhReal = rowsWithData.reduce((sum, r) => sum + (r.uhReal || 0), 0) / rowsWithData.length;
+                      
+                      const rowsWithRend = rowsWithData.filter(r => r.rendimiento !== null && r.rendimiento !== undefined);
+                      if (rowsWithRend.length > 0) {
+                        mediaRendimiento = rowsWithRend.reduce((sum, r) => sum + (r.rendimiento || 0), 0) / rowsWithRend.length;
+                      }
+                    }
+
+                    return (
+                      <React.Fragment key={group.formato}>
+                        {/* Cabecera del Formato */}
+                        <tr className="bg-slate-100/80 border-y border-slate-200">
+                          <td colSpan={9} className="p-3 font-extrabold text-slate-800 text-[13px] uppercase tracking-wider">
+                            📦 {group.formato}
+                          </td>
+                        </tr>
+
+                        {/* Filas de Datos */}
+                        {group.rows.map((row, idx) => {
+                          const isDataEmpty = row.pph === null;
+                          return (
+                            <tr key={`${row.fecha}_${idx}`} className="hover:bg-slate-50 transition-colors">
+                              <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] font-bold text-slate-400 italic">
+                                {row.formato}
+                              </td>
+                              <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] font-bold text-slate-600">{row.fecha}</td>
+                              
+                              {isDataEmpty ? (
+                                <>
+                                  <td className="p-3 sm:p-4"></td>
+                                  <td className="p-3 sm:p-4"></td>
+                                  <td className="p-3 sm:p-4"></td>
+                                  <td className="p-3 sm:p-4"></td>
+                                  <td className="p-3 sm:p-4"></td>
+                                  <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] font-semibold text-slate-500">
+                                    {row.uhObjetivo !== null ? row.uhObjetivo : '-'}
+                                  </td>
+                                  <td className="p-3 sm:p-4"></td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] font-semibold text-slate-700">
+                                    {row.duracion !== null ? `${row.duracion} min` : '-'}
+                                  </td>
+                                  <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] font-bold text-indigo-700">
+                                    {row.cantidad !== null ? row.cantidad.toFixed(1) : '-'}
+                                  </td>
+                                  <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] font-semibold text-slate-700">
+                                    {row.personas}
+                                  </td>
+                                  <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] font-extrabold text-emerald-700">
+                                    {row.pph !== null ? row.pph.toFixed(2) : '-'}
+                                  </td>
+                                  <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] font-extrabold text-blue-700">
+                                    {row.uhReal !== null ? row.uhReal.toFixed(1) : '-'}
+                                  </td>
+                                  <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] font-semibold text-slate-500">
+                                    {row.uhObjetivo !== null ? row.uhObjetivo : '-'}
+                                  </td>
+                                  <td className={`p-3 sm:p-4 text-[11px] sm:text-[13px] font-black ${
+                                    row.rendimiento && row.rendimiento >= 100 
+                                      ? 'text-emerald-600' 
+                                      : row.rendimiento && row.rendimiento >= 85 
+                                      ? 'text-amber-600' 
+                                      : 'text-rose-600'
+                                  }`}>
+                                    {row.rendimiento !== null ? `${row.rendimiento.toFixed(1)}%` : '-'}
+                                  </td>
+                                </>
+                              )}
+                            </tr>
+                          );
+                        })}
+
+                        {/* Fila de Media */}
+                        {rowsWithData.length > 0 && (
+                          <tr className="bg-indigo-50/40 font-extrabold border-t border-indigo-100">
+                            <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] text-indigo-800 uppercase italic">
+                              Media {group.formato}
+                            </td>
+                            <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] text-slate-400 font-normal">-</td>
+                            <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] text-slate-400 font-normal">-</td>
+                            <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] text-slate-400 font-normal">-</td>
+                            <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] text-slate-400 font-normal">-</td>
+                            <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] text-emerald-700">
+                              {mediaPph.toFixed(2)}
+                            </td>
+                            <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] text-blue-700">
+                              {mediaUhReal.toFixed(1)}
+                            </td>
+                            <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] text-slate-400 font-normal">-</td>
+                            <td className="p-3 sm:p-4 text-[11px] sm:text-[13px] text-indigo-700">
+                              {mediaRendimiento > 0 ? `${mediaRendimiento.toFixed(1)}%` : '-'}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+
+                  {pphData.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="p-20 text-center">
+                        <div className="flex flex-col items-center opacity-20 grayscale">
+                          <Database className="w-16 h-16 mb-4" />
+                          <p className="font-black text-xs uppercase tracking-[0.4em]">No hay actividades registradas en este período</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

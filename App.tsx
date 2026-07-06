@@ -34,7 +34,7 @@ import {
   Lock,
   LogOut
 } from 'lucide-react';
-import { Activity, MasterSpeed, IncidenceMaster, TaskType, OEEObjectives, User, Bodega, TipoProducto, MovimientoBodega } from './types';
+import { Activity, MasterSpeed, IncidenceMaster, TaskType, OEEObjectives, User, Bodega, TipoProducto, MovimientoBodega, PlanAccionSeguridad, GapSeguridad, IdeaDeMejora } from './types';
 import BodegasModule from './components/BodegasModule';
 import SavingsPanel from './components/SavingsPanel';
 import { INITIAL_WORKSHOP_INDICATORS, getInitialMasterSpeeds, getInitialOperarios, getInitialIncidenceMaster, INITIAL_OEE_OBJECTIVES, AREA_NAMES, INITIAL_ACTION_PLAN_TOP15, JOSELITO_LOGO } from './constants';
@@ -84,6 +84,9 @@ const App: React.FC = () => {
   const [allObjectives, setAllObjectives] = useState<Record<string, OEEObjectives[]>>({});
   const [responsibles, setResponsibles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [planAccionSeguridad, setPlanAccionSeguridad] = useState<PlanAccionSeguridad[]>([]);
+  const [gapsSeguridad, setGapsSeguridad] = useState<GapSeguridad[]>([]);
+  const [ideasDeMejora, setIdeasDeMejora] = useState<IdeaDeMejora[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   // Helper para guardar en localStorage de forma segura
   const safeLocalStorageSetItem = useCallback((key: string, value: string) => {
@@ -982,6 +985,50 @@ const App: React.FC = () => {
           } catch (e) {
             console.warn('movimientos_bodega load failure', e);
           }
+
+          // Cargar Gaps Seguridad y Plan de Acción Seguridad
+          try {
+            const { data: gapsData } = await supabase.from('gaps_seguridad').select('*').order('nombre');
+            if (gapsData) {
+              setGapsSeguridad(gapsData);
+              localStorage.setItem('zitron_gaps_seguridad', JSON.stringify(gapsData));
+            }
+          } catch (e) {
+            console.warn('gaps_seguridad load failure', e);
+          }
+
+          try {
+            const { data: planData } = await supabase.from('plan_accion_seguridad').select('*').order('fecha', { ascending: false });
+            if (planData) {
+              setPlanAccionSeguridad(planData);
+              localStorage.setItem('zitron_plan_accion_seguridad', JSON.stringify(planData));
+            }
+          } catch (e) {
+            console.warn('plan_accion_seguridad load failure', e);
+          }
+
+          try {
+            const { data: ideasData } = await supabase.from('ideas_mejora').select('*').order('numero_sugerencia', { ascending: false });
+            if (ideasData) {
+              const formattedIdeas: IdeaDeMejora[] = ideasData.map((idm: any) => ({
+                id: idm.id,
+                numeroSugerencia: idm.numero_sugerencia,
+                sugerencia: idm.sugerencia,
+                recurso: idm.recurso,
+                fechaCreacion: idm.fecha_creacion,
+                aprobada: idm.aprobada || 'Pendiente',
+                responsable: idm.responsable,
+                fechaEjecucionPrevista: idm.fecha_ejecucion_prevista,
+                fechaCierre: idm.fecha_cierre,
+                estado: idm.fecha_cierre ? 'Cerrado' : (!idm.fecha_ejecucion_prevista ? 'Abierto' : (idm.fecha_ejecucion_prevista < new Date().toISOString().split('T')[0] ? 'Retrasado' : 'En Marcha')),
+                fechaEmision: idm.fecha_emision
+              }));
+              setIdeasDeMejora(formattedIdeas);
+              localStorage.setItem('zitron_ideas_mejora', JSON.stringify(formattedIdeas));
+            }
+          } catch (e) {
+            console.warn('ideas_mejora load failure', e);
+          }
           
           // Clear any previous error if we reached this point successfully
           localStorage.removeItem('zitron_last_sync_error');
@@ -1007,6 +1054,13 @@ const App: React.FC = () => {
         setBodegas(storedBodegas);
         setTiposProducto(storedTipos);
         setMovimientosBodega(storedMovs);
+
+        const storedGaps = safeParse('zitron_gaps_seguridad', []);
+        const storedPlan = safeParse('zitron_plan_accion_seguridad', []);
+        const storedIdeas = safeParse('zitron_ideas_mejora', []);
+        setGapsSeguridad(storedGaps);
+        setPlanAccionSeguridad(storedPlan);
+        setIdeasDeMejora(storedIdeas);
         
         // Load global users and objectives from localStorage if fetch failed
         const localGlobalUsers = safeParse('zitron_global_users', []);
@@ -1207,6 +1261,47 @@ const App: React.FC = () => {
   }, [selectedArea, isConfigured, loadData]);
 
   useEffect(() => { loadData(true); }, [loadData]);
+
+  // Load all activities and history when entering the savings view to ensure complete cross-area data
+  useEffect(() => {
+    if (currentView === 'ahorros') {
+      (async () => {
+        try {
+          // Fetch all history rows with complete pagination
+          let allHistory: any[] = [];
+          let from = 0;
+          const pageSize = 1000;
+          while (true) {
+            const { data, error } = await supabase
+              .from('history')
+              .select('*')
+              .range(from, from + pageSize - 1);
+            if (error) {
+              console.error('Error fetching history page:', error);
+              break;
+            }
+            if (!data || data.length === 0) break;
+            allHistory = [...allHistory, ...data];
+            if (data.length < pageSize) break;
+            from += pageSize;
+          }
+
+          // Fetch all activities rows (without limits or filters)
+          const { data: allActivities, error: actsError } = await supabase
+            .from('activities')
+            .select('*');
+          if (actsError) {
+            console.error('Error fetching activities:', actsError);
+          }
+
+          setHistory(allHistory);
+          if (allActivities) setActivities(allActivities);
+        } catch (e) {
+          console.error("DEBUG: Failed to fetch data for SavingsPanel:", e);
+        }
+      })();
+    }
+  }, [currentView]);
 
   // Sync data when entering a workshop or specific tabs
   useEffect(() => {
@@ -1556,6 +1651,87 @@ const App: React.FC = () => {
     
     addToast("OPERARIO ELIMINADO", "success");
   }, [addToast, executeOrQueue]);
+
+  const handleSaveIdeaMejora = useCallback(async (idea: IdeaDeMejora) => {
+    let finalIdea = { ...idea };
+    const isNew = !idea.id || !ideasDeMejora.some(i => i.id === idea.id);
+    
+    if (isNew) {
+      if (!finalIdea.id) {
+        finalIdea.id = Math.random().toString(36).substring(2, 15);
+      }
+      const maxSugerencia = ideasDeMejora.reduce((max, curr) => curr.numeroSugerencia > max ? curr.numeroSugerencia : max, 0);
+      finalIdea.numeroSugerencia = maxSugerencia + 1;
+    }
+
+    // Calcular estado
+    const calcularEstadoIdm = (fechaPrevista: string, fechaCierre?: string): 'Abierto' | 'En Marcha' | 'Cerrado' | 'Retrasado' => {
+      if (fechaCierre) return 'Cerrado';
+      if (!fechaPrevista) return 'Abierto';
+      const hoy = new Date().toISOString().split('T')[0];
+      if (fechaPrevista < hoy) return 'Retrasado';
+      return 'En Marcha';
+    };
+    finalIdea.estado = calcularEstadoIdm(finalIdea.fechaEjecucionPrevista || '', finalIdea.fechaCierre);
+
+    // Save to State
+    setIdeasDeMejora(prev => {
+      let next;
+      if (isNew) {
+        next = [finalIdea, ...prev];
+      } else {
+        next = prev.map(i => i.id === finalIdea.id ? finalIdea : i);
+      }
+      safeLocalStorageSetItem('zitron_ideas_mejora', JSON.stringify(next));
+      return next;
+    });
+
+    // Save to Supabase (upsert)
+    try {
+      const dbItem = {
+        id: finalIdea.id,
+        numero_sugerencia: finalIdea.numeroSugerencia,
+        sugerencia: finalIdea.sugerencia,
+        recurso: finalIdea.recurso,
+        fecha_creacion: finalIdea.fechaCreacion,
+        aprobada: finalIdea.aprobada,
+        responsable: finalIdea.responsable,
+        fecha_ejecucion_prevista: finalIdea.fechaEjecucionPrevista || null,
+        fecha_cierre: finalIdea.fechaCierre || null,
+        fecha_emision: finalIdea.fechaEmision || null
+      };
+
+      const { error } = await supabase.from('ideas_mejora').upsert(dbItem);
+      if (error) {
+        console.error("Error saving to ideas_mejora:", error);
+        addToast("Error al guardar idea de mejora en base de datos", "error");
+      } else {
+        addToast(isNew ? "IDEA DE MEJORA CREADA" : "IDEA DE MEJORA ACTUALIZADA", "success");
+      }
+    } catch (err: any) {
+      console.error("Exception saving ideas_mejora:", err);
+    }
+  }, [ideasDeMejora, addToast, safeLocalStorageSetItem]);
+
+  const handleDeleteIdeaMejora = useCallback(async (id: string) => {
+    setIdeasDeMejora(prev => {
+      const next = prev.filter(i => i.id !== id);
+      safeLocalStorageSetItem('zitron_ideas_mejora', JSON.stringify(next));
+      return next;
+    });
+
+    try {
+      const { error } = await supabase.from('ideas_mejora').delete().eq('id', id);
+      if (error) {
+        console.error("Error deleting from ideas_mejora:", error);
+        addToast("Error al eliminar idea de mejora de la base de datos", "error");
+      } else {
+        addToast("IDEA DE MEJORA ELIMINADA", "success");
+      }
+    } catch (err: any) {
+      console.error("Exception deleting ideas_mejora:", err);
+    }
+  }, [addToast, safeLocalStorageSetItem]);
 
   const handleSetSpeeds = useCallback(async (newSpeeds: MasterSpeed[]) => {
     console.log(`handleSetSpeeds called for ${selectedArea} with ${newSpeeds.length} items`);
@@ -3029,7 +3205,9 @@ const App: React.FC = () => {
         onBack={() => setCurrentView('root-menu')}
         activities={activities}
         history={history}
+        mermas={mermas}
         workshopIndicators={workshopIndicators}
+        masterSpeeds={masterSpeeds}
       />
     );
   }
@@ -3246,7 +3424,13 @@ const App: React.FC = () => {
 
                     {top60Access === 'preparacion' && (
                       <div className="animate-in fade-in zoom-in duration-500">
-                        <TOP60Preparacion operarios={filteredOperarios} passwords={passwords} />
+                        <TOP60Preparacion 
+                          operarios={globalUsers} 
+                          passwords={passwords} 
+                          ideasDeMejora={ideasDeMejora}
+                          onSaveIdeaMejora={handleSaveIdeaMejora}
+                          onDeleteIdeaMejora={handleDeleteIdeaMejora}
+                        />
                       </div>
                     )}
 
@@ -3334,6 +3518,7 @@ const App: React.FC = () => {
                 passwords={passwords}
                 operarios={operarios}
                 onCorrectShift={handleCorrectShift}
+                masterSpeeds={masterSpeeds}
               />
             )}
           </>

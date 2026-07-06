@@ -4,11 +4,12 @@ import {
 } from 'recharts';
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
-import { Activity as ActivityIcon, ShieldAlert, Clock } from 'lucide-react';
+import { Activity as ActivityIcon, ShieldAlert, Clock, Users } from 'lucide-react';
 import { Activity, OEEObjectives, TaskType, User, ActionPlanItem } from '../types';
 import { calculateStats, getWeekNumber } from './Dashboard';
 import { AREA_NAMES, JOSELITO_LOGO } from '../constants';
 import HelpModal from './HelpModal';
+import { supabase } from '../lib/supabase';
 
 interface TOP60DashboardProps {
   activities: Activity[];
@@ -73,6 +74,8 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
   });
 
   const [seguridadData, setSeguridadData] = useState<any[]>([]);
+  const [dbSeguridadRecords, setDbSeguridadRecords] = useState<any[]>([]);
+  const [dbRrhhRecords, setDbRrhhRecords] = useState<any[]>([]);
   const [rrhhData, setRrhhData] = useState<any[]>([]);
   const [ausentismoData, setAusentismoData] = useState<any[]>([]);
   const [calidadData, setCalidadData] = useState<any[]>([]);
@@ -122,6 +125,36 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
     setCalidadData(safeParse('zitron_top60_calidad', []));
     setIdmData(safeParse('zitron_top60_idm', []));
     setActionPlanData(safeParse('zitron_top60_actionplan', []));
+
+    // Fetch seguridad_top60 from Supabase
+    const fetchDbSeguridad = async () => {
+      try {
+        const { data, error } = await supabase.from('seguridad_top60').select('*');
+        if (error) {
+          console.error("Error fetching seguridad_top60:", error);
+        } else if (data) {
+          setDbSeguridadRecords(data);
+        }
+      } catch (e) {
+        console.error("Error in fetchDbSeguridad:", e);
+      }
+    };
+    fetchDbSeguridad();
+
+    // Fetch top60_rrhh from Supabase
+    const fetchDbRrhh = async () => {
+      try {
+        const { data, error } = await supabase.from('top60_rrhh').select('*');
+        if (error) {
+          console.error("Error fetching top60_rrhh:", error);
+        } else if (data) {
+          setDbRrhhRecords(data);
+        }
+      } catch (e) {
+        console.error("Error in fetchDbRrhh:", e);
+      }
+    };
+    fetchDbRrhh();
   }, []);
 
   const allData = useMemo(() => [...history, ...activities], [history, activities]);
@@ -604,34 +637,38 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
 
   const renderSeguridadTab = (isReport = false, onlyCharts = false, onlyTable = false) => {
     const weeklyAccidents = last15Weeks.map(w => {
-      const count = seguridadData.filter(i => {
-        const d = new Date(i.fecha);
-        return i.tipo === 'Accidente' && getWeekNumber(d) === w.week && d.getFullYear() === w.year;
-      }).length;
+      const recordsForWeek = dbSeguridadRecords.filter(r => {
+        const d = new Date(r.fecha);
+        return getWeekNumber(d) === w.week && d.getFullYear() === w.year;
+      });
+      const count = recordsForWeek.reduce((sum, r) => sum + (Number(r.accidentes) || 0), 0);
       return { name: w.label, count, week: w.week, year: w.year };
     });
 
     const monthlyAccidents = last15Months.map(m => {
-      const count = seguridadData.filter(i => {
-        const d = new Date(i.fecha);
-        return i.tipo === 'Accidente' && d.getMonth() === m.month && d.getFullYear() === m.year;
-      }).length;
+      const recordsForMonth = dbSeguridadRecords.filter(r => {
+        const d = new Date(r.fecha);
+        return d.getMonth() === m.month && d.getFullYear() === m.year;
+      });
+      const count = recordsForMonth.reduce((sum, r) => sum + (Number(r.accidentes) || 0), 0);
       return { name: m.label, count, date: new Date(m.year, m.month, 1) };
     });
 
     const weeklyIncidentes = last15Weeks.map(w => {
-      const count = seguridadData.filter(i => {
-        const d = new Date(i.fecha);
-        return i.tipo === 'Incidente' && getWeekNumber(d) === w.week && d.getFullYear() === w.year;
-      }).length;
+      const recordsForWeek = dbSeguridadRecords.filter(r => {
+        const d = new Date(r.fecha);
+        return getWeekNumber(d) === w.week && d.getFullYear() === w.year;
+      });
+      const count = recordsForWeek.reduce((sum, r) => sum + (Number(r.incidentes) || 0), 0);
       return { name: w.label, count, week: w.week, year: w.year };
     });
 
     const monthlyIncidentes = last15Months.map(m => {
-      const count = seguridadData.filter(i => {
-        const d = new Date(i.fecha);
-        return i.tipo === 'Incidente' && d.getMonth() === m.month && d.getFullYear() === m.year;
-      }).length;
+      const recordsForMonth = dbSeguridadRecords.filter(r => {
+        const d = new Date(r.fecha);
+        return d.getMonth() === m.month && d.getFullYear() === m.year;
+      });
+      const count = recordsForMonth.reduce((sum, r) => sum + (Number(r.incidentes) || 0), 0);
       return { name: m.label, count, date: new Date(m.year, m.month, 1) };
     });
 
@@ -647,6 +684,71 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
             {renderEvolutionChart(monthlyAccidents, 'count', 'ACCIDENTES', '#ef4444', 'Evolución Accidentes (Meses)', 'accidentes', false, isReport)}
             {renderEvolutionChart(weeklyIncidentes, 'count', 'INCIDENTES', '#f97316', 'Evolución Incidentes (Semanas)', 'incidentes', false, isReport)}
             {renderEvolutionChart(monthlyIncidentes, 'count', 'INCIDENTES', '#f97316', 'Evolución Incidentes (Meses)', 'incidentes', false, isReport)}
+          </div>
+        )}
+
+        {/* Histórico de Indicadores de Seguridad */}
+        {!onlyCharts && (
+          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+            <div className="flex items-center gap-3 mb-6 border-b border-slate-50 pb-4">
+              <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center text-red-600">
+                <ShieldAlert size={20} />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Indicadores de Seguridad Registrados</h3>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Accidentes e incidentes de trabajo por semana</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto max-h-[350px] overflow-y-auto">
+              {dbSeguridadRecords.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 font-bold uppercase tracking-wider text-xs">
+                  No hay indicadores registrados todavía.
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      <th className="py-3 px-4">Semana (Lunes)</th>
+                      <th className="py-3 px-4 text-center">Accidentes de Trabajo</th>
+                      <th className="py-3 px-4 text-center">Incidentes de Trabajo</th>
+                      <th className="py-3 px-4">Comentarios</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...dbSeguridadRecords].sort((a, b) => b.fecha.localeCompare(a.fecha)).map((r) => {
+                      const d = new Date(r.fecha);
+                      const weekNum = getWeekNumber(d);
+                      const formattedDate = d.toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
+                      return (
+                        <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                          <td className="py-3 px-4 text-xs font-bold text-slate-800">
+                            Semana {weekNum} ({formattedDate})
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-black ${
+                              Number(r.accidentes) > 0 ? 'bg-red-100 text-red-700 font-extrabold scale-110 inline-block' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {r.accidentes}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-black ${
+                              Number(r.incidentes) > 0 ? 'bg-amber-100 text-amber-700 font-extrabold scale-110 inline-block' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {r.incidentes}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-xs text-slate-500 italic max-w-xs truncate" title={r.comentarios}>
+                            {r.comentarios || 'Sin comentarios'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         )}
 
@@ -803,23 +905,144 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
       };
     });
 
+    // Group dbRrhhRecords by fecha (from Supabase)
+    const groupedRrhh: Record<string, { fecha: string; absentismo: number; ausentismo: number; comentarios: string }> = {};
+
+    // First load from local storage if available for fallback
+    let localPrepRecords: Record<string, any> = {};
+    try {
+      const saved = localStorage.getItem('zitron_top60_preparacion_records');
+      if (saved) localPrepRecords = JSON.parse(saved);
+    } catch (e) {}
+
+    // Helper to get monday string
+    const getMondayOfDate = (dateStr: string) => {
+      try {
+        const d = new Date(dateStr);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(d.setDate(diff));
+        return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
+      } catch (e) {
+        return dateStr;
+      }
+    };
+
+    Object.entries(localPrepRecords).forEach(([dateStr, rec]) => {
+      if (rec?.personal?.completed && rec?.personal?.data) {
+        const monday = getMondayOfDate(dateStr);
+        groupedRrhh[monday] = {
+          fecha: monday,
+          absentismo: Number(rec.personal.data.absentismo || 0),
+          ausentismo: Number(rec.personal.data.ausentismo || 0),
+          comentarios: rec.personal.data.comentarios || ''
+        };
+      }
+    });
+
+    // Then overwrite/merge with Supabase records (source of truth)
+    dbRrhhRecords.forEach(r => {
+      if (!r.fecha) return;
+      if (!groupedRrhh[r.fecha]) {
+        groupedRrhh[r.fecha] = {
+          fecha: r.fecha,
+          absentismo: 0,
+          ausentismo: 0,
+          comentarios: ''
+        };
+      }
+      if (r.area === 'absentismo') {
+        groupedRrhh[r.fecha].absentismo = Number(r.valor || 0);
+      } else if (r.area === 'ausentismo') {
+        groupedRrhh[r.fecha].ausentismo = Number(r.valor || 0);
+      }
+      if (r.comentarios && !groupedRrhh[r.fecha].comentarios) {
+        groupedRrhh[r.fecha].comentarios = r.comentarios;
+      }
+    });
+
+    const historicalRows = Object.values(groupedRrhh).sort((a, b) => b.fecha.localeCompare(a.fecha));
+
     return (
-      <div className={`grid ${isReport ? 'grid-cols-2' : 'grid-cols-1 lg:grid-cols-2'} gap-6`}>
-        <div className="col-span-full border-b border-slate-200 pb-2 mb-2">
-          <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">Absentismo (Bajas)</h4>
+      <div className="flex flex-col gap-8">
+        <div className={`grid ${isReport ? 'grid-cols-2' : 'grid-cols-1 lg:grid-cols-2'} gap-6`}>
+          <div className="col-span-full border-b border-slate-200 pb-2 mb-2">
+            <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">Absentismo (Bajas)</h4>
+          </div>
+          {renderEvolutionChart(weeklyAbsentismo, 'MOD', 'MOD %', '#3b82f6', 'Absentismo MOD % (Semanas)', 'absentismo-mod', true, isReport)}
+          {renderEvolutionChart(monthlyAbsentismo, 'MOD', 'MOD %', '#3b82f6', 'Absentismo MOD % (Meses)', 'absentismo-mod', true, isReport)}
+          {renderEvolutionChart(weeklyAbsentismo, 'MOI', 'MOI %', '#8b5cf6', 'Absentismo MOI % (Semanas)', 'absentismo-moi', true, isReport)}
+          {renderEvolutionChart(monthlyAbsentismo, 'MOI', 'MOI %', '#8b5cf6', 'Absentismo MOI % (Meses)', 'absentismo-moi', true, isReport)}
+          
+          <div className="col-span-full border-b border-slate-200 pb-2 mb-2 mt-6">
+            <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">Ausentismo (Jornadas Perdidas)</h4>
+          </div>
+          {renderEvolutionChart(weeklyAusentismo, 'MOD', 'MOD', '#3b82f6', 'Ausentismo MOD (Semanas)', 'ausentismo-mod', false, isReport)}
+          {renderEvolutionChart(monthlyAusentismo, 'MOD', 'MOD', '#3b82f6', 'Ausentismo MOD (Meses)', 'ausentismo-mod', false, isReport)}
+          {renderEvolutionChart(weeklyAusentismo, 'MOI', 'MOI', '#8b5cf6', 'Ausentismo MOI (Semanas)', 'ausentismo-moi', false, isReport)}
+          {renderEvolutionChart(monthlyAusentismo, 'MOI', 'MOI', '#8b5cf6', 'Ausentismo MOI (Meses)', 'ausentismo-moi', false, isReport)}
         </div>
-        {renderEvolutionChart(weeklyAbsentismo, 'MOD', 'MOD %', '#3b82f6', 'Absentismo MOD % (Semanas)', 'absentismo-mod', true, isReport)}
-        {renderEvolutionChart(monthlyAbsentismo, 'MOD', 'MOD %', '#3b82f6', 'Absentismo MOD % (Meses)', 'absentismo-mod', true, isReport)}
-        {renderEvolutionChart(weeklyAbsentismo, 'MOI', 'MOI %', '#8b5cf6', 'Absentismo MOI % (Semanas)', 'absentismo-moi', true, isReport)}
-        {renderEvolutionChart(monthlyAbsentismo, 'MOI', 'MOI %', '#8b5cf6', 'Absentismo MOI % (Meses)', 'absentismo-moi', true, isReport)}
-        
-        <div className="col-span-full border-b border-slate-200 pb-2 mb-2 mt-6">
-          <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">Ausentismo (Jornadas Perdidas)</h4>
-        </div>
-        {renderEvolutionChart(weeklyAusentismo, 'MOD', 'MOD', '#3b82f6', 'Ausentismo MOD (Semanas)', 'ausentismo-mod', false, isReport)}
-        {renderEvolutionChart(monthlyAusentismo, 'MOD', 'MOD', '#3b82f6', 'Ausentismo MOD (Meses)', 'ausentismo-mod', false, isReport)}
-        {renderEvolutionChart(weeklyAusentismo, 'MOI', 'MOI', '#8b5cf6', 'Ausentismo MOI (Semanas)', 'ausentismo-moi', false, isReport)}
-        {renderEvolutionChart(monthlyAusentismo, 'MOI', 'MOI', '#8b5cf6', 'Ausentismo MOI (Meses)', 'ausentismo-moi', false, isReport)}
+
+        {/* Histórico de Indicadores de Personal */}
+        {!isReport && (
+          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+            <div className="flex items-center gap-3 mb-6 border-b border-slate-50 pb-4">
+              <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
+                <Users size={20} />
+              </div>
+              <div>
+                <h3 className="font-serif font-black text-slate-900 uppercase">Histórico de Indicadores de Personal</h3>
+                <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Registros semanales de Absentismo y Ausentismo</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto max-h-[350px] overflow-y-auto">
+              {historicalRows.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 font-bold uppercase tracking-wider text-xs">
+                  No hay indicadores registrados todavía.
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      <th className="py-3 px-4">Semana (Lunes)</th>
+                      <th className="py-3 px-4 text-center">NÚMERO DE ABSENTISMO</th>
+                      <th className="py-3 px-4 text-center">NÚMERO DE AUSENTISMO</th>
+                      <th className="py-3 px-4">Comentarios</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historicalRows.map((r) => {
+                      const d = new Date(r.fecha);
+                      const weekNum = getWeekNumber(d);
+                      const formattedDate = d.toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
+                      return (
+                        <tr key={r.fecha} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                          <td className="py-3 px-4 text-xs font-bold text-slate-800">
+                            Semana {weekNum} ({formattedDate})
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-black bg-slate-100 text-slate-600`}>
+                              {r.absentismo}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-black bg-slate-100 text-slate-600`}>
+                              {r.ausentismo}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-xs text-slate-500 italic max-w-xs truncate" title={r.comentarios}>
+                            {r.comentarios || 'Sin comentarios'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -1033,10 +1256,10 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
                 <div className="bg-slate-50 p-8 rounded-[3rem] border-2 border-red-100 flex flex-col items-center text-center justify-center shadow-sm">
                   <h3 className="text-xl font-black text-slate-400 uppercase tracking-widest mb-4">Seguridad</h3>
                   <div className="text-8xl font-black text-red-600">
-                    {seguridadData.filter(i => {
-                      const d = new Date(i.fecha);
-                      return i.tipo === 'Accidente' && getWeekNumber(d) === selectedWeek && d.getFullYear() === selectedYear;
-                    }).length}
+                    {dbSeguridadRecords.filter(r => {
+                      const d = new Date(r.fecha);
+                      return getWeekNumber(d) === selectedWeek && d.getFullYear() === selectedYear;
+                    }).reduce((sum, r) => sum + (Number(r.accidentes) || 0), 0)}
                   </div>
                   <p className="text-sm font-black text-slate-400 uppercase tracking-widest mt-4">Accidentes S{selectedWeek}</p>
                 </div>

@@ -120,12 +120,17 @@ export const calculateStats = (
   mermas: any[] = [],
   workshopIndicators?: Record<string, {id: string, name: string, formula?: string}[]>,
   activities: Activity[] = [],
-  history: Activity[] = []
+  history: Activity[] = [],
+  useNewFormula: boolean = false,
+  masterSpeeds: MasterSpeed[] = []
 ) => {
   let totalPersonMinutes = 0;
   let totalParts = 0;
   let totalPartsNok = 0;
   let theoreticalTimeSum = 0;
+  let sumDurationTotal = 0;
+  let sumDurationP = 0;
+  let totalTiempoDisponible = 0;
 
   const aid = (areaId || '').toLowerCase();
   const isLoncheadoArea = aid.includes('sb-loncheado') || aid.includes('loncheado');
@@ -135,6 +140,52 @@ export const calculateStats = (
     const [h, m] = timeStr.split(':').map(Number);
     return (h || 0) * 60 + (m || 0);
   };
+
+  if (useNewFormula) {
+      // Group by date, then find P blocks
+      const dataByDate: Record<string, Activity[]> = {};
+      data.forEach(a => {
+          const date = a.fecha || 'unknown';
+          if (!dataByDate[date]) dataByDate[date] = [];
+          dataByDate[date].push(a);
+      });
+      
+      Object.values(dataByDate).forEach(dayActs => {
+          // Sort by start time
+          dayActs.sort((a,b) => parseTime(a.horaInicio) - parseTime(b.horaInicio));
+          
+          // Find contiguous blocks of P tasks
+          let i = 0;
+          while (i < dayActs.length) {
+              const tipo = dayActs[i].tipoTarea || (dayActs[i] as any).tipo_tarea;
+              if (tipo === TaskType.PRODUCCION || tipo === 'P') {
+                  let start = parseTime(dayActs[i].horaInicio);
+                  let end = parseTime(dayActs[i].horaFin || dayActs[i].horaInicio);
+                  
+                  let j = i + 1;
+                  while (j < dayActs.length) {
+                      const nextTipo = dayActs[j].tipoTarea || (dayActs[j] as any).tipo_tarea;
+                      if (nextTipo === TaskType.PRODUCCION || nextTipo === 'P') {
+                          const nextStart = parseTime(dayActs[j].horaInicio);
+                          const nextEnd = parseTime(dayActs[j].horaFin || dayActs[j].horaInicio);
+                          if (nextStart <= end) {
+                              end = Math.max(end, nextEnd);
+                          } else {
+                              break;
+                          }
+                          j++;
+                      } else {
+                          break;
+                      }
+                  }
+                  totalTiempoDisponible += (end - start);
+                  i = j;
+              } else {
+                  i++;
+              }
+          }
+      });
+  }
 
   const prodActs = data.filter(act => {
     const tipo = act.tipoTarea || (act as any).tipo_tarea;
@@ -154,12 +205,15 @@ export const calculateStats = (
       duration = end >= start ? (end - start) : (24 * 60 - start + end);
     }
     
+    sumDurationTotal += duration;
+
     // Total person minutes for PPH (using operators count)
     const nOps = Array.isArray(act.operarios) ? act.operarios.length : 1;
     totalPersonMinutes += duration * nOps;
 
     const tipo = act.tipoTarea || (act as any).tipo_tarea;
     if (tipo === TaskType.PRODUCCION || tipo === 'P') {
+      sumDurationP += duration;
       const cant = Number(act.cantidad ?? (act as any).quantity ?? (act as any).cantidad_ok ?? 0);
       const cantNok = Number(act.cantidadNok ?? (act as any).quantity_nok ?? (act as any).cantidad_nok ?? 0);
       totalParts += cant;
@@ -167,15 +221,24 @@ export const calculateStats = (
       
       const actIsLoncheado = (act.area || aid).toLowerCase().includes('loncheado');
       const isLaser = (act.area || aid).toLowerCase().includes('laser');
-      const teoManual = Number(act.tiempoTeoricoManual ?? (act as any).tiempo_teorico ?? (act as any).theo_time ?? 0);
-
-      // Theoretical time per record (Σ Cantidad / Velocidad)
-      if (isLaser) {
-        theoreticalTimeSum += (teoManual > 0 ? (60 / teoManual) : 0);
-      } else if (actIsLoncheado) {
-        theoreticalTimeSum += (teoManual > 0 ? (cant + cantNok) / teoManual : 0);
+      
+      if (useNewFormula) {
+          // Rendimiento: Suma (unidades ok+nok * (60/Unidades hora del maestro para ese formato))
+          const master = masterSpeeds.find(ms => ms.formato === act.formato);
+          const teoManual = Number(act.tiempoTeoricoManual ?? (act as any).tiempo_teorico ?? (act as any).theo_time ?? (master?.tiempoTeorico || 0));
+          if (teoManual > 0) {
+            theoreticalTimeSum += (cant + cantNok) * (60 / teoManual);
+          }
       } else {
-        theoreticalTimeSum += (teoManual * (cant + cantNok));
+          const teoManual = Number(act.tiempoTeoricoManual ?? (act as any).tiempo_teorico ?? (act as any).theo_time ?? 0);
+          // Theoretical time per record (Σ Cantidad / Velocidad)
+          if (isLaser) {
+            theoreticalTimeSum += (teoManual > 0 ? (60 / teoManual) : 0);
+          } else if (actIsLoncheado) {
+            theoreticalTimeSum += (teoManual > 0 ? (cant + cantNok) / teoManual : 0);
+          } else {
+            theoreticalTimeSum += (teoManual * (cant + cantNok));
+          }
       }
     }
   });
@@ -197,14 +260,16 @@ export const calculateStats = (
 
   // Universal Formulas per User Request
   // Availability = P / (P + E + A)
-  const availability = (uniqueTimeP + uniqueTimeE + uniqueTimeA) > 0 
-    ? (uniqueTimeP / (uniqueTimeP + uniqueTimeE + uniqueTimeA)) * 100 
-    : 0;
+  const availability = useNewFormula 
+    ? (sumDurationTotal > 0 ? (sumDurationP / sumDurationTotal) * 100 : 0)
+    : ((uniqueTimeP + uniqueTimeE + uniqueTimeA) > 0 
+      ? (uniqueTimeP / (uniqueTimeP + uniqueTimeE + uniqueTimeA)) * 100 
+      : 0);
 
   // Performance = Theoretical / Production
-  const performance = uniqueTimeP > 0 
-    ? (theoreticalTimeSum / uniqueTimeP) * 100 
-    : 0;
+  const performance = useNewFormula
+    ? (totalTiempoDisponible > 0 ? (theoreticalTimeSum / totalTiempoDisponible) * 100 : 0)
+    : (uniqueTimeP > 0 ? (theoreticalTimeSum / uniqueTimeP) * 100 : 0);
 
   const quality = (totalParts + totalPartsNok) > 0 ? (totalParts / (totalParts + totalPartsNok)) * 100 : 100;
 

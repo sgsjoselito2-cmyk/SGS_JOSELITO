@@ -122,3 +122,66 @@ export interface MovimientoBodega {
   cantidad: number;
   comentarios?: string;
 }
+
+export interface PlanAccionSeguridad {
+  id: string;
+  fecha: string;
+  tipo: 'Accidente' | 'Incidente' | 'Near Miss';
+  gap: string;
+  queHaOcurrido: string;
+  accion: string;
+  responsable: string;
+  fechaImplantacionPrevista: string;
+  fechaImplantacionReal?: string;
+  estado: 'Abierto' | 'En Marcha' | 'Cerrado' | 'Retrasado';
+}
+
+export interface GapSeguridad {
+  id: string;
+  nombre: string;
+}
+
+export interface RegistroPersonalTop60 {
+  id: string;
+  fecha: string;
+  jornadasTeoricas: number;
+  jornadasPerdidasBaja: number;
+  jornadasPerdidasAusentismo: number;
+}
+
+export interface PlanAccionCalidad {
+  id: string;
+  fecha: string;
+  tipoReclamacion: string;
+  areaCausante: string;
+  descripcionProblema: string;
+  accionContenedora: string;
+  responsableContenedora: string;
+  fechaPrevistaContenedora: string;
+  fechaCierreContenedora?: string;
+  accionCorrectora: string;
+  responsableCorrectora: string;
+  fechaPrevistaCorrectora: string;
+  fechaCierreCorrectora?: string;
+}
+
+export interface TipoReclamacion {
+  id: string;
+  nombre: string;
+}
+
+export interface IdeaDeMejora {
+  id: string;
+  numeroSugerencia: number;
+  sugerencia: string;
+  recurso: string;
+  fechaCreacion: string;
+  aprobada: 'Sí' | 'No' | 'Pendiente';
+  responsable: string;
+  fechaEjecucionPrevista?: string;
+  fechaCierre?: string;
+  estado: 'Abierto' | 'En Marcha' | 'Cerrado' | 'Retrasado';
+  fechaEmision?: string;
+}
+
+

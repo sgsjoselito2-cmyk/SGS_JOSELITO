@@ -1,62 +1,96 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Activity } from '../types';
+import { Activity, TaskType, MasterSpeed } from '../types';
 import { AREA_NAMES } from '../constants';
-import { getWeekNumber } from './Dashboard';
+import { getWeekNumber, calculateStats } from './Dashboard';
+import { supabase } from '../lib/supabase';
 
 interface SavingsPanelProps {
   onBack: () => void;
   activities: Activity[];
   history: Activity[];
+  mermas: any[];
   workshopIndicators: Record<string, { id: string; name: string }[]>;
+  masterSpeeds: MasterSpeed[];
 }
 
-const SavingsDashboard = ({ allData, globalConfig, wsConfigs, workshopIndicators }: any) => {
-    const firstArea = allData.length > 0 ? allData[0].area : 'N/A';
-    
-    // Process allData to group by week
+const SavingsDashboard = ({ allData, globalConfig, wsConfigs, workshopIndicators, mermas, masterSpeeds, propActivities, propHistory }: any) => {
+    // 1. Group data by workshop and week
     const weeksData = useMemo(() => {
-        const weeks: Record<number, Record<string, any>> = {};
-        console.log('--- DEBUG: Processing allData ---', allData.length, 'total items');
+        if (!allData || !Array.isArray(allData)) return {};
+        const weeks: Record<number, Record<string, Activity[]>> = {};
         
-        allData.slice(0, 5).forEach((a, idx) => {
-            console.log(`DEBUG: Item ${idx}: area="${a.area}", fecha="${a.fecha}", tipoTarea="${a.tipoTarea}"`);
-        });
-
-        allData.forEach((a: Activity, idx: number) => {
-            if (!a.fecha) return;
+        allData.forEach((a: Activity) => {
+            if (!a.fecha || !a.area) return;
             const d = new Date(a.fecha);
-            if (isNaN(d.getTime())) {
-                console.warn(`DEBUG: Invalid date for item ${idx}: ${a.fecha}`);
-                return;
-            }
             const week = getWeekNumber(d);
             if (!weeks[week]) weeks[week] = {};
-            
-            const rawArea = (a.area && a.area.trim() !== '') ? a.area : 'unknown';
-            
-            // Map rawArea to the expected workshopIndicator key
-            const mappedArea = Object.keys(workshopIndicators).find(id => 
-                id === rawArea || rawArea.includes(id) || id.includes(rawArea)
-            ) || rawArea;
-            
-            weeks[week][mappedArea] = (weeks[week][mappedArea] || 0) + (a.cantidad || 0);
+            if (!weeks[week][a.area]) weeks[week][a.area] = [];
+            weeks[week][a.area].push(a);
         });
-        console.log('--- DEBUG: Resulting weeksData ---', weeks);
         return weeks;
-    }, [allData, workshopIndicators]);
+    }, [allData]);
+
+    const loncheadoActs = allData.filter((a: any) => a.area === 'sb-loncheado');
+    console.log('SAVINGS DEBUG - Total actividades con area=sb-loncheado en allData:', loncheadoActs.length);
+    console.log('SAVINGS DEBUG - Muestra de esas actividades:', 
+      loncheadoActs.slice(0, 5).map((a: any) => ({
+        fecha: a.fecha,
+        area: a.area,
+        tipoTarea: a.tipoTarea,
+        semanaCalculada: getWeekNumber(new Date(a.fecha))
+      }))
+    );
+    console.log('SAVINGS DEBUG - áreas únicas encontradas en allData:', 
+      [...new Set(allData.map((a: any) => a.area))]);
 
     const weekNumbers = Object.keys(weeksData).map(Number).sort((a, b) => a - b);
 
+    console.log('SAVINGS PROPS - propActivities recibidas en SavingsPanel:', propActivities?.length);
+    console.log('SAVINGS PROPS - propHistory recibidas en SavingsPanel:', propHistory?.length);
+    console.log('SAVINGS allData final:', allData?.length);
+    console.log('SAVINGS weekNumbers calculadas:', weekNumbers);
+    console.log('SAVINGS workshopIndicators recibido:', workshopIndicators);
+    
+    // 2. Compute Situación de Partida (avg of first 4 weeks) for OEE
+    const referenceData = useMemo(() => {
+        const refs: Record<string, number> = {};
+        Object.keys(workshopIndicators).forEach(wsId => {
+            const firstFourWeeks = weekNumbers.slice(0, 4);
+            let totalProd = 0;
+            let count = 0;
+            firstFourWeeks.forEach(week => {
+                const acts = weeksData[week]?.[wsId] || [];
+                // Filter mermas for this week and wsId
+                const weekMermas = mermas.filter((m: any) => {
+                    const d = new Date(m.fecha);
+                    return getWeekNumber(d) === week && m.area === wsId;
+                });
+                const stats = calculateStats(acts, wsId, weekMermas, workshopIndicators, allData, allData, true, masterSpeeds); 
+                if (stats.productividad) {
+                    totalProd += Number(stats.productividad);
+                    count++;
+                }
+            });
+            if (count > 0) refs[wsId] = totalProd / count;
+        });
+        return refs;
+    }, [weeksData, weekNumbers, workshopIndicators, mermas, masterSpeeds]);
+
     return (
         <div className="space-y-8">
-            <div className="text-sm bg-yellow-100 p-2">Debug: First Activity Area = {firstArea}</div>
             {Object.entries(workshopIndicators).map(([wsId, indicators]) => {
                 const wsConf = wsConfigs[wsId] || { semanasAnio: 48, indicators: {} };
                 
                 return (
                     <div key={wsId} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                        <h4 className="font-bold text-slate-800 mb-6">{AREA_NAMES[wsId] || wsId}</h4>
-                        {indicators.map((ind: any) => (
+                        <h4 className="font-bold text-slate-800 mb-6 flex justify-between">
+                            <span>{AREA_NAMES[wsId] || wsId}</span>
+                            {referenceData[wsId] && <span className="text-xs font-normal text-slate-500">Prod. (OEE) Ref: {referenceData[wsId].toFixed(1)}%</span>}
+                        </h4>
+                        {(indicators as any).map((ind: any) => {
+                          const isPPH = ind.id.startsWith('pph');
+                          
+                          return (
                           <div key={ind.id} className="mb-6">
                             <h5 className="font-bold text-slate-700 mb-2">{ind.name}</h5>
                             <div className="overflow-x-auto">
@@ -64,32 +98,111 @@ const SavingsDashboard = ({ allData, globalConfig, wsConfigs, workshopIndicators
                                     <thead>
                                         <tr className="text-slate-500 uppercase border-b border-slate-100">
                                             <th className="py-2">Semana</th>
-                                            <th className="py-2 px-2">Valor/Prod</th>
-                                            <th className="py-2 px-2">T. Actual</th>
-                                            <th className="py-2 px-2">T. Ahorro</th>
-                                            <th className="py-2 px-2">Ahorro</th>
-                                            <th className="py-2 px-2">Proy. Anual</th>
+                                            {isPPH ? (
+                                                <>
+                                                    <th className="py-2">PPH</th>
+                                                    <th className="py-2">T. Actual</th>
+                                                    <th className="py-2">T. Ahorro</th>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <th className="py-2">Horas útiles</th>
+                                                    <th className="py-2">Horas reales</th>
+                                                    <th className="py-2">Productividad</th>
+                                                    <th className="py-2">H. A Product. Ref</th>
+                                                    <th className="py-2">Ahorro Horas</th>
+                                                </>
+                                            )}
+                                            <th className="py-2">Ahorro €</th>
+                                            <th className="py-2">Proy. Anual €</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {weekNumbers.map((week) => {
-                                            const val = weeksData[week][wsId] || 0;
-                                            return (
-                                              <tr key={week} className="border-b border-slate-50">
-                                                <td className="py-3 font-black text-slate-700">{week}</td>
-                                                <td className="py-3 px-2">{val.toFixed(1)}</td>
-                                                <td className="py-3 px-2">--</td>
-                                                <td className="py-3 px-2 text-emerald-600 font-bold">--</td>
-                                                <td className="py-3 px-2 text-emerald-600 font-bold">--</td>
-                                                <td className="py-3 px-2 font-black">--</td>
-                                              </tr>
-                                            );
+                                            const acts = weeksData[week]?.[wsId] || [];
+                                            const weekMermas = mermas.filter((m: any) => {
+                                              const d = new Date(m.fecha);
+                                              return getWeekNumber(d) === week && m.area === wsId;
+                                            });
+                                            if (wsId === 'sb-loncheado') {
+                                              console.log(`SAVINGS DEBUG wsId=${wsId} week=${week} acts.length=${acts.length}`, 
+                                                acts.map((a: any) => ({ 
+                                                  fecha: a.fecha, area: a.area, tipoTarea: a.tipoTarea, 
+                                                  horaInicio: a.horaInicio, horaFin: a.horaFin, 
+                                                  cantidad: a.cantidad 
+                                                }))
+                                              );
+                                            }
+                                            const stats = calculateStats(acts, wsId, weekMermas, workshopIndicators, allData, allData, true);
+                                            if (wsId === 'sb-loncheado') {
+                                              console.log(`SAVINGS DEBUG stats week=${week}:`, stats);
+                                            }
+                                            
+                                            // TODO: Need Config for Costs and NumOps
+                                            const costeOp = globalConfig.costOperario || 20;
+                                            const costeEnc = globalConfig.costEncargado || 30;
+                                            const nOps = wsConfigs[wsId]?.indicators[ind.id]?.numOperarios || 1;
+                                            
+                                            let ahorroEuro = 0;
+                                            let proyAnual = 0;
+                                            
+                                            if (isPPH) {
+                                                const val = Number(stats.pph) || 0;
+                                                const tActual = 0; // Needs logic
+                                                const tAhorro = 0; // Needs logic
+                                                ahorroEuro = 0; // Needs logic
+                                                
+                                                return (
+                                                  <tr key={week} className="border-b border-slate-50">
+                                                    <td className="py-3 font-black text-slate-700">{week}</td>
+                                                    <td className="py-3 px-2">{val.toFixed(1)}</td>
+                                                    <td className="py-3 px-2">{tActual.toFixed(1)}</td>
+                                                    <td className="py-3 px-2">{tAhorro.toFixed(1)}</td>
+                                                    <td className="py-3 px-2 text-emerald-600 font-bold">{ahorroEuro.toFixed(2)} €</td>
+                                                    <td className="py-3 px-2 font-black">{proyAnual.toFixed(2)} €</td>
+                                                  </tr>
+                                                );
+                                            } else {
+                                                // Correct OEE calculation (as in Dashboard.tsx: oee = (disp * perf * qual) / 10000)
+                                                // Assuming stats has disp, perf, qual values or calculating from tiempo_produccion_real, etc.
+                                                // For now, let's derive prodPct directly from the stats already computed
+                                                const prodPct = Number(stats.productividad) || 0;
+                                                
+                                                // Ensure stats has the necessary fields for calculation if not already in stats.productividad
+                                                const d = Number(stats.disponibilidad || 100);
+                                                const r = Number(stats.rendimiento || 100);
+                                                const c = Number(stats.calidad || 100);
+                                                const correctOEE = (d * r * c) / 10000;
+                                                
+                                                const finalProdPct = prodPct > 0 ? prodPct : correctOEE;
+                                                
+                                                const horasReales = (Number(stats.tiempo_produccion_real) + Number(stats.tiempo_esperas) + Number(stats.tiempo_averias)) / 60 || 0;
+                                                const horasUtiles = horasReales * (finalProdPct / 100);
+                                                const situacionPartida = referenceData[wsId] ? referenceData[wsId] / 100 : 0.606; 
+                                                const horasRef = situacionPartida > 0 ? (horasUtiles / situacionPartida) : 0;
+                                                const ahorroHoras = horasRef - horasReales;
+
+                                                ahorroEuro = (ahorroHoras * costeOp) + (1/8 * costeEnc / nOps);
+                                                
+                                                return (
+                                                  <tr key={week} className="border-b border-slate-50">
+                                                    <td className="py-3 font-black text-slate-700">{week}</td>
+                                                    <td className="py-3 px-2">{horasUtiles.toFixed(1)}</td>
+                                                    <td className="py-3 px-2">{horasReales.toFixed(1)}</td>
+                                                    <td className="py-3 px-2">{finalProdPct.toFixed(1)}%</td>
+                                                    <td className="py-3 px-2">{horasRef.toFixed(1)}</td>
+                                                    <td className="py-3 px-2 text-emerald-600 font-bold">{ahorroHoras.toFixed(1)}</td>
+                                                    <td className="py-3 px-2 text-emerald-600 font-bold">{ahorroEuro.toFixed(2)} €</td>
+                                                    <td className="py-3 px-2 font-black">{proyAnual.toFixed(2)} €</td>
+                                                  </tr>
+                                                );
+                                            }
                                         })}
                                     </tbody>
                                 </table>
                             </div>
                           </div>
-                        ))}
+                        )})}
                     </div>
                 );
             })}
@@ -97,11 +210,12 @@ const SavingsDashboard = ({ allData, globalConfig, wsConfigs, workshopIndicators
     );
 };
 
-const SavingsPanel: React.FC<SavingsPanelProps> = ({ onBack, activities, history, workshopIndicators }) => {
+const SavingsPanel: React.FC<SavingsPanelProps> = ({ onBack, activities: propActivities, history: propHistory, mermas, workshopIndicators, masterSpeeds }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'config'>('dashboard');
-  const allData = useMemo(() => [...history, ...activities], [history, activities]);
+
+  const allData = useMemo(() => [...propHistory, ...propActivities], [propHistory, propActivities]);
+  
   const filteredIndicators = useMemo(() => {
-    // The requested indicators mapping
     const allowedMap: Record<string, { id: string, name: string }[]> = {
       'sb-empaquetado-deshuesado': [{ id: 'pph', name: 'PPH DESHUESADO / PRENSADO' }],
       'sb-loncheado': [{ id: 'productividad', name: 'OEE LONCHEADO' }],
@@ -175,7 +289,7 @@ const SavingsPanel: React.FC<SavingsPanelProps> = ({ onBack, activities, history
       
       <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 flex-1">
           {activeTab === 'dashboard' ? (
-              <SavingsDashboard allData={allData} globalConfig={globalConfig} wsConfigs={wsConfigs} workshopIndicators={filteredIndicators} />
+              <SavingsDashboard allData={allData} globalConfig={globalConfig} wsConfigs={wsConfigs} workshopIndicators={filteredIndicators} mermas={mermas} masterSpeeds={masterSpeeds} propActivities={propActivities} propHistory={propHistory} />
           ) : (
               <div className="space-y-6">
                 <div className="bg-white p-4 rounded-xl border border-slate-200">

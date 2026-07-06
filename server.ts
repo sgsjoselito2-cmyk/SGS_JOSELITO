@@ -14,6 +14,30 @@ try {
 console.log("Starting Joselito Backend Server...");
 console.log("NODE_ENV:", process.env.NODE_ENV);
 
+// Run startup database migration to add fecha_emision column if needed
+const dbUrlForMigration = process.env.DATABASE_URL || process.env.VITE_DATABASE_URL;
+if (dbUrlForMigration) {
+  const pool = new Pool({
+    connectionString: dbUrlForMigration,
+    ssl: { rejectUnauthorized: false }
+  });
+  pool.query("ALTER TABLE ideas_mejora ADD COLUMN IF NOT EXISTS fecha_emision TEXT;")
+    .then(() => {
+      console.log("Database Migration: Checked/Added column fecha_emision to ideas_mejora successfully.");
+      try {
+        fs.appendFileSync("server-log.txt", "Migration success: added fecha_emision to ideas_mejora\n");
+      } catch (e) {}
+      return pool.end();
+    })
+    .catch(err => {
+      console.error("Database Migration Error for ideas_mejora:", err.message);
+      try {
+        fs.appendFileSync("server-log.txt", "Migration failed: " + err.message + "\n");
+      } catch (e) {}
+      return pool.end();
+    });
+}
+
 const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
 

@@ -427,3 +427,51 @@ GRANT ALL ON TABLE movimientos_bodega TO authenticated;
 ALTER TABLE oee_objectives ADD COLUMN IF NOT EXISTS show_in_top5 BOOLEAN DEFAULT TRUE;
 ALTER TABLE oee_objectives ADD COLUMN IF NOT EXISTS show_in_top15 BOOLEAN DEFAULT TRUE;
 ALTER TABLE oee_objectives ADD COLUMN IF NOT EXISTS show_in_top60 BOOLEAN DEFAULT TRUE;
+
+CREATE TABLE IF NOT EXISTS gaps_seguridad (
+  id TEXT PRIMARY KEY,
+  nombre TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS plan_accion_seguridad (
+  id TEXT PRIMARY KEY,
+  fecha TEXT NOT NULL,
+  tipo TEXT NOT NULL,
+  gap TEXT,
+  que_ha_ocurrido TEXT,
+  accion TEXT,
+  responsable TEXT,
+  fecha_implantacion_prevista TEXT,
+  fecha_implantacion_real TEXT,
+  estado TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE gaps_seguridad DISABLE ROW LEVEL SECURITY;
+ALTER TABLE plan_accion_seguridad DISABLE ROW LEVEL SECURITY;
+
+GRANT ALL ON TABLE gaps_seguridad TO anon;
+GRANT ALL ON TABLE gaps_seguridad TO authenticated;
+GRANT ALL ON TABLE plan_accion_seguridad TO anon;
+GRANT ALL ON TABLE plan_accion_seguridad TO authenticated;
+
+CREATE TABLE IF NOT EXISTS ideas_mejora (
+  id TEXT PRIMARY KEY,
+  numero_sugerencia INTEGER NOT NULL,
+  sugerencia TEXT,
+  recurso TEXT,
+  fecha_creacion TEXT,
+  aprobada TEXT DEFAULT 'Pendiente',
+  responsable TEXT,
+  fecha_ejecucion_prevista TEXT,
+  fecha_cierre TEXT,
+  fecha_emision TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE ideas_mejora DISABLE ROW LEVEL SECURITY;
+
+GRANT ALL ON TABLE ideas_mejora TO anon;
+GRANT ALL ON TABLE ideas_mejora TO authenticated;
+
+
