@@ -26,10 +26,11 @@ interface ConfigPanelProps {
     directorOperaciones: string;
     asistenciaTecnica: string;
   };
-  workshopIndicators: Record<string, {id: string, name: string, formula?: string}[]>;
-  setWorkshopIndicators: React.Dispatch<React.SetStateAction<Record<string, {id: string, name: string, formula?: string}[]>>>;
+  workshopIndicators: Record<string, {id: string, name: string, formula?: string, escala?: string}[]>;
+  setWorkshopIndicators: React.Dispatch<React.SetStateAction<Record<string, {id: string, name: string, formula?: string, escala?: string}[]>>>;
   activities?: Activity[];
   history?: Activity[];
+  onRecalculateProductivity?: (startDate: string, endDate: string) => Promise<{ success: boolean, count?: number, error?: string }>;
 }
 
 const ConfigPanel: React.FC<ConfigPanelProps> = ({ 
@@ -51,7 +52,8 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
   workshopIndicators,
   setWorkshopIndicators,
   activities = [],
-  history = []
+  history = [],
+  onRecalculateProductivity
 }) => {
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [showPassModal, setShowPassModal] = useState(false);
@@ -75,6 +77,41 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
   const [editUnidad, setEditUnidad] = useState<'kg' | 'unidades'>('unidades');
   const [editAfectaCalidad, setEditAfectaCalidad] = useState(false);
   const [newResponsibleName, setNewResponsibleName] = useState('');
+
+  // Estados para recalcular productividad
+  const [recalcStartDate, setRecalcStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().split('T')[0];
+  });
+  const [recalcEndDate, setRecalcEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [isRecalculating, setIsRecalculating] = useState(false);
+
+  const handleRunRecalculate = async () => {
+    if (!onRecalculateProductivity) return;
+    setIsRecalculating(true);
+    try {
+      const res = await onRecalculateProductivity(recalcStartDate, recalcEndDate);
+      if (res.success) {
+        setNotification({
+          message: `Productividad recalculada con éxito. Se actualizaron ${res.count || 0} filas en Supabase.`,
+          type: 'success'
+        });
+      } else {
+        setNotification({
+          message: `Error al recalcular productividad: ${res.error || 'Error desconocido'}`,
+          type: 'error'
+        });
+      }
+    } catch (err: any) {
+      setNotification({
+        message: `Error: ${err.message}`,
+        type: 'error'
+      });
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
 
   // Estado local para la tabla maestra de TOP 60
   const [localMasterObjectives, setLocalMasterObjectives] = useState<Record<string, OEEObjectives>>({});
@@ -416,13 +453,24 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
             { label: 'Calidad', value: 'calidad' },
           ]
         },
-        { label: 'Fórmula (ej: (campoA / 60) * campoB):', value: '', key: 'formula' }
+        { label: 'Fórmula (ej: (campoA / 60) * campoB):', value: '', key: 'formula' },
+        {
+          label: 'Escala del resultado:',
+          value: 'talcual',
+          key: 'escala',
+          type: 'select',
+          options: [
+            { label: 'Tal cual (sin dividir)', value: 'talcual' },
+            { label: 'Dividir entre 100', value: 'div100' },
+            { label: 'Dividir entre 10.000', value: 'div10000' }
+          ]
+        }
       ],
       onConfirm: (vals) => {
         if (vals?.name && vals?.id) {
           setWorkshopIndicators(prev => ({
             ...prev,
-            [wsId]: [...(prev[wsId] || prev.default), { id: vals.id, name: vals.name, formula: vals.formula }]
+            [wsId]: [...(prev[wsId] || prev.default), { id: vals.id, name: vals.name, formula: vals.formula, escala: vals.escala || 'talcual' }]
           }));
           
           if (selectedArea === 'TOP 60' && onUpdateAllObjectives) {
@@ -1313,6 +1361,56 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* SECCIÓN: RECALCULAR PRODUCTIVIDAD */}
+      {isAdminMode && onRecalculateProductivity && (
+        <section className={`p-10 rounded-[4rem] border shadow-2xl flex flex-col transition-colors ${isAdminMode ? 'bg-emerald-950/40 border-emerald-800 text-white' : 'bg-white border-slate-100'}`}>
+          <div className="flex items-center gap-4 mb-8">
+            <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center shadow-inner animate-pulse">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.656 48.656 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3" /></svg>
+            </div>
+            <div>
+              <h2 className="text-2xl font-black uppercase tracking-tighter text-emerald-600">Recalcular Tabla Productividad</h2>
+              <p className="text-[14px] font-black uppercase tracking-widest opacity-50">Regenerar tabla resumen_productividad en Supabase</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col md:flex-row items-end gap-6 mb-8">
+            <div className="flex-1 flex flex-col md:flex-row gap-4 w-full">
+              <div className="flex-1 flex flex-col">
+                <label className="text-[13px] font-black uppercase tracking-widest text-emerald-400 mb-2">Fecha Inicio</label>
+                <input 
+                  type="date" 
+                  value={recalcStartDate}
+                  onChange={(e) => setRecalcStartDate(e.target.value)}
+                  className="w-full bg-slate-900/40 border-4 border-slate-700 rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-widest outline-none focus:border-emerald-500 transition-all text-white"
+                />
+              </div>
+              <div className="flex-1 flex flex-col">
+                <label className="text-[13px] font-black uppercase tracking-widest text-emerald-400 mb-2">Fecha Fin</label>
+                <input 
+                  type="date" 
+                  value={recalcEndDate}
+                  onChange={(e) => setRecalcEndDate(e.target.value)}
+                  className="w-full bg-slate-900/40 border-4 border-slate-700 rounded-2xl px-6 py-4 text-sm font-black uppercase tracking-widest outline-none focus:border-emerald-500 transition-all text-white"
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={isRecalculating}
+              onClick={handleRunRecalculate}
+              className={`w-full md:w-auto px-10 py-5 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-95 text-white ${isRecalculating ? 'bg-slate-600 cursor-not-allowed' : 'bg-emerald-600 shadow-xl shadow-emerald-200 hover:bg-emerald-700'}`}
+            >
+              {isRecalculating ? 'RECALCULANDO...' : 'RECALCULAR AHORA'}
+            </button>
+          </div>
+          
+          <p className="text-xs text-slate-400 font-medium leading-relaxed">
+            Este proceso recalcula el tiempo único de producción consolidando solapes, la cantidad de unidades, el número de operarios y el PPH por día, taller y formato en el rango de fechas seleccionado, y los almacena en la tabla de Supabase <code>resumen_productividad</code>.
+          </p>
         </section>
       )}
     </div>

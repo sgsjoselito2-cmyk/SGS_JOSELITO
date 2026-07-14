@@ -41,6 +41,7 @@ import { INITIAL_WORKSHOP_INDICATORS, getInitialMasterSpeeds, getInitialOperario
 import { supabase, isConfigured, debugConfig } from './lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { calcDuration } from './src/utils/index';
+import { calculateProductivityRows } from './src/utils/productividad';
 
 interface Toast {
   id: string;
@@ -87,6 +88,7 @@ const App: React.FC = () => {
   const [planAccionSeguridad, setPlanAccionSeguridad] = useState<PlanAccionSeguridad[]>([]);
   const [gapsSeguridad, setGapsSeguridad] = useState<GapSeguridad[]>([]);
   const [ideasDeMejora, setIdeasDeMejora] = useState<IdeaDeMejora[]>([]);
+  const [ideasMejora, setIdeasMejora] = useState<any[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   // Helper para guardar en localStorage de forma segura
   const safeLocalStorageSetItem = useCallback((key: string, value: string) => {
@@ -149,20 +151,35 @@ const App: React.FC = () => {
 
   const [workshopIndicators, setWorkshopIndicators] = useState(() => {
     const parsed = safeParse('zitron_workshop_indicators', INITIAL_WORKSHOP_INDICATORS);
-    if (parsed && parsed['sb-loncheado'] && !parsed['sb-loncheado'].some((ind: any) => ind.id === 'productividad')) {
-      parsed['sb-loncheado'].splice(3, 0, { id: 'productividad', name: 'Productividad (OEE)' });
-      localStorage.setItem('zitron_workshop_indicators', JSON.stringify(parsed));
+    let changed = false;
+    
+    if (parsed && parsed['sb-loncheado']) {
+      if (!parsed['sb-loncheado'].some((ind: any) => ind.id === 'productividad')) {
+        parsed['sb-loncheado'].splice(3, 0, { id: 'productividad', name: 'Productividad (OEE)' });
+        changed = true;
+      } else {
+        const prodInd = parsed['sb-loncheado'].find((ind: any) => ind.id === 'productividad');
+        if (prodInd && (prodInd.formula !== undefined || prodInd.escala !== undefined)) {
+          delete prodInd.formula;
+          delete prodInd.escala;
+          changed = true;
+        }
+      }
     }
     
     // Ensure expedicion indicators exist
     if (parsed && !parsed['expedicion']) {
       parsed['expedicion'] = INITIAL_WORKSHOP_INDICATORS['expedicion'];
-      localStorage.setItem('zitron_workshop_indicators', JSON.stringify(parsed));
+      changed = true;
     }
     
     // Ensure preparacion-exp indicators exist
     if (parsed && !parsed['preparacion-exp']) {
       parsed['preparacion-exp'] = INITIAL_WORKSHOP_INDICATORS['preparacion-exp'];
+      changed = true;
+    }
+    
+    if (changed) {
       localStorage.setItem('zitron_workshop_indicators', JSON.stringify(parsed));
     }
     return parsed;
@@ -406,7 +423,7 @@ const App: React.FC = () => {
             }
           }
         } catch (e) {
-          console.error("Error fetching passwords from Supabase:", e);
+          console.log("Error fetching passwords from Supabase (using local storage fallback):", e);
         }
       }
     };
@@ -1024,6 +1041,7 @@ const App: React.FC = () => {
                 fechaEmision: idm.fecha_emision
               }));
               setIdeasDeMejora(formattedIdeas);
+              setIdeasMejora(ideasData);
               localStorage.setItem('zitron_ideas_mejora', JSON.stringify(formattedIdeas));
             }
           } catch (e) {
@@ -1061,6 +1079,14 @@ const App: React.FC = () => {
         setGapsSeguridad(storedGaps);
         setPlanAccionSeguridad(storedPlan);
         setIdeasDeMejora(storedIdeas);
+        setIdeasMejora(storedIdeas.map((i: any) => ({
+          ...i,
+          fecha_emision: i.fechaEmision || null,
+          fecha_cierre: i.fechaCierre || null,
+          fecha_ejecucion_prevista: i.fechaEjecucionPrevista || null,
+          fecha_creacion: i.fechaCreacion || null,
+          numero_sugerencia: i.numeroSugerencia || null
+        })));
         
         // Load global users and objectives from localStorage if fetch failed
         const localGlobalUsers = safeParse('zitron_global_users', []);
@@ -1163,12 +1189,11 @@ const App: React.FC = () => {
       }
 
       const isOldDefault = Array.isArray(localIncidences) && localIncidences.some(inc => inc.id === 'e1' && inc.nombre === 'ARRANQUE LINEA');
-      const newAreas = ['corte-laser', 'curvadora', 'soldadura-silenciosos', 'soldadura-rodetes', 'soldadura-carcasas'];
+      const newAreas = ['curvadora', 'soldadura-silenciosos', 'soldadura-rodetes', 'soldadura-carcasas'];
       if (isOldDefault && newAreas.includes(selectedArea || '')) {
         localIncidences = [];
       }
 
-      if (selectedArea === 'corte-laser' && (localIncidences?.length !== 20)) localIncidences = [];
       if (selectedArea === 'curvadora' && (localIncidences?.length !== 15)) localIncidences = [];
       if (selectedArea === 'soldadura-silenciosos' && (localIncidences?.length !== 19 || isOldDefault)) localIncidences = [];
       if (selectedArea === 'soldadura-rodetes' && (localIncidences?.length !== 23)) localIncidences = [];
@@ -1211,7 +1236,7 @@ const App: React.FC = () => {
       safeLocalStorageSetItem(`${prefix}operarios`, JSON.stringify(finalOps));
 
     } catch (e) {
-      console.error("loadData error:", e);
+      console.log("loadData error:", e);
       if (loadDataRequestIdRef.current === requestId) {
         addToast("ERROR DE SINCRONIZADO", "error");
       }
@@ -1427,7 +1452,7 @@ const App: React.FC = () => {
         if (error) throw error;
         addToast("CONTRASEÑAS SINCRONIZADAS CON LA NUBE", "success");
       } catch (e) {
-        console.error("Error saving passwords to Supabase:", e);
+        console.log("Error saving passwords to Supabase (saved locally):", e);
         addToast("ERROR AL SINCRONIZAR CON LA NUBE", "error");
       }
     } else {
@@ -1686,6 +1711,26 @@ const App: React.FC = () => {
       return next;
     });
 
+    setIdeasMejora(prev => {
+      const dbItem = {
+        id: finalIdea.id,
+        numero_sugerencia: finalIdea.numeroSugerencia,
+        sugerencia: finalIdea.sugerencia,
+        recurso: finalIdea.recurso,
+        fecha_creacion: finalIdea.fechaCreacion,
+        aprobada: finalIdea.aprobada,
+        responsable: finalIdea.responsable,
+        fecha_ejecucion_prevista: finalIdea.fechaEjecucionPrevista || null,
+        fecha_cierre: finalIdea.fechaCierre || null,
+        fecha_emision: finalIdea.fechaEmision || null
+      };
+      if (isNew) {
+        return [dbItem, ...prev];
+      } else {
+        return prev.map(i => i.id === finalIdea.id ? dbItem : i);
+      }
+    });
+
     // Save to Supabase (upsert)
     try {
       const dbItem = {
@@ -1719,6 +1764,8 @@ const App: React.FC = () => {
       safeLocalStorageSetItem('zitron_ideas_mejora', JSON.stringify(next));
       return next;
     });
+
+    setIdeasMejora(prev => prev.filter(i => i.id !== id));
 
     try {
       const { error } = await supabase.from('ideas_mejora').delete().eq('id', id);
@@ -1894,6 +1941,121 @@ const App: React.FC = () => {
     }
   }, [selectedArea, allObjectives, executeOrQueue, addToast]);
 
+  const handleSaveIDMObjectives = useCallback(async (presentadas: number, cerradas: number) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    
+    const existingPres = (allObjectives['idm-presentadas'] || []).find(o => o.valid_from === todayStr);
+    const existingCerr = (allObjectives['idm-cerradas'] || []).find(o => o.valid_from === todayStr);
+
+    const presId = existingPres?.id || (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16); }));
+    const cerrId = existingCerr?.id || (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16); }));
+
+    const objsToSave = [
+      {
+        id: presId,
+        area: 'idm-presentadas',
+        indicator_id: 'productividad',
+        objetivo: presentadas,
+        valid_from: todayStr,
+        disponibilidad: 0,
+        rendimiento: 0,
+        calidad: 0,
+        productividad: 0,
+        show_in_top5: true,
+        show_in_top15: true,
+        show_in_top60: true
+      },
+      {
+        id: cerrId,
+        area: 'idm-cerradas',
+        indicator_id: 'productividad',
+        objetivo: cerradas,
+        valid_from: todayStr,
+        disponibilidad: 0,
+        rendimiento: 0,
+        calidad: 0,
+        productividad: 0,
+        show_in_top5: true,
+        show_in_top15: true,
+        show_in_top60: true
+      }
+    ];
+
+    try {
+      const success = await executeOrQueue({
+        table: 'oee_objectives',
+        type: 'upsert',
+        data: objsToSave,
+        filter: { column: 'id' }
+      });
+
+      if (!success) {
+        addToast("Error al guardar objetivos IDM", "error");
+        return false;
+      }
+
+      setAllObjectives(prev => {
+        const next = { ...prev };
+        
+        const listPres = [...(next['idm-presentadas'] || [])];
+        const idxPres = listPres.findIndex(o => o.id === presId || o.valid_from === todayStr);
+        const savedPresObj: OEEObjectives = {
+          id: presId,
+          area: 'idm-presentadas',
+          indicator_id: 'productividad',
+          valid_from: todayStr,
+          objetivo: presentadas,
+          disponibilidad: 0,
+          rendimiento: 0,
+          calidad: 0,
+          productividad: 0,
+          showInTop5: true,
+          showInTop15: true,
+          showInTop60: true
+        };
+        if (idxPres >= 0) {
+          listPres[idxPres] = savedPresObj;
+        } else {
+          listPres.unshift(savedPresObj);
+        }
+        next['idm-presentadas'] = listPres.sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+
+        const listCerr = [...(next['idm-cerradas'] || [])];
+        const idxCerr = listCerr.findIndex(o => o.id === cerrId || o.valid_from === todayStr);
+        const savedCerrObj: OEEObjectives = {
+          id: cerrId,
+          area: 'idm-cerradas',
+          indicator_id: 'productividad',
+          valid_from: todayStr,
+          objetivo: cerradas,
+          disponibilidad: 0,
+          rendimiento: 0,
+          calidad: 0,
+          productividad: 0,
+          showInTop5: true,
+          showInTop15: true,
+          showInTop60: true
+        };
+        if (idxCerr >= 0) {
+          listCerr[idxCerr] = savedCerrObj;
+        } else {
+          listCerr.unshift(savedCerrObj);
+        }
+        next['idm-cerradas'] = listCerr.sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+
+        safeLocalStorageSetItem('zitron_global_objectives', JSON.stringify(next));
+        return next;
+      });
+
+      addToast("Objetivos IDM guardados correctamente", "success");
+      return true;
+    } catch (e: any) {
+      console.error("Error saving IDM objectives:", e);
+      addToast("Error al guardar objetivos IDM", "error");
+      return false;
+    }
+  }, [allObjectives, executeOrQueue, addToast]);
+
   const handleUpdateAllObjectives = useCallback(async (objectivesMap: Record<string, OEEObjectives>, valid_from: string) => {
     try {
       const toUpsert: any[] = [];
@@ -2006,6 +2168,65 @@ const App: React.FC = () => {
       addToast("Error al guardar objetivo", "error");
     }
   }, [selectedArea, allObjectives, executeOrQueue, addToast]);
+
+  const updateProductivityRow = useCallback(async (fecha: string, area: string, producto: string) => {
+    if (!fecha || !area || !producto) return;
+    try {
+      const filteredActs = activities.filter(a => a.fecha === fecha && a.area === area && a.formato === producto);
+      const filteredHist = history.filter(a => a.fecha === fecha && a.area === area && a.formato === producto);
+      
+      const rows = calculateProductivityRows(filteredActs, filteredHist, masterSpeeds);
+      
+      if (rows.length > 0) {
+        if (isConfigured && isOnline) {
+          const { error } = await supabase
+            .from('resumen_productividad')
+            .upsert(rows, { onConflict: 'fecha,area,producto' });
+          if (error) {
+            console.error('Error updating resumen_productividad:', error.message);
+          }
+        }
+      } else {
+        if (isConfigured && isOnline) {
+          const { error } = await supabase
+            .from('resumen_productividad')
+            .delete()
+            .eq('fecha', fecha)
+            .eq('area', area)
+            .eq('producto', producto);
+          if (error) {
+            console.error('Error deleting from resumen_productividad:', error.message);
+          }
+        }
+      }
+    } catch (e: any) {
+      console.error('Error in updateProductivityRow:', e.message);
+    }
+  }, [activities, history, masterSpeeds, isOnline, isConfigured]);
+
+  const handleRecalculateProductivity = useCallback(async (startDate: string, endDate: string) => {
+    try {
+      const rows = calculateProductivityRows(activities, history, masterSpeeds, startDate, endDate);
+      
+      if (isConfigured && isOnline) {
+        if (rows.length > 0) {
+          const { error } = await supabase
+            .from('resumen_productividad')
+            .upsert(rows, { onConflict: 'fecha,area,producto' });
+            
+          if (error) {
+            throw new Error(error.message);
+          }
+        } else {
+          console.log("No data found for productivity recalculation in this range.");
+        }
+      }
+      return { success: true, count: rows.length };
+    } catch (e: any) {
+      console.error("Error in handleRecalculateProductivity:", e.message);
+      return { success: false, error: e.message };
+    }
+  }, [activities, history, masterSpeeds, isOnline, isConfigured]);
 
   const handleAddActivity = async (act: any, cierre?: any) => {
     if (!selectedArea) return;
@@ -2354,7 +2575,7 @@ const App: React.FC = () => {
     }
   };
 
-  // --- AUTO-FIX FOR CORTE LASER AND DURATION ---
+  // --- AUTO-FIX FOR DATA AND DURATION ---
   useEffect(() => {
     if (activities.length > 0 || history.length > 0) {
       const today = new Date().toISOString().split('T')[0];
@@ -2370,8 +2591,8 @@ const App: React.FC = () => {
           localChanged = true;
         }
 
-        // 2. Asegurar que tiempoTeoricoManual es número para corte-laser
-        if (act.area === 'corte-laser' && typeof act.tiempoTeoricoManual === 'string') {
+        // 2. Asegurar que tiempoTeoricoManual es número
+        if (typeof act.tiempoTeoricoManual === 'string') {
           updated.tiempoTeoricoManual = parseFloat(act.tiempoTeoricoManual) || 0;
           localChanged = true;
         }
@@ -2402,6 +2623,133 @@ const App: React.FC = () => {
       }
     }
   }, [activities.length, history.length, selectedArea]);
+
+  const prevActivitiesRef = useRef<Activity[]>([]);
+  const prevHistoryRef = useRef<Activity[]>([]);
+
+  useEffect(() => {
+    if (prevActivitiesRef.current.length === 0 && activities.length === 0) {
+      prevActivitiesRef.current = activities;
+      return;
+    }
+
+    const oldList = prevActivitiesRef.current;
+    const newList = activities;
+    prevActivitiesRef.current = activities;
+
+    const changedCombos = new Set<string>();
+    const getComboKey = (a: Activity) => `${a.fecha}|${a.area}|${a.formato}`;
+
+    const isDifferent = (a: Activity, b: Activity) => {
+      return (
+        a.fecha !== b.fecha ||
+        a.area !== b.area ||
+        a.formato !== b.formato ||
+        a.horaInicio !== b.horaInicio ||
+        a.horaFin !== b.horaFin ||
+        a.duracionMin !== b.duracionMin ||
+        a.cantidad !== b.cantidad ||
+        a.cantidadNok !== b.cantidadNok ||
+        JSON.stringify(a.operarios) !== JSON.stringify(b.operarios) ||
+        a.tipoTarea !== b.tipoTarea
+      );
+    };
+
+    const oldMap = new Map(oldList.map(a => [a.id, a]));
+    const newMap = new Map(newList.map(a => [a.id, a]));
+
+    for (const [id, oldAct] of oldMap.entries()) {
+      const newAct = newMap.get(id);
+      if (!newAct) {
+        if (oldAct.fecha && oldAct.area && oldAct.formato && (oldAct.tipoTarea === 'P' || (oldAct.tipoTarea as string) === 'PRODUCCION')) {
+          changedCombos.add(getComboKey(oldAct));
+        }
+      } else if (isDifferent(oldAct, newAct)) {
+        if (oldAct.fecha && oldAct.area && oldAct.formato && (oldAct.tipoTarea === 'P' || (oldAct.tipoTarea as string) === 'PRODUCCION')) {
+          changedCombos.add(getComboKey(oldAct));
+        }
+        if (newAct.fecha && newAct.area && newAct.formato && (newAct.tipoTarea === 'P' || (newAct.tipoTarea as string) === 'PRODUCCION')) {
+          changedCombos.add(getComboKey(newAct));
+        }
+      }
+    }
+
+    for (const [id, newAct] of newMap.entries()) {
+      if (!oldMap.has(id)) {
+        if (newAct.fecha && newAct.area && newAct.formato && (newAct.tipoTarea === 'P' || (newAct.tipoTarea as string) === 'PRODUCCION')) {
+          changedCombos.add(getComboKey(newAct));
+        }
+      }
+    }
+
+    changedCombos.forEach(combo => {
+      const [fecha, area, producto] = combo.split('|');
+      updateProductivityRow(fecha, area, producto);
+    });
+
+  }, [activities, updateProductivityRow]);
+
+  useEffect(() => {
+    if (prevHistoryRef.current.length === 0 && history.length === 0) {
+      prevHistoryRef.current = history;
+      return;
+    }
+
+    const oldList = prevHistoryRef.current;
+    const newList = history;
+    prevHistoryRef.current = history;
+
+    const changedCombos = new Set<string>();
+    const getComboKey = (a: Activity) => `${a.fecha}|${a.area}|${a.formato}`;
+
+    const isDifferent = (a: Activity, b: Activity) => {
+      return (
+        a.fecha !== b.fecha ||
+        a.area !== b.area ||
+        a.formato !== b.formato ||
+        a.horaInicio !== b.horaInicio ||
+        a.horaFin !== b.horaFin ||
+        a.duracionMin !== b.duracionMin ||
+        a.cantidad !== b.cantidad ||
+        a.cantidadNok !== b.cantidadNok ||
+        JSON.stringify(a.operarios) !== JSON.stringify(b.operarios) ||
+        a.tipoTarea !== b.tipoTarea
+      );
+    };
+
+    const oldMap = new Map(oldList.map(a => [a.id, a]));
+    const newMap = new Map(newList.map(a => [a.id, a]));
+
+    for (const [id, oldAct] of oldMap.entries()) {
+      const newAct = newMap.get(id);
+      if (!newAct) {
+        if (oldAct.fecha && oldAct.area && oldAct.formato && (oldAct.tipoTarea === 'P' || (oldAct.tipoTarea as string) === 'PRODUCCION')) {
+          changedCombos.add(getComboKey(oldAct));
+        }
+      } else if (isDifferent(oldAct, newAct)) {
+        if (oldAct.fecha && oldAct.area && oldAct.formato && (oldAct.tipoTarea === 'P' || (oldAct.tipoTarea as string) === 'PRODUCCION')) {
+          changedCombos.add(getComboKey(oldAct));
+        }
+        if (newAct.fecha && newAct.area && newAct.formato && (newAct.tipoTarea === 'P' || (newAct.tipoTarea as string) === 'PRODUCCION')) {
+          changedCombos.add(getComboKey(newAct));
+        }
+      }
+    }
+
+    for (const [id, newAct] of newMap.entries()) {
+      if (!oldMap.has(id)) {
+        if (newAct.fecha && newAct.area && newAct.formato && (newAct.tipoTarea === 'P' || (newAct.tipoTarea as string) === 'PRODUCCION')) {
+          changedCombos.add(getComboKey(newAct));
+        }
+      }
+    }
+
+    changedCombos.forEach(combo => {
+      const [fecha, area, producto] = combo.split('|');
+      updateProductivityRow(fecha, area, producto);
+    });
+
+  }, [history, updateProductivityRow]);
 
   const handleUpdateActivity = async (updated: Activity) => {
     if (!selectedArea) return;
@@ -3450,6 +3798,9 @@ const App: React.FC = () => {
                           history={history} 
                           allObjectives={allObjectives}
                           operarios={operarios}
+                          ideasMejora={ideasMejora}
+                          passwords={passwords}
+                          onSaveIDMObjectives={handleSaveIDMObjectives}
                         />
                       )
                     )}
@@ -3496,6 +3847,8 @@ const App: React.FC = () => {
                 workshopIndicators={workshopIndicators}
                 setWorkshopIndicators={setWorkshopIndicators}
                 activities={activities}
+                history={history}
+                onRecalculateProductivity={handleRecalculateProductivity}
               />
             )}
             {activeTab === 'database' && (

@@ -22,6 +22,15 @@ export const cleanText = (text: string): string => {
   return text.trim().toUpperCase();
 };
 
+export const normalizeFormato = (formato: string | undefined | null): string => {
+  if (!formato) return '';
+  return formato
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+};
+
 export const normalizeDate = (dateStr: string): string => {
   if (!dateStr) return '';
   // Basic normalization, assuming YYYY-MM-DD or ISO

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { TaskType, Activity, IncidenceMaster, MasterSpeed, OEEObjectives, User } from '../types';
 import { AREA_COLUMNS } from '../constants';
-import { calcDuration, calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals } from '../src/utils/index';
+import { calcDuration, calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals, normalizeFormato } from '../src/utils/index';
 import HelpModal from './HelpModal';
 import { Check, X, Edit2, Trash2, Calendar, Star, Shield } from 'lucide-react';
 
@@ -112,7 +112,6 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
     }
   };
   
-  const isLaserArea = selectedArea === 'corte-laser';
   const isLoncheadoArea = selectedArea === 'sb-loncheado';
   
   // Eliminados fanType y otros locales obsoletos
@@ -186,13 +185,6 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
     setProductionTask('');
   }, [selectedArea]);
 
-  // Efecto separado para auto-seleccionar tarea en Laser
-  useEffect(() => {
-    if (isLaserArea && availableProductionTasks.length > 0 && !productionTask) {
-      setProductionTask(availableProductionTasks[0]);
-    }
-  }, [isLaserArea, availableProductionTasks, productionTask]);
-
   const qtyInputRef = useRef<HTMLInputElement>(null);
   const commentsRef = useRef<HTMLTextAreaElement>(null);
 
@@ -222,12 +214,9 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
         
         const actArea = (act.area || selectedArea || '').toLowerCase();
         const actIsLoncheado = actArea.includes('loncheado');
-        const isLaser = actArea.includes('laser');
         const teoManual = Number(act.tiempoTeoricoManual || 0);
 
-        if (isLaser) {
-          theoreticalTimeSum += (teoManual > 0 ? (60 / teoManual) : 0);
-        } else if (actIsLoncheado) {
+        if (actIsLoncheado) {
           theoreticalTimeSum += (teoManual > 0 ? (cant + cantNok) / teoManual : 0);
         } else {
           theoreticalTimeSum += (teoManual * (cant + cantNok));
@@ -423,16 +412,10 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
   }, [activities]);
 
   const calculatedTheoreticalTime = useMemo(() => {
-    const speedRecord = masterSpeeds.find(ms => ms.formato === productionTask);
+    const speedRecord = masterSpeeds.find(ms => normalizeFormato(ms.formato) === normalizeFormato(productionTask));
     const teo = speedRecord?.tiempoTeorico || 0;
-    // For Loncheado, we want to store and show units/minute (teo / 60)
-    // For other areas, we continue using cycle time (60 / teo) for compatibility, 
-    // but the math in stats and table must be consistent with what's stored.
-    if (isLoncheadoArea) {
-      return teo > 0 ? Number((teo / 60).toFixed(4)) : 0;
-    }
     return teo > 0 ? Number((60 / teo).toFixed(4)) : 0;
-  }, [productionTask, masterSpeeds, isLoncheadoArea]);
+  }, [productionTask, masterSpeeds]);
 
   useEffect(() => {
     if (pin.length === 4 && passwords) {
@@ -785,7 +768,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       };
       // Guardar merma se loncheado e produção
         if (selectedArea === 'sb-loncheado' && data.esProduccion && data.kgEntrada !== undefined && data.kgEntrada !== '') {
-          const formatInfo = masterSpeeds.find(ms => ms.formato === formato);
+          const formatInfo = masterSpeeds.find(ms => normalizeFormato(ms.formato) === normalizeFormato(formato));
           const formatPeso = formatInfo?.peso || 0;
           const cantOk = safeParse(data.cantidad || '0') || 0;
           const cantNok = safeParse(data.cantidadNok || '0') || 0;
@@ -999,7 +982,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                   const kgPieles = safeParse(d.kgPieles || '0') || 0;
                   const kgHueco = safeParse(d.kgHueco || '0') || 0;
                   
-                  const formatInfo = masterSpeeds.find(ms => ms.formato === formato);
+                  const formatInfo = masterSpeeds.find(ms => normalizeFormato(ms.formato) === normalizeFormato(formato));
                   const formatPeso = formatInfo?.peso || 0;
                   const cantOk = safeParse(d.cantidad || '0') || 0;
                   const cantNok = safeParse(d.cantidadNok || '0') || 0;
@@ -1220,12 +1203,10 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
               {productionTask && (
                 <div className="mt-2 p-2 bg-emerald-50 border border-emerald-100 rounded-lg flex items-center justify-between animate-in slide-in-from-bottom-2">
                   <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">
-                    {isLoncheadoArea ? 'Unid. Minuto Teóricas' : 'Tiempo Teórico'}
+                    Tiempo Teórico
                   </span>
                   <span className="text-xs font-black text-emerald-700">
-                    {isLoncheadoArea 
-                      ? `${calculatedTheoreticalTime.toFixed(2)} U.M.`
-                      : `${calculatedTheoreticalTime.toFixed(2)} min`}
+                    {calculatedTheoreticalTime.toFixed(2)} min
                   </span>
                 </div>
               )}
@@ -1343,7 +1324,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                           <span className="font-black uppercase">{act.formato}</span> 
                           {act.tiempoTeoricoManual !== undefined && (
                             <span className="text-[14px] text-emerald-600 block font-black uppercase tracking-tighter">
-                              {isLoncheadoArea ? `U.M.: ${act.tiempoTeoricoManual}` : `U/H: ${act.tiempoTeoricoManual > 0 ? Math.round(60 / act.tiempoTeoricoManual) : 0}`}
+                              {`U/H: ${act.tiempoTeoricoManual > 0 ? Math.round(60 / act.tiempoTeoricoManual) : 0}`}
                             </span>
                           )}
                         </td>
@@ -1364,7 +1345,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                         {selectedArea !== 'sb-preparacion' && (
                           <td className="px-2 py-1.5 text-center font-black text-emerald-600">
                             {act.tipoTarea === TaskType.PRODUCCION && act.tiempoTeoricoManual !== undefined && act.cantidad > 0
-                              ? `${(isLoncheadoArea ? (act.cantidad / act.tiempoTeoricoManual) : (act.tiempoTeoricoManual * act.cantidad)).toFixed(1)}m` 
+                              ? `${(act.tiempoTeoricoManual * act.cantidad).toFixed(1)}m` 
                               : '-'}
                           </td>
                         )}

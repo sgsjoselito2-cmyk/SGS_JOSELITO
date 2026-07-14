@@ -3203,7 +3203,10 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
                   maxLength={4}
                   placeholder="••••"
                   value={pinInput}
-                  onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+                  onChange={(e) => {
+                    setPinInput(e.target.value.replace(/\D/g, '').slice(0, 4));
+                    setPinError('');
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       if (checkPasswordLevel3(pinInput)) {
@@ -3214,9 +3217,43 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
                       }
                     }
                   }}
-                  className="w-full text-center px-4 py-3 tracking-widest text-2xl font-black border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500 bg-slate-50/50 text-slate-800 animate-pulse"
+                  className="w-full text-center px-4 py-3 tracking-widest text-2xl font-black border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500 bg-slate-50/50 text-slate-800"
                 />
                 {pinError && <p className="text-xs font-bold text-rose-600 mt-2">{pinError}</p>}
+
+                {/* On-screen Keypad */}
+                <div className="grid grid-cols-3 gap-2 mt-4">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 'C', 0, '⌫'].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => {
+                        if (num === 'C') {
+                          setPinInput('');
+                          setPinError('');
+                        } else if (num === '⌫') {
+                          setPinInput(prev => prev.slice(0, -1));
+                          setPinError('');
+                        } else {
+                          if (pinInput.length < 4) {
+                            const nextVal = pinInput + num;
+                            setPinInput(nextVal);
+                            setPinError('');
+                          }
+                        }
+                      }}
+                      className={`h-12 rounded-xl font-black text-lg transition-all active:scale-95 cursor-pointer ${
+                        num === '⌫' 
+                          ? 'bg-rose-50 text-rose-600 hover:bg-rose-100' 
+                          : num === 'C' 
+                            ? 'bg-slate-100 text-slate-500 hover:bg-slate-200' 
+                            : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">

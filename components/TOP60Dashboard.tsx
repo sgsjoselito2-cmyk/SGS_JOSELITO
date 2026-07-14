@@ -4,7 +4,7 @@ import {
 } from 'recharts';
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
-import { Activity as ActivityIcon, ShieldAlert, Clock, Users } from 'lucide-react';
+import { Activity as ActivityIcon, ShieldAlert, Clock, Users, Lock, Unlock, Save } from 'lucide-react';
 import { Activity, OEEObjectives, TaskType, User, ActionPlanItem } from '../types';
 import { calculateStats, getWeekNumber } from './Dashboard';
 import { AREA_NAMES, JOSELITO_LOGO } from '../constants';
@@ -16,6 +16,9 @@ interface TOP60DashboardProps {
   history: Activity[];
   allObjectives: Record<string, OEEObjectives[]>;
   operarios: User[];
+  ideasMejora: any[];
+  passwords?: any;
+  onSaveIDMObjectives?: (presentadas: number, cerradas: number) => Promise<boolean>;
 }
 
 const TALLERES_POR_AREA = [
@@ -54,11 +57,95 @@ const TABS = [
   { id: 'idm', name: 'IdM' }
 ];
 
-const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, allObjectives, operarios }) => {
+const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ 
+  activities, 
+  history, 
+  allObjectives, 
+  operarios, 
+  ideasMejora,
+  passwords,
+  onSaveIDMObjectives
+}) => {
   const [activeTab, setActiveTab] = useState('seguridad');
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [reportProgress, setReportProgress] = useState({ current: 0, total: 0 });
+
+  // State for IDM objectives config
+  const [objPresentadasInput, setObjPresentadasInput] = useState(0);
+  const [objCerradasInput, setObjCerradasInput] = useState(0);
+  const [isSavingObjectives, setIsSavingObjectives] = useState(false);
+  const [isEditingUnlocked, setIsEditingUnlocked] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
+
+  // Update objectives input values when allObjectives is loaded
+  useEffect(() => {
+    const getCurrentObjectiveValue = (area: string) => {
+      const objs = allObjectives[area] || [];
+      if (objs.length === 0) return 0;
+      const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+      return sorted[0]?.objetivo || 0;
+    };
+
+    setObjPresentadasInput(getCurrentObjectiveValue('idm-presentadas'));
+    setObjCerradasInput(getCurrentObjectiveValue('idm-cerradas'));
+  }, [allObjectives]);
+
+  const checkPasswordLevel3 = (pin: string) => {
+    if (!passwords) return pin === '1234';
+    return pin === passwords.directorOperaciones || pin === passwords.asistenciaTecnica || pin === passwords.jefeTaller;
+  };
+
+  const handleSaveObjectives = async () => {
+    setIsSavingObjectives(true);
+    if (onSaveIDMObjectives) {
+      const success = await onSaveIDMObjectives(objPresentadasInput, objCerradasInput);
+      if (success) {
+        setIsEditingUnlocked(false);
+      }
+    } else {
+      const todayStr = new Date().toISOString().split('T')[0];
+      try {
+        const { error } = await supabase.from('oee_objectives').insert([
+          {
+            area: 'idm-presentadas',
+            indicator_id: 'productividad',
+            objetivo: objPresentadasInput,
+            valid_from: todayStr,
+            disponibilidad: 0,
+            rendimiento: 0,
+            calidad: 0,
+            productividad: 0,
+            show_in_top5: true,
+            show_in_top15: true,
+            show_in_top60: true
+          },
+          {
+            area: 'idm-cerradas',
+            indicator_id: 'productividad',
+            objetivo: objCerradasInput,
+            valid_from: todayStr,
+            disponibilidad: 0,
+            rendimiento: 0,
+            calidad: 0,
+            productividad: 0,
+            show_in_top5: true,
+            show_in_top15: true,
+            show_in_top60: true
+          }
+        ]);
+        if (error) throw error;
+        alert("Objetivos guardados correctamente.");
+        setIsEditingUnlocked(false);
+      } catch (e: any) {
+        console.error(e);
+        alert("Error al guardar objetivos: " + e.message);
+      }
+    }
+    setIsSavingObjectives(false);
+  };
   
   const now = new Date();
   const currentWeek = getWeekNumber(now);
@@ -79,7 +166,6 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
   const [rrhhData, setRrhhData] = useState<any[]>([]);
   const [ausentismoData, setAusentismoData] = useState<any[]>([]);
   const [calidadData, setCalidadData] = useState<any[]>([]);
-  const [idmData, setIdmData] = useState<any[]>([]);
   const [actionPlanData, setActionPlanData] = useState<ActionPlanItem[]>([]);
   const [fullscreenChart, setFullscreenChart] = useState<any>(null);
 
@@ -123,7 +209,6 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
     setRrhhData(safeParse('zitron_top60_rrhh', []));
     setAusentismoData(safeParse('zitron_top60_ausentismo', []));
     setCalidadData(safeParse('zitron_top60_calidad', []));
-    setIdmData(safeParse('zitron_top60_idm', []));
     setActionPlanData(safeParse('zitron_top60_actionplan', []));
 
     // Fetch seguridad_top60 from Supabase
@@ -1090,13 +1175,28 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
 
   const renderIdMTab = (isReport = false) => {
     const weeklyIdM = last15Weeks.map(w => {
-      const records = idmData.filter(i => {
-        const d = new Date(i.fechaCreacion);
+      const presentadas = ideasMejora.filter(i => {
+        if (!i.fecha_emision) return false;
+        const d = new Date(i.fecha_emision);
         return getWeekNumber(d) === w.week && d.getFullYear() === w.year;
-      });
-      const presentadas = records.length;
-      const cerradas = records.filter(i => i.fechaCierre).length;
-      const rechazadas = records.filter(i => i.aprobada === 'NO').length;
+      }).length;
+
+      const cerradas = ideasMejora.filter(i => {
+        const isCerrado = i.fecha_cierre || i.estado === 'Cerrado';
+        if (!isCerrado) return false;
+        const dateStr = i.fecha_ejecucion_prevista || i.fecha_prevista || i.created_at || i.updated_at;
+        if (!dateStr) return false;
+        const d = new Date(dateStr);
+        return getWeekNumber(d) === w.week && d.getFullYear() === w.year;
+      }).length;
+
+      const rechazadas = ideasMejora.filter(i => {
+        const isRechazada = i.aprobada === 'No' || i.aprobada === 'NO' || i.aprobada === 'no';
+        if (!isRechazada) return false;
+        if (!i.fecha_emision) return false;
+        const d = new Date(i.fecha_emision);
+        return getWeekNumber(d) === w.week && d.getFullYear() === w.year;
+      }).length;
       
       const date = new Date(w.year, 0, 1);
       date.setDate(date.getDate() + (w.week - 1) * 7);
@@ -1108,13 +1208,28 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
     });
 
     const monthlyIdM = last15Months.map(m => {
-      const records = idmData.filter(i => {
-        const d = new Date(i.fechaCreacion);
+      const presentadas = ideasMejora.filter(i => {
+        if (!i.fecha_emision) return false;
+        const d = new Date(i.fecha_emision);
         return d.getMonth() === m.month && d.getFullYear() === m.year;
-      });
-      const presentadas = records.length;
-      const cerradas = records.filter(i => i.fechaCierre).length;
-      const rechazadas = records.filter(i => i.aprobada === 'NO').length;
+      }).length;
+
+      const cerradas = ideasMejora.filter(i => {
+        const isCerrado = i.fecha_cierre || i.estado === 'Cerrado';
+        if (!isCerrado) return false;
+        const dateStr = i.fecha_ejecucion_prevista || i.fecha_prevista || i.created_at || i.updated_at;
+        if (!dateStr) return false;
+        const d = new Date(dateStr);
+        return d.getMonth() === m.month && d.getFullYear() === m.year;
+      }).length;
+
+      const rechazadas = ideasMejora.filter(i => {
+        const isRechazada = i.aprobada === 'No' || i.aprobada === 'NO' || i.aprobada === 'no';
+        if (!isRechazada) return false;
+        if (!i.fecha_emision) return false;
+        const d = new Date(i.fecha_emision);
+        return d.getMonth() === m.month && d.getFullYear() === m.year;
+      }).length;
       
       const date = new Date(m.year, m.month, 1);
       const objPres = getObjectiveForDate('idm-presentadas', date);
@@ -1124,45 +1239,222 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
     });
 
     return (
-      <div className={`grid ${isReport ? 'grid-cols-2' : 'grid-cols-1 lg:grid-cols-2'} gap-6`}>
-        <div className={`bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col ${isReport ? 'h-[320px]' : 'h-[300px]'}`}>
-          <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 text-center">Evolución IdM (Semanas)</h3>
-          <div className="flex-1 w-full min-h-0">
-            <ResponsiveContainer width="100%" height="100%" minHeight={isReport ? 240 : 250} debounce={100}>
-              <ComposedChart data={weeklyIdM} margin={{ top: 10, right: 10, bottom: 10, left: -20 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<CustomXAxisTick />} />
-                <YAxis tick={{fontSize: 8, fontWeight: 700, fill: '#64748b'}} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '9px', fontWeight: 'bold'}} />
-                <Legend wrapperStyle={{fontSize: '8px', fontWeight: 'bold', paddingTop: '5px'}} />
-                <Bar dataKey="presentadas" name="PRESENTADAS" fill="#3b82f6" radius={[1, 1, 0, 0]} maxBarSize={20} />
-                <Bar dataKey="cerradas" name="CERRADAS" fill="#10b981" radius={[1, 1, 0, 0]} maxBarSize={20} />
-                <Bar dataKey="rechazadas" name="RECHAZADAS" fill="#ef4444" radius={[1, 1, 0, 0]} maxBarSize={20} />
-                <Line type="step" dataKey="ObjPres" name="OBJ. PRES" stroke="#3b82f6" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} />
-                <Line type="step" dataKey="ObjCerr" name="OBJ. CERR" stroke="#10b981" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
+      <div className="space-y-6">
+        {/* IDM Tab Header with Lock/Unlock button */}
+        {!isReport && (
+          <div className="flex justify-end items-center gap-2">
+            <button
+              onClick={() => {
+                if (isEditingUnlocked) {
+                  setIsEditingUnlocked(false);
+                } else {
+                  setPinInput('');
+                  setPinError('');
+                  setShowPinModal(true);
+                }
+              }}
+              className={`px-3 py-1.5 rounded-xl font-black text-xs flex items-center gap-1.5 border transition-all cursor-pointer shadow-sm ${
+                isEditingUnlocked 
+                  ? 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100' 
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {isEditingUnlocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+              {isEditingUnlocked ? 'BLOQUEAR EDICIÓN' : 'DESBLOQUEAR EDICIÓN'}
+            </button>
+          </div>
+        )}
+
+        {/* Objectives Config Panel (visible only when isEditingUnlocked is true) */}
+        {isEditingUnlocked && !isReport && (
+          <div className="bg-white p-4 rounded-3xl border-2 border-indigo-50 shadow-sm flex flex-col md:flex-row items-center gap-4 justify-between animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center gap-3">
+              <div className="bg-indigo-50 p-2.5 rounded-2xl text-indigo-600">
+                <Lock className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Configuración de Objetivos IDM</h4>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Define los objetivos semanales</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+              <div className="flex-1 md:flex-initial min-w-[150px]">
+                <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Obj. Presentadas / Sem</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={objPresentadasInput}
+                  onChange={(e) => setObjPresentadasInput(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="w-full px-3 py-1.5 text-xs font-black text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center"
+                />
+              </div>
+              <div className="flex-1 md:flex-initial min-w-[150px]">
+                <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Obj. Cerradas / Sem</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={objCerradasInput}
+                  onChange={(e) => setObjCerradasInput(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="w-full px-3 py-1.5 text-xs font-black text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center"
+                />
+              </div>
+              <button
+                onClick={handleSaveObjectives}
+                disabled={isSavingObjectives}
+                className="w-full md:w-auto mt-3 md:mt-0 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-indigo-100"
+              >
+                <Save className="w-3.5 h-3.5" />
+                {isSavingObjectives ? 'GUARDANDO...' : 'GUARDAR'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className={`grid ${isReport ? 'grid-cols-2' : 'grid-cols-1 lg:grid-cols-2'} gap-6`}>
+          <div className={`bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col ${isReport ? 'h-[320px]' : 'h-[300px]'}`}>
+            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 text-center">Evolución IdM (Semanas)</h3>
+            <div className="flex-1 w-full min-h-0">
+              <ResponsiveContainer width="100%" height="100%" minHeight={isReport ? 240 : 250} debounce={100}>
+                <ComposedChart data={weeklyIdM} margin={{ top: 10, right: 10, bottom: 10, left: -20 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<CustomXAxisTick />} />
+                  <YAxis tick={{fontSize: 8, fontWeight: 700, fill: '#64748b'}} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '9px', fontWeight: 'bold'}} />
+                  <Legend wrapperStyle={{fontSize: '8px', fontWeight: 'bold', paddingTop: '5px'}} />
+                  <Bar dataKey="presentadas" name="PRESENTADAS" fill="#3b82f6" radius={[1, 1, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="cerradas" name="CERRADAS" fill="#10b981" radius={[1, 1, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="rechazadas" name="RECHAZADAS" fill="#ef4444" radius={[1, 1, 0, 0]} maxBarSize={20} />
+                  <Line type="step" dataKey="ObjPres" name="OBJ. PRES" stroke="#3b82f6" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} />
+                  <Line type="step" dataKey="ObjCerr" name="OBJ. CERR" stroke="#10b981" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className={`bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col ${isReport ? 'h-[320px]' : 'h-[300px]'}`}>
+            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 text-center">Evolución IdM (Meses)</h3>
+            <div className="flex-1 w-full min-h-0">
+              <ResponsiveContainer width="100%" height="100%" minHeight={isReport ? 240 : 250} debounce={100}>
+                <ComposedChart data={monthlyIdM} margin={{ top: 10, right: 10, bottom: 10, left: -20 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<CustomXAxisTick />} />
+                  <YAxis tick={{fontSize: 8, fontWeight: 700, fill: '#64748b'}} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '9px', fontWeight: 'bold'}} />
+                  <Legend wrapperStyle={{fontSize: '8px', fontWeight: 'bold', paddingTop: '5px'}} />
+                  <Bar dataKey="presentadas" name="PRESENTADAS" fill="#3b82f6" radius={[1, 1, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="cerradas" name="CERRADAS" fill="#10b981" radius={[1, 1, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="rechazadas" name="RECHAZADAS" fill="#ef4444" radius={[1, 1, 0, 0]} maxBarSize={20} />
+                  <Line type="step" dataKey="ObjPres" name="OBJ. PRES" stroke="#3b82f6" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} />
+                  <Line type="step" dataKey="ObjCerr" name="OBJ. CERR" stroke="#10b981" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
-        <div className={`bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col ${isReport ? 'h-[320px]' : 'h-[300px]'}`}>
-          <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 text-center">Evolución IdM (Meses)</h3>
-          <div className="flex-1 w-full min-h-0">
-            <ResponsiveContainer width="100%" height="100%" minHeight={isReport ? 240 : 250} debounce={100}>
-              <ComposedChart data={monthlyIdM} margin={{ top: 10, right: 10, bottom: 10, left: -20 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<CustomXAxisTick />} />
-                <YAxis tick={{fontSize: 8, fontWeight: 700, fill: '#64748b'}} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '9px', fontWeight: 'bold'}} />
-                <Legend wrapperStyle={{fontSize: '8px', fontWeight: 'bold', paddingTop: '5px'}} />
-                <Bar dataKey="presentadas" name="PRESENTADAS" fill="#3b82f6" radius={[1, 1, 0, 0]} maxBarSize={20} />
-                <Bar dataKey="cerradas" name="CERRADAS" fill="#10b981" radius={[1, 1, 0, 0]} maxBarSize={20} />
-                <Bar dataKey="rechazadas" name="RECHAZADAS" fill="#ef4444" radius={[1, 1, 0, 0]} maxBarSize={20} />
-                <Line type="step" dataKey="ObjPres" name="OBJ. PRES" stroke="#3b82f6" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} />
-                <Line type="step" dataKey="ObjCerr" name="OBJ. CERR" stroke="#10b981" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
+
+        {/* PIN modal */}
+        {showPinModal && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+            <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-slate-100 p-6 animate-in zoom-in-95 duration-150">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="bg-rose-50 p-2.5 rounded-xl text-rose-600">
+                  <Lock className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="text-lg font-serif font-black text-slate-900 uppercase">PIN DE SEGURIDAD</h4>
+                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-widest mt-0.5">Nivel de Fábrica Requerido</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">INTRODUCE TU PIN DE TOP 60:</label>
+                  <input
+                    type="password"
+                    maxLength={4}
+                    placeholder="••••"
+                    value={pinInput}
+                    onChange={(e) => {
+                      setPinInput(e.target.value.replace(/\D/g, '').slice(0, 4));
+                      setPinError('');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        if (checkPasswordLevel3(pinInput)) {
+                          setIsEditingUnlocked(true);
+                          setShowPinModal(false);
+                        } else {
+                          setPinError('PIN incorrecto. Inténtalo de nuevo.');
+                        }
+                      }
+                    }}
+                    className="w-full text-center px-4 py-3 tracking-widest text-2xl font-black border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500 bg-slate-50/50 text-slate-800"
+                  />
+                  {pinError && <p className="text-xs font-bold text-rose-600 mt-2">{pinError}</p>}
+
+                  {/* On-screen Keypad */}
+                  <div className="grid grid-cols-3 gap-2 mt-4">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 'C', 0, '⌫'].map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => {
+                          if (num === 'C') {
+                            setPinInput('');
+                            setPinError('');
+                          } else if (num === '⌫') {
+                            setPinInput(prev => prev.slice(0, -1));
+                            setPinError('');
+                          } else {
+                            if (pinInput.length < 4) {
+                              const nextVal = pinInput + num;
+                              setPinInput(nextVal);
+                              setPinError('');
+                            }
+                          }
+                        }}
+                        className={`h-12 rounded-xl font-black text-lg transition-all active:scale-95 cursor-pointer ${
+                          num === '⌫' 
+                            ? 'bg-rose-50 text-rose-600 hover:bg-rose-100' 
+                            : num === 'C' 
+                              ? 'bg-slate-100 text-slate-500 hover:bg-slate-200' 
+                              : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        {num}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowPinModal(false)}
+                    className="px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (checkPasswordLevel3(pinInput)) {
+                        setIsEditingUnlocked(true);
+                        setShowPinModal(false);
+                      } else {
+                        setPinError('PIN incorrecto. Inténtalo de nuevo.');
+                      }
+                    }}
+                    className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-colors shadow-lg shadow-rose-100"
+                  >
+                    Confirmar
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   };
@@ -1276,8 +1568,9 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ activities, history, al
                 <div className="bg-slate-50 p-8 rounded-[3rem] border-2 border-amber-100 flex flex-col items-center text-center justify-center shadow-sm">
                   <h3 className="text-xl font-black text-slate-400 uppercase tracking-widest mb-4">IdM</h3>
                   <div className="text-8xl font-black text-amber-600">
-                    {idmData.filter(i => {
-                      const d = new Date(i.fechaCreacion);
+                    {ideasMejora.filter(i => {
+                      if (!i.fecha_emision) return false;
+                      const d = new Date(i.fecha_emision);
                       return getWeekNumber(d) === selectedWeek && d.getFullYear() === selectedYear;
                     }).length}
                   </div>

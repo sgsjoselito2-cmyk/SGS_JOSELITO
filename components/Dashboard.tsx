@@ -7,7 +7,7 @@ import Markdown from 'react-markdown';
 import { GoogleGenAI } from "@google/genai";
 import { Activity, MasterSpeed, IncidenceMaster, OEEObjectives, TaskType } from '../types';
 import { generateContentWithRetry } from '../src/utils/aiUtils';
-import { calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals } from '../src/utils/index';
+import { calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals, normalizeFormato } from '../src/utils/index';
 import { X } from 'lucide-react';
 
 interface DashboardProps {
@@ -22,7 +22,7 @@ interface DashboardProps {
   mermas?: any[];
   selectedDate?: string;
   setSelectedDate?: (d: string) => void;
-  workshopIndicators: Record<string, {id: string, name: string, formula?: string}[]>;
+  workshopIndicators: Record<string, {id: string, name: string, formula?: string, escala?: string}[]>;
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
@@ -40,13 +40,27 @@ const getIntervals = (acts: Activity[]) => acts
   .filter(a => a.horaInicio && a.horaFin)
   .map(a => ({ start: a.horaInicio, end: a.horaFin! }));
 
+const calculateUniqueMinutesMultiDay = (acts: Activity[]) => {
+  const byDate: Record<string, Activity[]> = {};
+  acts.forEach(a => {
+    const d = a.fecha || 'unknown';
+    if (!byDate[d]) byDate[d] = [];
+    byDate[d].push(a);
+  });
+  let total = 0;
+  Object.values(byDate).forEach(dayActs => {
+    total += calculateUniqueMinutes(getIntervals(dayActs));
+  });
+  return total;
+};
+
 const sanitizeFieldName = (formato: string) =>
   formato
     .toLowerCase()
     .replace(/\s+/g, '_')
     .replace(/[^a-z0-9_]/g, '');
 
-const evaluateFormula = (formula: string, vars: Record<string, number>): number => {
+const evaluateFormula = (formula: string, vars: Record<string, number>, escala?: string): number => {
   if (!formula) return 0;
   let expr = formula.toLowerCase();
   
@@ -79,31 +93,10 @@ const evaluateFormula = (formula: string, vars: Record<string, number>): number 
   try {
     const val = Function('"use strict"; return (' + expr + ')')();
     if (typeof val === 'number' && !isNaN(val) && isFinite(val)) {
-      const norm = formula.toLowerCase().replace(/\s+/g, '');
-      const hasDisp = norm.includes('disponibilidad');
-      const hasRend = norm.includes('rendimiento');
-      const hasCal = norm.includes('calidad');
-      
-      const isProductOfThree = (
-        hasDisp && hasRend && hasCal &&
-        norm.includes('*') &&
-        !norm.includes('/') &&
-        !norm.includes('+') &&
-        !norm.includes('-')
-      );
-      
-      const isProductOfTwo = (
-        ((hasDisp && hasRend) || (hasDisp && hasCal) || (hasRend && hasCal)) &&
-        norm.includes('*') &&
-        !norm.includes('/') &&
-        !norm.includes('+') &&
-        !norm.includes('-')
-      ) && !isProductOfThree;
-      
-      if (isProductOfThree) {
-        return val / 10000;
-      } else if (isProductOfTwo) {
+      if (escala === 'div100') {
         return val / 100;
+      } else if (escala === 'div10000') {
+        return val / 10000;
       }
       return val;
     }
@@ -118,11 +111,13 @@ export const calculateStats = (
   data: Activity[],
   areaId?: string,
   mermas: any[] = [],
-  workshopIndicators?: Record<string, {id: string, name: string, formula?: string}[]>,
+  workshopIndicators?: Record<string, {id: string, name: string, formula?: string, escala?: string}[]>,
   activities: Activity[] = [],
   history: Activity[] = [],
   useNewFormula: boolean = false,
-  masterSpeeds: MasterSpeed[] = []
+  masterSpeeds: MasterSpeed[] = [],
+  useNewPerformanceFormula: boolean = false,
+  useNewAvailabilityFormula: boolean = false
 ) => {
   let totalPersonMinutes = 0;
   let totalParts = 0;
@@ -141,7 +136,12 @@ export const calculateStats = (
     return (h || 0) * 60 + (m || 0);
   };
 
-  if (useNewFormula) {
+  // Separate parameters: useNewPerformanceFormula and useNewAvailabilityFormula
+  // For backwards compatibility and correct SavingsPanel handling, we map useNewFormula to activeNewPerformance
+  const activeNewPerformance = useNewPerformanceFormula || useNewFormula;
+  const activeNewAvailability = useNewAvailabilityFormula;
+
+  if (activeNewPerformance) {
       // Group by date, then find P blocks
       const dataByDate: Record<string, Activity[]> = {};
       data.forEach(a => {
@@ -171,7 +171,7 @@ export const calculateStats = (
                           if (nextStart <= end) {
                               end = Math.max(end, nextEnd);
                           } else {
-                              break;
+                               break;
                           }
                           j++;
                       } else {
@@ -219,55 +219,64 @@ export const calculateStats = (
       totalParts += cant;
       totalPartsNok += cantNok;
       
-      const actIsLoncheado = (act.area || aid).toLowerCase().includes('loncheado');
-      const isLaser = (act.area || aid).toLowerCase().includes('laser');
-      
-      if (useNewFormula) {
-          // Rendimiento: Suma (unidades ok+nok * (60/Unidades hora del maestro para ese formato))
-          const master = masterSpeeds.find(ms => ms.formato === act.formato);
-          const teoManual = Number(act.tiempoTeoricoManual ?? (act as any).tiempo_teorico ?? (act as any).theo_time ?? (master?.tiempoTeorico || 0));
-          if (teoManual > 0) {
-            theoreticalTimeSum += (cant + cantNok) * (60 / teoManual);
-          }
-      } else {
-          const teoManual = Number(act.tiempoTeoricoManual ?? (act as any).tiempo_teorico ?? (act as any).theo_time ?? 0);
-          // Theoretical time per record (Σ Cantidad / Velocidad)
-          if (isLaser) {
-            theoreticalTimeSum += (teoManual > 0 ? (60 / teoManual) : 0);
-          } else if (actIsLoncheado) {
-            theoreticalTimeSum += (teoManual > 0 ? (cant + cantNok) / teoManual : 0);
-          } else {
-            theoreticalTimeSum += (teoManual * (cant + cantNok));
-          }
+      let teoManual = Number(act.tiempoTeoricoManual ?? (act as any).tiempo_teorico ?? (act as any).theo_time ?? 0);
+      if (teoManual === 0) {
+        const master = masterSpeeds.find(ms => normalizeFormato(ms.formato) === normalizeFormato(act.formato));
+        if (master && master.tiempoTeorico > 0) {
+          teoManual = 60 / master.tiempoTeorico;
+        }
       }
+      theoreticalTimeSum += teoManual * (cant + cantNok);
     }
   });
 
   // Unique machine times (Clock hours, not man-hours) using priorities: P > A > E
-  const pIntervals = mergeIntervals(getIntervalsInMinutes(getIntervals(prodActs)));
-  const aIntervalsRaw = mergeIntervals(getIntervalsInMinutes(getIntervals(averiaActs)));
-  const eIntervalsRaw = mergeIntervals(getIntervalsInMinutes(getIntervals(esperaActs)));
+  // Group activities by date first to prevent interval collapse across different days
+  const dataByDate: Record<string, Activity[]> = {};
+  data.forEach(a => {
+    const d = a.fecha || 'unknown';
+    if (!dataByDate[d]) dataByDate[d] = [];
+    dataByDate[d].push(a);
+  });
 
-  // Machine is only stopped if NOT in Production
-  const machineAIntervals = subtractIntervals(aIntervalsRaw, pIntervals);
-  // Machine is only in Esperas if NOT in Production AND NOT in Averia
-  const machineEIntervals = subtractIntervals(subtractIntervals(eIntervalsRaw, pIntervals), machineAIntervals);
+  let uniqueTimeP = 0;
+  let uniqueTimeA = 0;
+  let uniqueTimeE = 0;
 
-  const uniqueTimeP = pIntervals.reduce((s, i) => s + (i.end - i.start), 0);
-  const uniqueTimeA = machineAIntervals.reduce((s, i) => s + (i.end - i.start), 0);
-  const uniqueTimeE = machineEIntervals.reduce((s, i) => s + (i.end - i.start), 0);
-  const uniqueTotalTime = calculateUniqueMinutes(getIntervals(data));
+  Object.keys(dataByDate).forEach(date => {
+    const dayActs = dataByDate[date];
+    const dayProdActs = dayActs.filter(act => {
+      const tipo = act.tipoTarea || (act as any).tipo_tarea;
+      return tipo === TaskType.PRODUCCION || tipo === 'P';
+    });
+    const dayAveriaActs = dayActs.filter(a => a.tipoTarea === TaskType.AVERIA);
+    const dayEsperaActs = dayActs.filter(a => a.tipoTarea === TaskType.ESPERAS);
+
+    const pInts = mergeIntervals(getIntervalsInMinutes(getIntervals(dayProdActs)));
+    const aIntsRaw = mergeIntervals(getIntervalsInMinutes(getIntervals(dayAveriaActs)));
+    const eIntsRaw = mergeIntervals(getIntervalsInMinutes(getIntervals(dayEsperaActs)));
+
+    // Machine is only stopped if NOT in Production
+    const machineAInts = subtractIntervals(aIntsRaw, pInts);
+    // Machine is only in Esperas if NOT in Production AND NOT in Averia
+    const machineEInts = subtractIntervals(subtractIntervals(eIntsRaw, pInts), machineAInts);
+
+    uniqueTimeP += pInts.reduce((s, i) => s + (i.end - i.start), 0);
+    uniqueTimeA += machineAInts.reduce((s, i) => s + (i.end - i.start), 0);
+    uniqueTimeE += machineEInts.reduce((s, i) => s + (i.end - i.start), 0);
+  });
+
+  const uniqueTotalTime = calculateUniqueMinutesMultiDay(data);
 
   // Universal Formulas per User Request
   // Availability = P / (P + E + A)
-  const availability = useNewFormula 
-    ? (sumDurationTotal > 0 ? (sumDurationP / sumDurationTotal) * 100 : 0)
-    : ((uniqueTimeP + uniqueTimeE + uniqueTimeA) > 0 
-      ? (uniqueTimeP / (uniqueTimeP + uniqueTimeE + uniqueTimeA)) * 100 
-      : 0);
+  // Completely unified to always use the unique time formula (old formula) across all modules
+  const availability = ((uniqueTimeP + uniqueTimeE + uniqueTimeA) > 0 
+    ? (uniqueTimeP / (uniqueTimeP + uniqueTimeE + uniqueTimeA)) * 100 
+    : 0);
 
   // Performance = Theoretical / Production
-  const performance = useNewFormula
+  const performance = activeNewPerformance
     ? (totalTiempoDisponible > 0 ? (theoreticalTimeSum / totalTiempoDisponible) * 100 : 0)
     : (uniqueTimeP > 0 ? (theoreticalTimeSum / uniqueTimeP) * 100 : 0);
 
@@ -344,7 +353,7 @@ export const calculateStats = (
     );
     const cantJamones = actsJamones.reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
     const persJamones = new Set(actsJamones.flatMap(a => a.operarios || [])).size || 1;
-    const horasJamones = calculateUniqueMinutes(getIntervals(actsJamones)) / 60;
+    const horasJamones = calculateUniqueMinutesMultiDay(actsJamones) / 60;
     pph_jamones = horasJamones > 0 ? Math.round(cantJamones / persJamones / horasJamones) : 0;
 
     const actsPaletas = data.filter(a =>
@@ -353,7 +362,7 @@ export const calculateStats = (
     );
     const cantPaletas = actsPaletas.reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
     const persPaletas = new Set(actsPaletas.flatMap(a => a.operarios || [])).size || 1;
-    const horasPaletas = calculateUniqueMinutes(getIntervals(actsPaletas)) / 60;
+    const horasPaletas = calculateUniqueMinutesMultiDay(actsPaletas) / 60;
     pph_paletas = horasPaletas > 0 ? Math.round(cantPaletas / persPaletas / horasPaletas) : 0;
 
     const actsManteca = data.filter(a =>
@@ -362,7 +371,7 @@ export const calculateStats = (
     );
     const cantManteca = actsManteca.reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
     const persManteca = new Set(actsManteca.flatMap(a => a.operarios || [])).size || 1;
-    const horasManteca = calculateUniqueMinutes(getIntervals(actsManteca)) / 60;
+    const horasManteca = calculateUniqueMinutesMultiDay(actsManteca) / 60;
     pph_manteca = horasManteca > 0 ? Math.round(cantManteca / persManteca / horasManteca) : 0;
 
     cantidad_colgada = data
@@ -462,7 +471,7 @@ export const calculateStats = (
   const rawIndicators = (resolvedIndicators && targetArea) ? (resolvedIndicators[targetArea] || resolvedIndicators.default || []) : [];
   rawIndicators.forEach((ind: any) => {
     if (ind.formula) {
-      const val = evaluateFormula(ind.formula, baseVars);
+      const val = evaluateFormula(ind.formula, baseVars, ind.escala);
       // store the result as a key in the stats object
       statsObj[ind.id] = val.toFixed(1);
     }
@@ -742,19 +751,8 @@ const Dashboard: React.FC<DashboardProps> = ({
         }
       }
       if (act.tipoTarea === TaskType.PRODUCCION) {
-        const actArea = (act.area || selectedArea || '').toLowerCase();
-        const actIsLoncheado = actArea.includes('loncheado');
-        const isLaser = actArea.includes('laser');
         const teo = act.tiempoTeoricoManual || 0;
-        
-        let theoreticalTotal = 0;
-        if (isLaser) {
-          theoreticalTotal = (teo > 0 ? (60 / teo) : 0);
-        } else if (actIsLoncheado) {
-          theoreticalTotal = (teo > 0 ? (act.cantidad || 0) / teo : 0);
-        } else {
-          theoreticalTotal = teo * (act.cantidad || 0);
-        }
+        const theoreticalTotal = teo * (act.cantidad || 0);
 
         const loss = (act.duracionMin || 0) - theoreticalTotal;
         if (loss > 0) {
@@ -763,12 +761,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         
         // Quality loss from NOK pieces
         if ((act.cantidadNok || 0) > 0) {
-          let nokLoss = 0;
-          if (actIsLoncheado) {
-            nokLoss = (teo > 0 ? (act.cantidadNok || 0) / teo : 0);
-          } else {
-            nokLoss = teo * (act.cantidadNok || 0);
-          }
+          const nokLoss = teo * (act.cantidadNok || 0);
           qualityLoss[act.formato] = (qualityLoss[act.formato] || 0) + nokLoss;
         }
       }

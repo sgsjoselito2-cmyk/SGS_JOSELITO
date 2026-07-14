@@ -30,9 +30,9 @@ if (dbUrlForMigration) {
       return pool.end();
     })
     .catch(err => {
-      console.error("Database Migration Error for ideas_mejora:", err.message);
+      console.log("Database Migration Status (Postgres direct connection skipped or not available):", err.message);
       try {
-        fs.appendFileSync("server-log.txt", "Migration failed: " + err.message + "\n");
+        fs.appendFileSync("server-log.txt", "Migration skipped or failed: " + err.message + "\n");
       } catch (e) {}
       return pool.end();
     });

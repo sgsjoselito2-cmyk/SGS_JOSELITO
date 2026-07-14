@@ -1372,11 +1372,8 @@ const ParetoModal: React.FC<ParetoModalProps> = ({ workshopId, date, allData, on
         disponibilidad[act.formato] = (disponibilidad[act.formato] || 0) + (act.duracionMin || 0);
       }
       if (act.tipoTarea === TaskType.PRODUCCION) {
-        const isLaser = workshopId === 'corte-laser' || act.area === 'corte-laser';
         const teo = act.tiempoTeoricoManual || 0;
-        const theoreticalTotal = isLaser 
-          ? (teo > 0 ? (60 / teo) : 0)
-          : (teo > 0 ? (60 / teo) : 0) * (act.cantidad || 0);
+        const theoreticalTotal = (teo > 0 ? (60 / teo) : 0) * (act.cantidad || 0);
         const loss = (act.duracionMin || 0) - theoreticalTotal;
         if (loss > 0) {
           rendimiento[act.formato] = (rendimiento[act.formato] || 0) + loss;
@@ -1518,11 +1515,8 @@ const RecordsModal: React.FC<RecordsModalProps> = ({ workshopId, date, type, cat
             </thead>
             <tbody>
               {filteredRecords.map((rec, idx) => {
-                const isLaser = workshopId === 'corte-laser' || rec.area === 'corte-laser';
                 const teo = rec.tiempoTeoricoManual || 0;
-                const theoreticalTotal = isLaser 
-                  ? (teo > 0 ? (60 / teo) : 0) 
-                  : (teo > 0 ? (60 / teo) : 0) * (rec.cantidad || 0);
+                const theoreticalTotal = (teo > 0 ? (60 / teo) : 0) * (rec.cantidad || 0);
                 const realTime = rec.duracionMin || 0;
                 const loss = realTime - theoreticalTotal;
 
@@ -1548,7 +1542,7 @@ const RecordsModal: React.FC<RecordsModalProps> = ({ workshopId, date, type, cat
               })}
               {filteredRecords.length === 0 && (
                 <tr>
-                  <td colSpan={(type === 'rendimiento' ? 9 : type === 'calidad' ? 7 : 6) + ((workshopId === 'mecanizado' || workshopId === 'curvadora' || workshopId === 'corte-laser' || workshopId === 'soldadura-carcasas' || workshopId === 'soldadura-rodetes') ? 1 : 0)} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">No se encontraron registros detallados</td>
+                  <td colSpan={(type === 'rendimiento' ? 9 : type === 'calidad' ? 7 : 6) + ((workshopId === 'mecanizado' || workshopId === 'curvadora' || workshopId === 'soldadura-carcasas' || workshopId === 'soldadura-rodetes') ? 1 : 0)} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">No se encontraron registros detallados</td>
                 </tr>
               )}
             </tbody>

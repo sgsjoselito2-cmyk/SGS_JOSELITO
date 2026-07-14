@@ -1,6 +1,6 @@
 import dns from 'dns';
 
-dns.resolve4('rntyoitabtpqlqnwzerd.supabase.co', (err, addresses) => {
+dns.resolveAny('db.rntyoitabtpqlqnwzerd.supabase.co', (err, addresses) => {
   if (err) {
     console.error(err);
   } else {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Activity, TaskType, User, MasterSpeed } from '../types';
-import { calcDuration, cleanText, normalizeDate } from '../src/utils/index';
+import { calcDuration, cleanText, normalizeDate, normalizeFormato } from '../src/utils/index';
 import { 
   Lock, 
   Check, 
@@ -428,7 +428,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
       });
       const totalPersonas = uniqueOperators.size;
 
-      let speedObj = masterSpeeds.find(ms => ms.formato === formato && ms.area === selectedArea);
+      let speedObj = masterSpeeds.find(ms => normalizeFormato(ms.formato) === normalizeFormato(formato) && ms.area === selectedArea);
       if (!speedObj) {
         const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
         const envAreas = ['env-envasado', 'env-empaquetado'];
@@ -436,17 +436,17 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
         const movAreas = ['movimiento-jamones'];
         
         if (selectedArea === 'sala-blanca-dashboard') {
-          speedObj = masterSpeeds.find(ms => ms.formato === formato && ms.area && sbAreas.includes(ms.area));
+          speedObj = masterSpeeds.find(ms => normalizeFormato(ms.formato) === normalizeFormato(formato) && ms.area && sbAreas.includes(ms.area));
         } else if (selectedArea === 'envasado-dashboard') {
-          speedObj = masterSpeeds.find(ms => ms.formato === formato && ms.area && envAreas.includes(ms.area));
+          speedObj = masterSpeeds.find(ms => normalizeFormato(ms.formato) === normalizeFormato(formato) && ms.area && envAreas.includes(ms.area));
         } else if (selectedArea === 'expediciones-dashboard') {
-          speedObj = masterSpeeds.find(ms => ms.formato === formato && ms.area && expAreas.includes(ms.area));
+          speedObj = masterSpeeds.find(ms => normalizeFormato(ms.formato) === normalizeFormato(formato) && ms.area && expAreas.includes(ms.area));
         } else if (selectedArea === 'movimientos-dashboard') {
-          speedObj = masterSpeeds.find(ms => ms.formato === formato && ms.area && movAreas.includes(ms.area));
+          speedObj = masterSpeeds.find(ms => normalizeFormato(ms.formato) === normalizeFormato(formato) && ms.area && movAreas.includes(ms.area));
         }
       }
       if (!speedObj) {
-        speedObj = masterSpeeds.find(ms => ms.formato === formato);
+        speedObj = masterSpeeds.find(ms => normalizeFormato(ms.formato) === normalizeFormato(formato));
       }
 
       const uhObjetivo = speedObj && speedObj.tiempoTeorico ? speedObj.tiempoTeorico : null;
@@ -511,7 +511,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
       Inicio: r.horaInicio,
       Fin: r.horaFin,
       'T. Real (min)': r.duracionMin,
-      'T. Teo (min)': r.tipoTarea === TaskType.PRODUCCION && r.tiempoTeoricoManual !== undefined ? (r.tiempoTeoricoManual * (selectedArea === 'corte-laser' ? 1 : r.cantidad)).toFixed(1) : '-',
+      'T. Teo (min)': r.tipoTarea === TaskType.PRODUCCION && r.tiempoTeoricoManual !== undefined ? (r.tiempoTeoricoManual * r.cantidad).toFixed(1) : '-',
       Cantidad: r.cantidad,
       Comentarios: r.comentarios
     })));
@@ -1184,12 +1184,12 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
                         {editForm.horaInicio && editForm.horaFin ? `${calcDuration(editForm.horaInicio, editForm.horaFin)} min` : '-'}
                       </td>
                       <td className="p-1 text-center text-[15px] font-bold text-emerald-600 min-w-[50px]">
-                        {editForm.tipoTarea === TaskType.PRODUCCION && editForm.tiempoTeoricoManual !== undefined && (selectedArea === 'corte-laser' || (editForm.cantidad || 0) > 0)
-                          ? `${((editForm.tiempoTeoricoManual > 0 ? (60 / editForm.tiempoTeoricoManual) : 0) * (selectedArea === 'corte-laser' ? 1 : (editForm.cantidad || 0))).toFixed(1)}m` 
+                        {editForm.tipoTarea === TaskType.PRODUCCION && editForm.tiempoTeoricoManual !== undefined && (editForm.cantidad || 0) > 0
+                          ? `${(editForm.tiempoTeoricoManual * (editForm.cantidad || 0)).toFixed(1)}m` 
                           : '-'}
                       </td>
                       <td className="p-1"><input type="number" step="0.1" value={editForm.cantidad || 0} onChange={e => setEditForm({...editForm, cantidad: parseFloat(e.target.value) || 0})} className="min-w-[50px] w-full p-1 text-[15px] border rounded-lg font-bold text-center text-emerald-600" /></td>
-                      <td className="p-1"><input type="number" step={selectedArea === 'corte-laser' ? "1" : "0.1"} value={editForm.cantidadNok || 0} onChange={e => setEditForm({...editForm, cantidadNok: parseFloat(e.target.value) || 0})} className="min-w-[50px] w-full p-1 text-[15px] border rounded-lg font-bold text-center text-red-600" /></td>
+                      <td className="p-1"><input type="number" step="0.1" value={editForm.cantidadNok || 0} onChange={e => setEditForm({...editForm, cantidadNok: parseFloat(e.target.value) || 0})} className="min-w-[50px] w-full p-1 text-[15px] border rounded-lg font-bold text-center text-red-600" /></td>
                       <td className="p-1"><input type="text" value={editForm.comentarios || ''} onChange={e => setEditForm({...editForm, comentarios: e.target.value})} className="min-w-[120px] w-full p-1 text-[15px] border rounded-lg font-bold" /></td>
                       <td className="p-2 flex justify-center gap-1">
                         <button onClick={handleSave} className="p-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors shadow-sm" title="Guardar">
@@ -1230,14 +1230,14 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
                         {record.duracionMin ? `${Number(record.duracionMin).toFixed(1)}m` : '-'}
                       </td>
                       <td className="p-2 sm:p-4 text-[10px] sm:text-[13px] font-black text-emerald-600 text-center">
-                        {(record.tipoTarea === TaskType.PRODUCCION || record.formato === 'JAMON') && record.tiempoTeoricoManual !== undefined && (selectedArea === 'corte-laser' || (record.cantidad || 0) > 0)
-                          ? `${((record.tiempoTeoricoManual > 0 ? (60 / record.tiempoTeoricoManual) : 0) * (selectedArea === 'corte-laser' ? 1 : (record.cantidad || 0))).toFixed(1)}m` 
+                        {(record.tipoTarea === TaskType.PRODUCCION || record.formato === 'JAMON') && record.tiempoTeoricoManual !== undefined && (record.cantidad || 0) > 0
+                          ? `${(record.tiempoTeoricoManual * (record.cantidad || 0)).toFixed(1)}m` 
                           : '-'}
                       </td>
                       <td className="p-2 sm:p-4 text-[10px] sm:text-[13px] font-black text-emerald-800 text-center">
                         {Number(record.cantidad || 0).toFixed(1)}
                       </td>
-                      <td className="p-2 sm:p-4 text-[10px] sm:text-[13px] font-black text-red-600 text-center">{selectedArea === 'corte-laser' ? (record.cantidadNok || 0) : (record.cantidadNok || 0).toFixed(1)}</td>
+                      <td className="p-2 sm:p-4 text-[10px] sm:text-[13px] font-black text-red-600 text-center">{(record.cantidadNok || 0).toFixed(1)}</td>
                       <td className="p-2 sm:p-4 text-[10px] sm:text-[13px] font-bold text-slate-500 italic max-w-[150px] sm:max-w-[250px] break-words" title={record.comentarios}>{record.comentarios || '-'}</td>
                       {isAdminMode && (
                         <td className="p-2 sm:p-4 text-center">
