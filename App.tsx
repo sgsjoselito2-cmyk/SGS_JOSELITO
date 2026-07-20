@@ -172,6 +172,23 @@ const App: React.FC = () => {
       parsed['expedicion'] = INITIAL_WORKSHOP_INDICATORS['expedicion'];
       changed = true;
     }
+
+    // Ensure sb-empaquetado-loncheado indicators exist and are correct
+    if (parsed && parsed['sb-empaquetado-loncheado']) {
+      if (!parsed['sb-empaquetado-loncheado'].some((ind: any) => ind.id === 'disponibilidad')) {
+        parsed['sb-empaquetado-loncheado'].push({ id: 'disponibilidad', name: 'Disponibilidad (%)' });
+        changed = true;
+      }
+      if (!parsed['sb-empaquetado-loncheado'].some((ind: any) => ind.id === 'calidad')) {
+        parsed['sb-empaquetado-loncheado'].push({ id: 'calidad', name: 'Calidad (%)' });
+        changed = true;
+      }
+      const filtered = parsed['sb-empaquetado-loncheado'].filter((ind: any) => ind.id !== 'rendimiento' && ind.id !== 'productividad');
+      if (filtered.length !== parsed['sb-empaquetado-loncheado'].length) {
+        parsed['sb-empaquetado-loncheado'] = filtered;
+        changed = true;
+      }
+    }
     
     // Ensure preparacion-exp indicators exist
     if (parsed && !parsed['preparacion-exp']) {

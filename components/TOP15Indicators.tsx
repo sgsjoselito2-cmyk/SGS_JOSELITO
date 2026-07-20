@@ -418,6 +418,9 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
     TALLERES.forEach(ws => {
       const rawIndicators = workshopIndicators[ws.id] || workshopIndicators.default;
       const indicators = rawIndicators.filter(ind => {
+        if (ws.id === 'movimiento-jamones' && ind.id !== 'cantidad_colgada') {
+          return false;
+        }
         const objs = allObjectives[ws.id] || [];
         const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
         const spec = sorted.find(o => o.indicator_id === ind.id);
@@ -456,6 +459,9 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
     TALLERES.forEach(ws => {
       const rawIndicators = workshopIndicators[ws.id] || workshopIndicators.default;
       const indicators = rawIndicators.filter(ind => {
+        if (ws.id === 'movimiento-jamones' && ind.id !== 'cantidad_colgada') {
+          return false;
+        }
         const objs = allObjectives[ws.id] || [];
         const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
         const spec = sorted.find(o => o.indicator_id === ind.id);
@@ -674,6 +680,9 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
     TALLERES.forEach(ws => {
       const rawIndicators = workshopIndicators[ws.id] || workshopIndicators.default;
       const indicators = rawIndicators.filter(ind => {
+        if (ws.id === 'movimiento-jamones' && ind.id !== 'cantidad_colgada') {
+          return false;
+        }
         const objs = allObjectives[ws.id] || [];
         const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
         const spec = sorted.find(o => o.indicator_id === ind.id);

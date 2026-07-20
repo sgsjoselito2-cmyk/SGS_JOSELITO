@@ -445,6 +445,8 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
   };
 
   const renderChart = (data: any[], title: string, areaId?: string, isReport = false) => {
+    const isMovimientoJamones = areaId === 'movimiento-jamones' || areaId === 'movimiento-jamones-log';
+    const isEmpaquetadoLoncheado = areaId === 'sb-empaquetado-loncheado';
     const chartData = data.map(d => {
       let objValue = 0;
       if (areaId) {
@@ -455,7 +457,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
           date = new Date(d.year, 0, 1);
           date.setDate(date.getDate() + (d.week - 1) * 7);
         }
-        objValue = getObjectiveForDate(areaId, date);
+        objValue = getObjectiveForDate(areaId, date, (isMovimientoJamones || isEmpaquetadoLoncheado) ? 'disponibilidad' : 'productividad');
       }
       return { ...d, Objective: objValue };
     });
@@ -486,19 +488,27 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
             wrapperStyle={{fontSize: '7px', fontWeight: 'bold', paddingTop: '25px'}} 
           />
           {/* Productividad como área en el fondo */}
-          <Area type="monotone" dataKey="Prod" fill="#eab308" fillOpacity={0.1} stroke="none" legendType="none" isAnimationActive={false} />
+          {!isMovimientoJamones && !isEmpaquetadoLoncheado && (
+            <Area type="monotone" dataKey="Prod" fill="#eab308" fillOpacity={0.1} stroke="none" legendType="none" isAnimationActive={false} />
+          )}
           
           <Bar dataKey="Disp" name="Disponibilidad" fill="#3b82f6" radius={[1, 1, 0, 0]} maxBarSize={15} isAnimationActive={false} />
-          <Bar dataKey="Rto" name="Rendimiento" fill="#f97316" radius={[1, 1, 0, 0]} maxBarSize={15} isAnimationActive={false} />
-          <Bar dataKey="Cal" name="Calidad" fill="#94a3b8" radius={[1, 1, 0, 0]} maxBarSize={15} isAnimationActive={false} />
+          {!isMovimientoJamones && !isEmpaquetadoLoncheado && (
+            <Bar dataKey="Rto" name="Rendimiento" fill="#f97316" radius={[1, 1, 0, 0]} maxBarSize={15} isAnimationActive={false} />
+          )}
+          {!isMovimientoJamones && (
+            <Bar dataKey="Cal" name="Calidad" fill="#94a3b8" radius={[1, 1, 0, 0]} maxBarSize={15} isAnimationActive={false} />
+          )}
           
           {/* Productividad como línea delante para mantener orden de leyenda y definición */}
-          <Line type="monotone" dataKey="Prod" name="Productividad" stroke="#eab308" strokeWidth={2} dot={{r: 1.5, strokeWidth: 1}} activeDot={{r: 3}} isAnimationActive={false}>
-            <LabelList dataKey="Prod" position="top" formatter={(val: number) => val > 0 ? `${val.toFixed(1)}%` : ''} style={{ fontSize: '6px', fontWeight: 'bold', fill: '#334155' }} />
-          </Line>
+          {!isMovimientoJamones && !isEmpaquetadoLoncheado && (
+            <Line type="monotone" dataKey="Prod" name="Productividad" stroke="#eab308" strokeWidth={2} dot={{r: 1.5, strokeWidth: 1}} activeDot={{r: 3}} isAnimationActive={false}>
+              <LabelList dataKey="Prod" position="top" formatter={(val: number) => val > 0 ? `${val.toFixed(1)}%` : ''} style={{ fontSize: '6px', fontWeight: 'bold', fill: '#334155' }} />
+            </Line>
+          )}
           
           {areaId && (
-            <Line type="stepAfter" dataKey="Objective" name="OBJETIVO" stroke="#ef4444" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={false} />
+            <Line type="stepAfter" dataKey="Objective" name={(isMovimientoJamones || isEmpaquetadoLoncheado) ? "OBJETIVO DISP." : "OBJETIVO"} stroke="#ef4444" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={false} />
           )}
         </ComposedChart>
       </ResponsiveContainer>

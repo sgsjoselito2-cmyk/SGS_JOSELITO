@@ -112,33 +112,39 @@ app.all(["/auth/v1/*", "/rest/v1/*", "/storage/v1/*"], (req, res) => {
   });
 });
 
-// Vite middleware for development
-if (process.env.NODE_ENV !== "production") {
-  console.log("Starting Vite in middleware mode...");
-  import("vite").then(({ createServer: createViteServer }) => {
-    createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-      optimizeDeps: { force: true },
-    }).then(vite => {
+// Vite middleware for development and server startup
+async function startServer() {
+  if (process.env.NODE_ENV !== "production") {
+    console.log("Starting Vite in middleware mode...");
+    try {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+        optimizeDeps: { force: true },
+      });
       app.use(vite.middlewares);
-      console.log("Vite middleware attached.");
+      console.log("Vite middleware attached successfully.");
+    } catch (err: any) {
+      console.error("Failed to start Vite server:", err.message);
+    }
+  } else {
+    // Serve static files in production
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
     });
-  });
-} else {
-  // Serve static files in production
-  const distPath = path.join(process.cwd(), "dist");
-  app.use(express.static(distPath));
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(distPath, "index.html"));
-  });
+  }
+
+  // Only listen if not in a serverless environment (like Vercel)
+  if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://0.0.0.0:${PORT}`);
+    });
+  }
 }
 
-// Only listen if not in a serverless environment (like Vercel)
-if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
-  });
-}
+startServer();
 
 export default app;

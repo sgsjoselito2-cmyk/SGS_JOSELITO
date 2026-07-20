@@ -374,13 +374,18 @@ export const calculateStats = (
     const horasManteca = calculateUniqueMinutesMultiDay(actsManteca) / 60;
     pph_manteca = horasManteca > 0 ? Math.round(cantManteca / persManteca / horasManteca) : 0;
 
+    const targetFormats = [
+      normalizeFormato('COLGAR JAMONES'),
+      normalizeFormato('COLGAR PALETAS'),
+      normalizeFormato('COLGAR JAMONES MANTECA'),
+      normalizeFormato('DESCOLGAR - COLGAR (EN LINEA)')
+    ];
+
     cantidad_colgada = data
-      .filter(a => 
-        (a.formato === 'COLGAR JAMONES' || 
-         a.formato === 'COLGAR PALETAS' || 
-         a.formato === 'COLGAR JAMONES MANTECA') &&
-        a.tipoTarea === TaskType.PRODUCCION
-      )
+      .filter(a => {
+        const norm = normalizeFormato(a.formato);
+        return targetFormats.includes(norm) && a.tipoTarea === TaskType.PRODUCCION;
+      })
       .reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
   }
 
@@ -838,9 +843,12 @@ const Dashboard: React.FC<DashboardProps> = ({
       };
     });
 
-    const indicadoresFiltrados = indicators.filter(
-      ind => ind.showInTop5 === true
-    );
+    const indicadoresFiltrados = indicators.filter(ind => {
+      if (selectedArea === 'sb-empaquetado-loncheado' && (ind.id === 'rendimiento' || ind.id === 'productividad')) {
+        return false;
+      }
+      return ind.showInTop5 === true;
+    });
     console.log('Indicadores TOP 5:', indicadoresFiltrados);
 
     return (
@@ -980,13 +988,19 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-1 sm:gap-2 shrink-0">
+      <div className={`grid gap-1 sm:gap-2 shrink-0 ${selectedArea === 'movimiento-jamones' ? 'grid-cols-1 max-w-xs' : selectedArea === 'sb-empaquetado-loncheado' ? 'grid-cols-2 max-w-md' : 'grid-cols-2 md:grid-cols-4'}`}>
         {[
           { label: 'Dispon.', val: `${stats.disponibilidad}${stats.disponibilidad !== '' ? '%' : ''}`, key: 'disponibilidad' },
           { label: 'Rendim.', val: `${stats.rendimiento}${stats.rendimiento !== '' ? '%' : ''}`, key: 'rendimiento' },
           { label: 'Calidad', val: `${stats.calidad}${stats.calidad !== '' ? '%' : ''}`, key: 'calidad' },
           { label: 'OEE', val: `${stats.productividad}${stats.productividad !== '' ? '%' : ''}`, key: 'productividad', isDark: true }
         ].filter(kpi => {
+          if (selectedArea === 'movimiento-jamones' && kpi.key !== 'disponibilidad') {
+            return false;
+          }
+          if (selectedArea === 'sb-empaquetado-loncheado' && (kpi.key === 'rendimiento' || kpi.key === 'productividad')) {
+            return false;
+          }
           const objs = allObjectives[selectedArea || ''] || [];
           const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
           const spec = sorted.find(o => o.indicator_id === kpi.key);
@@ -1003,13 +1017,19 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto pr-1 space-y-2 no-scrollbar pb-24">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+        <div className={`grid gap-2 ${selectedArea === 'movimiento-jamones' ? 'grid-cols-1 max-w-xs' : selectedArea === 'sb-empaquetado-loncheado' ? 'grid-cols-2 max-w-md' : 'grid-cols-2 lg:grid-cols-4'}`}>
           {[
             { label: 'Disponibilidad', val: stats.disponibilidad, obj: getObjectiveForDate('disponibilidad', selectedDate), color: 'blue', key: 'disponibilidad' },
             { label: 'Rendimiento', val: stats.rendimiento, obj: getObjectiveForDate('rendimiento', selectedDate), color: 'emerald', key: 'rendimiento' },
             { label: 'Calidad', val: stats.calidad, obj: getObjectiveForDate('calidad', selectedDate), color: 'amber', key: 'calidad' },
             { label: 'OEE Global', val: stats.productividad, obj: getObjectiveForDate('productividad', selectedDate), color: 'slate', isGlobal: true, key: 'productividad' }
           ].filter(kpi => {
+            if (selectedArea === 'movimiento-jamones' && kpi.key !== 'disponibilidad') {
+              return false;
+            }
+            if (selectedArea === 'sb-empaquetado-loncheado' && (kpi.key === 'rendimiento' || kpi.key === 'productividad')) {
+              return false;
+            }
             const objs = allObjectives[selectedArea || ''] || [];
             const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
             const spec = sorted.find(o => o.indicator_id === kpi.key);
@@ -1096,12 +1116,20 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* Pareto Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+      <div className={`grid gap-4 sm:gap-6 ${selectedArea === 'movimiento-jamones' ? 'grid-cols-1 max-w-xl' : selectedArea === 'sb-empaquetado-loncheado' ? 'grid-cols-1 lg:grid-cols-2 max-w-4xl' : 'grid-cols-1 lg:grid-cols-3'}`}>
         {[
           { title: 'Pareto de Esperas', data: paretos.esperas, type: 'disponibilidad' as const, unit: 'min' },
           { title: 'Pérdida Rendimiento', data: paretos.performance, type: 'rendimiento' as const, unit: 'min' },
           { title: 'Pérdida Calidad', data: paretos.quality, type: 'calidad' as const, unit: isTimeBased ? 'min' : 'uds' }
-        ].map(pareto => (
+        ].filter(pareto => {
+          if (selectedArea === 'movimiento-jamones' && pareto.type !== 'disponibilidad') {
+            return false;
+          }
+          if (selectedArea === 'sb-empaquetado-loncheado' && pareto.type === 'rendimiento') {
+            return false;
+          }
+          return true;
+        }).map(pareto => (
           <div key={pareto.title} className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-[2.5rem] border border-slate-100 shadow-lg">
             <h3 className="text-slate-900 text-[13px] sm:text-[15px] font-black uppercase tracking-widest mb-4 sm:mb-6 px-2">{pareto.title}</h3>
             <div className="h-64 w-full relative">
