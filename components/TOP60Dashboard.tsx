@@ -4,7 +4,7 @@ import {
 } from 'recharts';
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
-import { Activity as ActivityIcon, ShieldAlert, Clock, Users, Lock, Unlock, Save } from 'lucide-react';
+import { Activity as ActivityIcon, ShieldAlert, Clock, Users, Lock, Unlock, Save, Lightbulb } from 'lucide-react';
 import { Activity, OEEObjectives, TaskType, User, ActionPlanItem, PlanAccionCalidad } from '../types';
 import { calculateStats, getWeekNumber } from './Dashboard';
 import { AREA_NAMES, JOSELITO_LOGO } from '../constants';
@@ -18,6 +18,7 @@ interface TOP60DashboardProps {
   operarios: User[];
   ideasMejora: any[];
   passwords?: any;
+  mermas?: any[];
   onSaveIDMObjectives?: (presentadas: number, cerradas: number) => Promise<boolean>;
 }
 
@@ -52,7 +53,7 @@ const TABS = [
   { id: 'seguridad', name: 'Seguridad' },
   { id: 'rrhh', name: 'RRHH' },
   { id: 'calidad', name: 'Calidad' },
-  { id: 'cmi', name: 'Cuadros de Mando' },
+  { id: 'cmi', name: 'Producción' },
   { id: 'idm', name: 'IdM' }
 ];
 
@@ -81,6 +82,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
   operarios, 
   ideasMejora,
   passwords,
+  mermas = [],
   onSaveIDMObjectives
 }) => {
   const [activeTab, setActiveTab] = useState('seguridad');
@@ -88,14 +90,34 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [reportProgress, setReportProgress] = useState({ current: 0, total: 0 });
 
-  // State for IDM objectives config
+  // State for IDM objectives config & table filter
   const [objPresentadasInput, setObjPresentadasInput] = useState(0);
   const [objCerradasInput, setObjCerradasInput] = useState(0);
+  const [idmFilterEstado, setIdmFilterEstado] = useState('Todos');
   const [isSavingObjectives, setIsSavingObjectives] = useState(false);
   const [isEditingUnlocked, setIsEditingUnlocked] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
+
+  // Security action plan table filters
+  const [secFilterEstado, setSecFilterEstado] = useState('Todos');
+  const [secFilterGap, setSecFilterGap] = useState('Todos');
+  const [secFilterResponsable, setSecFilterResponsable] = useState('Todos');
+
+  // Calidad action plan table filters
+  const [calFilterEstado, setCalFilterEstado] = useState('Todos');
+  const [calFilterOrigen, setCalFilterOrigen] = useState('Todos');
+
+  const getSecurityActionStatus = (r: any) => {
+    const real = r.fecha_implantacion_real || r.fechaImplantacionReal || '';
+    const prev = r.fecha_implantacion_prevista || r.fechaImplantacionPrevista || '';
+    if (real && real.trim() !== '') return 'Cerrado';
+    if (!prev) return r.estado || 'Abierto';
+    const today = new Date().toISOString().split('T')[0];
+    if (prev < today) return 'Retrasado';
+    return r.estado || 'En Marcha';
+  };
 
   // Update objectives input values when allObjectives is loaded
   useEffect(() => {
@@ -179,6 +201,24 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
 
   const [seguridadData, setSeguridadData] = useState<any[]>([]);
   const [dbPlanAccionRecords, setDbPlanAccionRecords] = useState<any[]>([]);
+
+  const availableGaps = useMemo(() => {
+    const gapsSet = new Set<string>();
+    dbPlanAccionRecords.forEach((r: any) => {
+      const g = r.gap?.trim();
+      if (g) gapsSet.add(g);
+    });
+    return Array.from(gapsSet).sort();
+  }, [dbPlanAccionRecords]);
+
+  const availableResponsables = useMemo(() => {
+    const respSet = new Set<string>();
+    dbPlanAccionRecords.forEach((r: any) => {
+      const resp = r.responsable?.trim();
+      if (resp) respSet.add(resp);
+    });
+    return Array.from(respSet).sort();
+  }, [dbPlanAccionRecords]);
   const [dbPlanCalidadRecords, setDbPlanCalidadRecords] = useState<PlanAccionCalidad[]>([]);
   const [dbRrhhRecords, setDbRrhhRecords] = useState<any[]>([]);
   const [rrhhData, setRrhhData] = useState<any[]>([]);
@@ -323,15 +363,24 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
       return objs || [];
     };
     
-    const objs = [...getObjectivesForArea(area)].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+    const objs = [...getObjectivesForArea(area)].sort((a, b) => {
+      const vComp = (b.valid_from || '').localeCompare(a.valid_from || '');
+      if (vComp !== 0) return vComp;
+      const aTop = (a.show_in_top15 || a.showInTop15 || a.show_in_top60 || a.showInTop60) ? 1 : 0;
+      const bTop = (b.show_in_top15 || b.showInTop15 || b.show_in_top60 || b.showInTop60) ? 1 : 0;
+      return bTop - aTop;
+    });
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     
     // Exact match for indicator
     const getVal = (id: string) => {
-      const spec = objs.find(o => o.valid_from <= dateStr && o.indicator_id === id);
-      if (spec && spec.objetivo) return spec.objetivo;
+      const spec = objs.find(o => (o.valid_from || '') <= dateStr && (
+        o.indicator_id === id ||
+        (id === 'pph_blister_emp' && (o.indicator_id === 'pph_blister' || o.indicator_id === 'pph_blister_emp' || o.indicator_id === 'pph'))
+      ));
+      if (spec && spec.objetivo !== undefined && spec.objetivo !== null) return spec.objetivo;
       
-      const master = objs.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id));
+      const master = objs.find(o => (o.valid_from || '') <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id));
       if (master) {
         if (id === 'disponibilidad') return master.disponibilidad || 0;
         if (id === 'rendimiento') return master.rendimiento || 0;
@@ -381,6 +430,160 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
     }
     return months;
   }, [selectedWeek, selectedYear]);
+
+  // SALA BLANCA 5 Indicators configuration
+  const SALA_BLANCA_INDICATORS = useMemo(() => [
+    {
+      id: 'pph_preparacion',
+      workshopId: 'sb-preparacion',
+      title: 'PPH Deshuesado/Prensado',
+      getValue: (stats: any) => parseFloat(stats.pph) || 0,
+      indicatorId: 'pph',
+      isPercentage: false,
+      color: '#6366f1',
+      unit: 'PPH'
+    },
+    {
+      id: 'oee_loncheado',
+      workshopId: 'sb-loncheado',
+      title: 'OEE Loncheado',
+      getValue: (stats: any) => parseFloat(stats.productividad) || 0,
+      indicatorId: 'productividad',
+      isPercentage: true,
+      color: '#3b82f6',
+      unit: '%'
+    },
+    {
+      id: 'merma_loncheado',
+      workshopId: 'sb-loncheado',
+      title: 'Merma Loncheado',
+      getValue: (stats: any) => parseFloat(stats.merma1) || 0,
+      indicatorId: 'merma1',
+      isPercentage: true,
+      color: '#f59e0b',
+      unit: '%'
+    },
+    {
+      id: 'pph_emp_loncheado',
+      workshopId: 'sb-empaquetado-loncheado',
+      title: 'PPH Empaquetado Loncheado',
+      getValue: (stats: any) => parseFloat(stats.pph_blister_emp) || parseFloat(stats.pph_blister) || parseFloat(stats.pph) || 0,
+      indicatorId: 'pph_blister_emp',
+      isPercentage: false,
+      color: '#8b5cf6',
+      unit: 'PPH'
+    },
+    {
+      id: 'pph_emp_deshuesado',
+      workshopId: 'sb-empaquetado-deshuesado',
+      title: 'PPH Emp. Deshuesado',
+      getValue: (stats: any) => parseFloat(stats.pph) || 0,
+      indicatorId: 'pph',
+      isPercentage: false,
+      color: '#06b6d4',
+      unit: 'PPH'
+    }
+  ], []);
+
+  const parseLocalDate = (dateStr: string) => {
+    if (!dateStr) return new Date();
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    }
+    return new Date(dateStr);
+  };
+
+  const salaBlancaWeeklyData = useMemo(() => {
+    return SALA_BLANCA_INDICATORS.map(ind => {
+      const dataPoints = last15Weeks.map(w => {
+        const weekActivities = allData.filter(a => {
+          if (!a.area || !a.fecha) return false;
+          if (a.area.toLowerCase() !== ind.workshopId.toLowerCase()) return false;
+          const d = parseLocalDate(a.fecha);
+          return getWeekNumber(d) === w.week && d.getFullYear() === w.year;
+        });
+
+        const weekMermas = (mermas || []).filter(m => {
+          if (!m.fecha || !m.area) return false;
+          if (m.area.toLowerCase() !== ind.workshopId.toLowerCase()) return false;
+          const md = parseLocalDate(m.fecha);
+          return getWeekNumber(md) === w.week && md.getFullYear() === w.year;
+        });
+
+        const date = new Date(w.year, 0, 1);
+        date.setDate(date.getDate() + (w.week - 1) * 7);
+
+        const hasData = weekActivities.length > 0 || weekMermas.length > 0;
+        let val = 0;
+        if (hasData) {
+          const stats = calculateStats(weekActivities, ind.workshopId, weekMermas);
+          val = ind.getValue(stats);
+        }
+
+        let obj = getObjectiveForDate(ind.workshopId, date, ind.indicatorId);
+        if (!obj && ind.id === 'merma_loncheado') {
+          obj = getObjectiveForDate(ind.workshopId, date, 'merma');
+        }
+
+        return {
+          name: `S${w.week}`,
+          value: val,
+          Objective: obj || 0,
+          week: w.week,
+          year: w.year,
+          date
+        };
+      });
+
+      return { ...ind, data: dataPoints };
+    });
+  }, [allData, mermas, last15Weeks, allObjectives, SALA_BLANCA_INDICATORS]);
+
+  const salaBlancaMonthlyData = useMemo(() => {
+    return SALA_BLANCA_INDICATORS.map(ind => {
+      const dataPoints = last15Months.map(m => {
+        const monthActivities = allData.filter(a => {
+          if (!a.area || !a.fecha) return false;
+          if (a.area.toLowerCase() !== ind.workshopId.toLowerCase()) return false;
+          const d = parseLocalDate(a.fecha);
+          return d.getMonth() === m.month && d.getFullYear() === m.year;
+        });
+
+        const monthMermas = (mermas || []).filter(m => {
+          if (!m.fecha || !m.area) return false;
+          if (m.area.toLowerCase() !== ind.workshopId.toLowerCase()) return false;
+          const md = parseLocalDate(m.fecha);
+          return md.getMonth() === m.month && md.getFullYear() === m.year;
+        });
+
+        const date = new Date(m.year, m.month, 1);
+
+        const hasData = monthActivities.length > 0 || monthMermas.length > 0;
+        let val = 0;
+        if (hasData) {
+          const stats = calculateStats(monthActivities, ind.workshopId, monthMermas);
+          val = ind.getValue(stats);
+        }
+
+        let obj = getObjectiveForDate(ind.workshopId, date, ind.indicatorId);
+        if (!obj && ind.id === 'merma_loncheado') {
+          obj = getObjectiveForDate(ind.workshopId, date, 'merma');
+        }
+
+        return {
+          name: m.label,
+          value: val,
+          Objective: obj || 0,
+          month: m.month,
+          year: m.year,
+          date
+        };
+      });
+
+      return { ...ind, data: dataPoints };
+    });
+  }, [allData, mermas, last15Months, allObjectives, SALA_BLANCA_INDICATORS]);
 
   const weeklyAbsentismo = useMemo(() => {
     return last15Weeks.map(w => {
@@ -1030,25 +1233,26 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
     }
   };
 
-  const renderEvolutionChart = (data: any[], dataKey: string, name: string, color: string, title: string, objectiveArea?: string, isPercentage?: boolean, isReport = false, chartType: 'area' | 'bar' = 'area') => {
+  const renderEvolutionChart = (data: any[], dataKey: string, name: string, color: string, title: string, objectiveArea?: string, isPercentage?: boolean, isReport = false, chartType: 'area' | 'bar' = 'area', indicatorId?: string) => {
     const chartData = data.map(d => {
-      let objValue = 0;
-      if (objectiveArea) {
-        // Try to find date in d. If not, use d.week/d.year to estimate
+      let objValue = d.Objective;
+      if ((objValue === undefined || objValue === 0) && objectiveArea) {
         let date = new Date();
         if (d.date) date = new Date(d.date);
         else if (d.year && d.week) {
           date = new Date(d.year, 0, 1);
           date.setDate(date.getDate() + (d.week - 1) * 7);
         }
-        objValue = getObjectiveForDate(objectiveArea, date);
+        objValue = getObjectiveForDate(objectiveArea, date, indicatorId);
       }
-      return { ...d, Objective: objValue };
+      return { ...d, Objective: objValue || 0 };
     });
+
+    const hasObjective = chartData.some(d => d.Objective > 0);
 
     const chart = (
       <ResponsiveContainer width="100%" height="100%" minHeight={isReport ? 220 : 250} debounce={100}>
-        <ComposedChart data={chartData} margin={{ top: 10, right: 10, bottom: 30, left: -20 }}>
+        <ComposedChart data={chartData} margin={{ top: 15, right: 10, bottom: 30, left: -20 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
           <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<CustomXAxisTick />} interval={0} />
           <YAxis 
@@ -1059,16 +1263,23 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
           />
           <Tooltip 
             contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '9px', fontWeight: 'bold'}}
-            formatter={(val: any, name: string) => isPercentage ? [`${Number(val).toFixed(1)}%`, name] : [val, name]}
+            formatter={(val: any, nameStr: string) => isPercentage ? [`${Number(val).toFixed(1)}%`, nameStr] : [val, nameStr]}
           />
           <Legend wrapperStyle={{fontSize: '8px', fontWeight: 'bold', paddingTop: '15px'}} />
           {chartType === 'bar' ? (
-            <Bar dataKey={dataKey} name={name} fill={color} radius={[2, 2, 0, 0]} maxBarSize={20} isAnimationActive={false} />
+            <Bar dataKey={dataKey} name={name} fill={color} radius={[2, 2, 0, 0]} maxBarSize={20} isAnimationActive={false}>
+              <LabelList 
+                dataKey={dataKey} 
+                position="top" 
+                formatter={(val: number) => val > 0 ? (isPercentage ? `${val.toFixed(1)}%` : `${val.toFixed(0)}`) : ''} 
+                style={{ fontSize: '7px', fontWeight: 'bold', fill: '#334155' }} 
+              />
+            </Bar>
           ) : (
             <Area type="monotone" dataKey={dataKey} name={name} stroke={color} fill={color} fillOpacity={0.1} strokeWidth={3} isAnimationActive={false} />
           )}
-          {objectiveArea && (
-            <Line type="stepAfter" dataKey="Objective" name="OBJETIVO" stroke="#ef4444" strokeWidth={3} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={false} />
+          {hasObjective && (
+            <Line type="stepAfter" dataKey="Objective" name="OBJETIVO" stroke="#ef4444" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={false} />
           )}
         </ComposedChart>
       </ResponsiveContainer>
@@ -1256,9 +1467,42 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
       return { name: m.label, count, date: new Date(m.year, m.month, 1) };
     });
 
-    // Filter items from the Preparation Tab's Security Plan (seguridadData)
-    // Show all actions as per user request
-    const securityActions = seguridadData;
+    // Filter items from the Preparation Tab's Security Plan (dbPlanAccionRecords)
+    const filteredSecurityActions = dbPlanAccionRecords.filter((action: any) => {
+      const prob = action.que_ha_ocurrido || action.queHaOcurrido || action.problema || '';
+      const acc = action.accion || '';
+      if (!prob && !acc && !action.tipo) return false;
+
+      // Filter by Estado
+      if (secFilterEstado !== 'Todos') {
+        const st = getSecurityActionStatus(action);
+        if (secFilterEstado === 'Retrasado') {
+          if (st !== 'Retrasado') return false;
+        } else if (secFilterEstado === 'Cerrado') {
+          if (st !== 'Cerrado') return false;
+        } else if (secFilterEstado === 'En Marcha') {
+          if (st !== 'En Marcha') return false;
+        } else if (secFilterEstado === 'Abierto') {
+          if (st !== 'Abierto') return false;
+        } else {
+          if (st !== secFilterEstado && action.estado !== secFilterEstado) return false;
+        }
+      }
+
+      // Filter by Gap
+      if (secFilterGap !== 'Todos') {
+        const gapVal = (action.gap || '').trim();
+        if (gapVal !== secFilterGap) return false;
+      }
+
+      // Filter by Responsables
+      if (secFilterResponsable !== 'Todos') {
+        const respVal = (action.responsable || '').trim();
+        if (respVal !== secFilterResponsable) return false;
+      }
+
+      return true;
+    });
 
     // Group dbPlanAccionRecords by Monday date
     const getMondayOfDateString = (dateStr: string) => {
@@ -1398,78 +1642,149 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
           </div>
         )}
 
-        {!onlyCharts && securityActions.length > 0 && (
+        {!onlyCharts && (
           <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-            <div className="flex items-center gap-3 mb-6 border-b border-slate-50 pb-4">
-              <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
-                <ActivityIcon size={20} />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
+                  <ActivityIcon size={20} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">
+                    Plan de Acción de Seguridad (Preparación)
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                    Historial completo de acciones ({filteredSecurityActions.length} de {dbPlanAccionRecords.length})
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Plan de Acción de Seguridad (Preparación)</h3>
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Historial completo de acciones</p>
+
+              {/* Filters Row */}
+              <div className="flex flex-wrap items-center gap-3">
+                {/* ESTADOS Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Estado:</span>
+                  <select
+                    value={secFilterEstado}
+                    onChange={(e) => setSecFilterEstado(e.target.value)}
+                    className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                  >
+                    <option value="Todos">Todos los estados</option>
+                    <option value="Abierto">Abierto</option>
+                    <option value="En Marcha">En Marcha</option>
+                    <option value="Cerrado">Cerrado</option>
+                    <option value="Retrasado">Retrasado</option>
+                  </select>
+                </div>
+
+                {/* GAPS Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">GAP:</span>
+                  <select
+                    value={secFilterGap}
+                    onChange={(e) => setSecFilterGap(e.target.value)}
+                    className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                  >
+                    <option value="Todos">Todos los GAPs</option>
+                    {availableGaps.map(gap => (
+                      <option key={gap} value={gap}>{gap}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* RESPONSABLES Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Responsable:</span>
+                  <select
+                    value={secFilterResponsable}
+                    onChange={(e) => setSecFilterResponsable(e.target.value)}
+                    className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                  >
+                    <option value="Todos">Todos los responsables</option>
+                    {availableResponsables.map(resp => (
+                      <option key={resp} value={resp}>{resp}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-100">
-                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Problema / Acción</th>
-                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Responsable</th>
-                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha Prevista</th>
-                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Taller (GAP)</th>
-                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {securityActions.map((action) => {
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    const planned = new Date(action.fecha_implantacion_prevista);
-                    planned.setHours(0, 0, 0, 0);
-                    const isClosed = !!(action.fecha_implantacion_real && action.fecha_implantacion_real.trim() !== '');
-                    const isOverdue = !isClosed && planned < today;
+            {filteredSecurityActions.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 flex flex-col items-center justify-center">
+                <ShieldAlert className="w-10 h-10 stroke-[1.5] mb-2 text-slate-300" />
+                <p className="font-bold text-xs">No hay acciones de seguridad que coincidan con los filtros seleccionados</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[700px]">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Problema / Acción</th>
+                      <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Responsable</th>
+                      <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha Prevista</th>
+                      <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Taller (GAP)</th>
+                      <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSecurityActions.map((action: any) => {
+                      const problema = action.que_ha_ocurrido || action.queHaOcurrido || action.problema || '-';
+                      const accionText = action.accion || '-';
+                      const responsable = action.responsable || '-';
+                      const gap = action.gap || '-';
+                      const prevDate = action.fecha_implantacion_prevista || action.fechaImplantacionPrevista || '';
+                      const realDate = action.fecha_implantacion_real || action.fechaImplantacionReal || '';
+                      
+                      const status = getSecurityActionStatus(action);
+                      const isClosed = status === 'Cerrado';
+                      const isOverdue = status === 'Retrasado';
 
-                    return (
-                      <tr key={action.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                        <td className="py-4 px-4">
-                          <div className="text-xs font-bold text-slate-800 mb-1">{action.problema}</div>
-                          <div className="text-[10px] text-slate-500 leading-relaxed">{action.accion}</div>
-                        </td>
-                        <td className="py-4 px-4">
-                          <span className="text-[10px] font-black text-slate-600 bg-slate-100 px-2 py-1 rounded-md uppercase">
-                            {action.responsable}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4">
-                          <div className={`text-[10px] font-bold ${isOverdue ? 'text-red-500' : 'text-slate-600'}`}>
-                            {new Date(action.fecha_implantacion_prevista).toLocaleDateString('es-ES')}
-                          </div>
-                          {isClosed && (
-                            <div className="text-[8px] text-emerald-600 font-black uppercase mt-1">
-                              Cerrada: {new Date(action.fecha_implantacion_real!).toLocaleDateString('es-ES')}
+                      const statusColor = isClosed
+                        ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                        : isOverdue
+                        ? 'bg-red-100 text-red-600 border border-red-200'
+                        : status === 'En Marcha'
+                        ? 'bg-green-50 text-green-700 border border-green-100'
+                        : 'bg-sky-50 text-sky-700 border border-sky-100';
+
+                      return (
+                        <tr key={action.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                          <td className="py-4 px-4">
+                            <div className="text-xs font-bold text-slate-800 mb-1">{problema}</div>
+                            <div className="text-[10px] text-slate-500 leading-relaxed">{accionText}</div>
+                          </td>
+                          <td className="py-4 px-4">
+                            <span className="text-[10px] font-black text-slate-600 bg-slate-100 px-2 py-1 rounded-md uppercase">
+                              {responsable}
+                            </span>
+                          </td>
+                          <td className="py-4 px-4 font-mono">
+                            <div className={`text-[10px] font-bold ${isOverdue ? 'text-red-500' : 'text-slate-600'}`}>
+                              {prevDate ? formatDateDMY(prevDate) : '-'}
                             </div>
-                          )}
-                        </td>
-                        <td className="py-4 px-4">
-                          <span className="text-[10px] font-bold text-slate-500 uppercase">
-                            {action.gap}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4">
-                          <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${
-                            isClosed ? 'bg-emerald-100 text-emerald-600' :
-                            isOverdue ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
-                          }`}>
-                            {isClosed ? 'Cerrada' : isOverdue ? 'Retrasada' : 'En marcha'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                            {isClosed && realDate && (
+                              <div className="text-[8px] text-emerald-600 font-black uppercase mt-1">
+                                Cerrada: {formatDateDMY(realDate)}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-4 px-4">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase">
+                              {gap}
+                            </span>
+                          </td>
+                          <td className="py-4 px-4">
+                            <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full ${statusColor}`}>
+                              {status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1641,6 +1956,27 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
 
     const sortedCalidad = [...dbPlanCalidadRecords].sort((a, b) => b.fecha.localeCompare(a.fecha));
 
+    const filteredCalidad = sortedCalidad.filter((item) => {
+      // 1. Filter by Estado
+      if (calFilterEstado !== 'Todos') {
+        const st = getCalidadGlobalStatusLocal(item);
+        if (st !== calFilterEstado) return false;
+      }
+
+      // 2. Filter by Origen
+      if (calFilterOrigen !== 'Todos') {
+        if (calFilterOrigen === 'Interna') {
+          if (item.origen !== 'Interna') return false;
+        } else if (calFilterOrigen === 'Externa') {
+          if (item.origen !== 'Externa') return false;
+        } else if (calFilterOrigen === 'Sin especificar') {
+          if (item.origen === 'Interna' || item.origen === 'Externa') return false;
+        }
+      }
+
+      return true;
+    });
+
     return (
       <div className="flex flex-col gap-8">
         {/* GRÁFICOS */}
@@ -1669,20 +2005,59 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
 
         {/* TABLA HISTORIAL */}
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col mt-6">
-          <div className="flex items-center gap-3 mb-6 border-b border-slate-50 pb-4">
-            <div className="w-10 h-10 bg-rose-100 rounded-xl flex items-center justify-center text-rose-600">
-              <ShieldAlert size={20} />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-slate-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-rose-100 rounded-xl flex items-center justify-center text-rose-600">
+                <ShieldAlert size={20} />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Historial de No Conformidades</h3>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                  Plan de Acción de Calidad Completo ({filteredCalidad.length} de {dbPlanCalidadRecords.length})
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Historial de No Conformidades</h3>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Plan de Acción de Calidad Completo</p>
+
+            {/* Filters Row */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* ESTADO Filter */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Estado:</span>
+                <select
+                  value={calFilterEstado}
+                  onChange={(e) => setCalFilterEstado(e.target.value)}
+                  className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                >
+                  <option value="Todos">Todos los estados</option>
+                  <option value="Abierto">Abierto</option>
+                  <option value="En Marcha">En Marcha</option>
+                  <option value="Cerrado">Cerrado</option>
+                  <option value="Retrasado">Retrasado</option>
+                </select>
+              </div>
+
+              {/* ORIGEN Filter */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Origen:</span>
+                <select
+                  value={calFilterOrigen}
+                  onChange={(e) => setCalFilterOrigen(e.target.value)}
+                  className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                >
+                  <option value="Todos">Todos los orígenes</option>
+                  <option value="Interna">Interna</option>
+                  <option value="Externa">Externa</option>
+                  <option value="Sin especificar">Sin especificar</option>
+                </select>
+              </div>
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            {sortedCalidad.length === 0 ? (
-              <div className="text-center py-8 text-slate-400 font-bold uppercase tracking-wider text-xs">
-                No hay reclamaciones registradas todavía.
+            {filteredCalidad.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 font-bold uppercase tracking-wider text-xs flex flex-col items-center justify-center">
+                <ShieldAlert className="w-10 h-10 stroke-[1.5] mb-2 text-slate-300" />
+                <p>No hay registros de no conformidades que coincidan con los filtros seleccionados</p>
               </div>
             ) : (
               <table className="min-w-[1500px] w-full text-left border-collapse">
@@ -1705,7 +2080,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedCalidad.map((r) => {
+                  {filteredCalidad.map((r) => {
                     const status = getCalidadGlobalStatusLocal(r);
                     let statusBg = 'bg-slate-100 text-slate-600';
                     if (status === 'Cerrado') statusBg = 'bg-emerald-100 text-emerald-700';
@@ -2075,6 +2450,157 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
           {renderIdMEvolutionChart(monthlyIdM, [{ key: 'rechazadas', name: 'RECHAZADAS', color: '#ef4444' }], undefined, undefined, undefined, 'Ideas Rechazadas (Meses)', isReport)}
         </div>
 
+        {/* Historial de Ideas de Mejora Table */}
+        {(() => {
+          const filteredTableIdeas = ideasMejora.filter(idea => {
+            if (idmFilterEstado === 'Todos') return true;
+            const estado = idea.estado || getIdeaStatus(idea);
+            if (idmFilterEstado === 'Retrasado') {
+              return estado === 'Retrasado';
+            }
+            return estado === idmFilterEstado;
+          });
+
+          return (
+            <div className="mt-8 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">
+                    Historial de Ideas de Mejora
+                  </h3>
+                  <p className="text-xs text-slate-400 font-bold mt-0.5">
+                    Listado completo de todas las ideas de mejora registradas ({filteredTableIdeas.length} de {ideasMejora.length})
+                  </p>
+                </div>
+
+                {/* Filter by Estado */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Estado:</span>
+                  <select
+                    value={idmFilterEstado}
+                    onChange={(e) => setIdmFilterEstado(e.target.value)}
+                    className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="Todos">Todos los estados</option>
+                    <option value="Abierto">Abierto</option>
+                    <option value="En Marcha">En Marcha</option>
+                    <option value="Cerrado">Cerrado</option>
+                    <option value="Retrasado">Retrasado</option>
+                  </select>
+                </div>
+              </div>
+
+              {filteredTableIdeas.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 flex flex-col items-center justify-center">
+                  <Lightbulb className="w-10 h-10 stroke-[1.5] mb-2 text-slate-300" />
+                  <p className="font-bold text-xs">No hay ideas de mejora que coincidan con el filtro</p>
+                </div>
+              ) : (
+                <div className="border border-slate-100 rounded-2xl overflow-x-auto shadow-sm">
+                  <table className="w-full text-left text-xs font-bold text-slate-700 min-w-[900px]">
+                    <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-wider border-b border-slate-100">
+                      <tr>
+                        <th className="px-4 py-3 text-center w-12">Nº</th>
+                        <th className="px-4 py-3">Sugerencia</th>
+                        <th className="px-4 py-3">Emisor</th>
+                        <th className="px-4 py-3">F. Creación</th>
+                        <th className="px-4 py-3">F. Emisión</th>
+                        <th className="px-4 py-3">Aprobada</th>
+                        <th className="px-4 py-3">Responsable</th>
+                        <th className="px-4 py-3">F. Prevista</th>
+                        <th className="px-4 py-3">F. Cierre</th>
+                        <th className="px-4 py-3">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50 bg-white">
+                      {filteredTableIdeas.map((idea, idx) => {
+                        const numeroSugerencia = idea.numeroSugerencia || idea.numero_sugerencia || idea.id || (idx + 1);
+                        const sugerencia = idea.sugerencia || idea.descripcion || idea.idea || '-';
+                        const emisor = idea.recurso || idea.emisor || idea.autor || '-';
+                        
+                        const fechaCreacionRaw = idea.fechaCreacion || idea.fecha_creacion || idea.created_at;
+                        const fechaCreacion = fechaCreacionRaw ? formatDateDMY(fechaCreacionRaw) : '-';
+
+                        const fechaEmisionRaw = idea.fechaEmision || idea.fecha_emision;
+                        const fechaEmision = fechaEmisionRaw ? formatDateDMY(fechaEmisionRaw) : '-';
+
+                        const isSi = idea.aprobada === 'Sí' || idea.aprobada === 'SI' || idea.aprobada === 'si';
+                        const isNo = idea.aprobada === 'No' || idea.aprobada === 'NO' || idea.aprobada === 'no';
+                        const aprobadaLabel = isSi ? 'Sí' : isNo ? 'No' : (idea.aprobada || 'Pendiente');
+                        const aprobadaColor = isSi 
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                          : isNo 
+                          ? 'bg-rose-50 text-rose-700 border-rose-100' 
+                          : 'bg-amber-50 text-amber-700 border-amber-100';
+
+                        const responsable = idea.responsable || '-';
+
+                        const fechaPrevistaRaw = idea.fechaEjecucionPrevista || idea.fecha_ejecucion_prevista || idea.fecha_prevista || idea.fechaPrevista;
+                        const fechaPrevista = fechaPrevistaRaw ? formatDateDMY(fechaPrevistaRaw) : '-';
+
+                        const fechaCierreRaw = idea.fechaCierre || idea.fecha_cierre;
+                        const fechaCierre = fechaCierreRaw ? (formatDateDMY(fechaCierreRaw) || '-') : '-';
+
+                        const estado = idea.estado || getIdeaStatus(idea);
+                        const estadoColor = estado === 'Cerrado' 
+                          ? 'bg-slate-100 text-slate-600 border-slate-200' 
+                          : estado === 'Abierto' 
+                          ? 'bg-sky-50 text-sky-700 border-sky-100' 
+                          : estado === 'Retrasado' 
+                          ? 'bg-red-50 text-red-700 border-red-100' 
+                          : 'bg-green-50 text-green-700 border-green-100';
+
+                        const recursoColor = 'bg-slate-50 text-slate-700 border-slate-200';
+
+                        return (
+                          <tr key={idea.id || idx} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="px-4 py-3.5 text-center text-slate-400 font-mono font-bold">
+                              {numeroSugerencia}
+                            </td>
+                            <td className="px-4 py-3.5 max-w-xs break-words">
+                              <p className="text-slate-900 leading-normal">{sugerencia}</p>
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full border text-[10px] ${recursoColor}`}>
+                                {emisor}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-slate-500 font-mono">
+                              {fechaCreacion}
+                            </td>
+                            <td className="px-4 py-3.5 text-slate-500 font-mono">
+                              {fechaEmision}
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full border text-[10px] ${aprobadaColor}`}>
+                                {aprobadaLabel}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-slate-900">
+                              {responsable}
+                            </td>
+                            <td className="px-4 py-3.5 text-slate-500 font-mono">
+                              {fechaPrevista}
+                            </td>
+                            <td className="px-4 py-3.5 text-slate-500 font-mono">
+                              {fechaCierre}
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full border text-[10px] ${estadoColor}`}>
+                                {estado}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* PIN modal */}
         {showPinModal && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
@@ -2371,7 +2897,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
 
           {/* PAGE 2b: SEGURIDAD ACTION PLAN (LANDSCAPE) */}
           {(() => {
-            const securityActions = seguridadData.filter(a => a.problema || a.accion);
+            const securityActions = dbPlanAccionRecords.filter(a => a.que_ha_ocurrido || a.queHaOcurrido || a.problema || a.accion);
             const actionChunks = chunkArray(securityActions, 8); // 8 actions per landscape page
             
             return actionChunks.map((chunk, idx) => (
@@ -2413,37 +2939,39 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {chunk.map((action: any) => {
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        const planned = new Date(action.fecha_implantacion_prevista);
-                        planned.setHours(0, 0, 0, 0);
-                        const isClosed = !!(action.fecha_implantacion_real && action.fecha_implantacion_real.trim() !== '');
-                        const isOverdue = !isClosed && planned < today;
+                        const problema = action.que_ha_ocurrido || action.queHaOcurrido || action.problema || '-';
+                        const accionText = action.accion || '-';
+                        const prevDate = action.fecha_implantacion_prevista || action.fechaImplantacionPrevista || '';
+                        const realDate = action.fecha_implantacion_real || action.fechaImplantacionReal || '';
+                        
+                        const status = getSecurityActionStatus(action);
+                        const isClosed = status === 'Cerrado';
+                        const isOverdue = status === 'Retrasado';
 
                         return (
                           <tr key={action.id} className="hover:bg-slate-50/50 transition-colors">
                             <td className="py-5 px-6">
-                              <div className="text-xs font-black text-slate-800 mb-1 uppercase tracking-tight">{action.problema}</div>
-                              <div className="text-[10px] text-slate-500 leading-relaxed italic">{action.accion}</div>
+                              <div className="text-xs font-black text-slate-800 mb-1 uppercase tracking-tight">{problema}</div>
+                              <div className="text-[10px] text-slate-500 leading-relaxed italic">{accionText}</div>
                             </td>
                             <td className="py-5 px-6">
                               <span className="text-[10px] font-black text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg uppercase">
-                                {action.responsable}
+                                {action.responsable || '-'}
                               </span>
                             </td>
-                            <td className="py-5 px-6">
+                            <td className="py-5 px-6 font-mono">
                               <div className={`text-[10px] font-black ${isOverdue ? 'text-red-500' : 'text-slate-700'}`}>
-                                {new Date(action.fecha_implantacion_prevista).toLocaleDateString('es-ES')}
+                                {prevDate ? formatDateDMY(prevDate) : '-'}
                               </div>
-                              {isClosed && (
+                              {isClosed && realDate && (
                                 <div className="text-[8px] text-emerald-600 font-black uppercase mt-1">
-                                  Cerrada: {new Date(action.fecha_implantacion_real!).toLocaleDateString('es-ES')}
+                                  Cerrada: {formatDateDMY(realDate)}
                                 </div>
                               )}
                             </td>
                             <td className="py-5 px-6">
                               <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                                {action.gap}
+                                {action.gap || '-'}
                               </span>
                             </td>
                             <td className="py-5 px-6">
@@ -2451,7 +2979,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
                                 isClosed ? 'bg-emerald-100 text-emerald-600' :
                                 isOverdue ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
                               }`}>
-                                {isClosed ? 'Cerrada' : isOverdue ? 'Retrasada' : 'En marcha'}
+                                {status}
                               </span>
                             </td>
                           </tr>
@@ -2878,39 +3406,46 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
         {activeTab === 'idm' && renderIdMTab()}
         {activeTab === 'cmi' && (
           <div className="space-y-8">
-            {TALLERES_POR_AREA.map(areaGroup => {
+            <div className="flex items-center gap-2 px-2">
+              <div className="h-0.5 flex-1 bg-slate-800 rounded-full"></div>
+              <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">SALA BLANCA</h2>
+              <div className="h-0.5 flex-1 bg-slate-800 rounded-full"></div>
+            </div>
+
+            {salaBlancaWeeklyData.map((ind, idx) => {
+              const mInd = salaBlancaMonthlyData[idx];
               return (
-                <div key={areaGroup.area} className="space-y-4">
+                <div key={ind.id} className="space-y-3 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
                   <div className="flex items-center gap-2 px-2">
-                    <div className="h-0.5 flex-1 bg-slate-800 rounded-full"></div>
-                    <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest">{areaGroup.area}</h2>
-                    <div className="h-0.5 flex-1 bg-slate-800 rounded-full"></div>
+                    <div className="h-px flex-1 bg-slate-200"></div>
+                    <h3 className="text-xs font-black text-slate-700 uppercase tracking-widest">{ind.title}</h3>
+                    <div className="h-px flex-1 bg-slate-200"></div>
                   </div>
-
-                  <div className="space-y-8 pl-2 border-l-2 border-slate-200 ml-2">
-                    {areaGroup.talleres.map(ws => {
-                      const objs = allObjectives[ws.id] || [];
-                      const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
-                      const spec = sorted.find(o => o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id);
-                      const isVisible = spec ? (spec.showInTop60 !== undefined ? !!spec.showInTop60 : true) : true;
-                      if (!isVisible) return null;
-
-                      const { weeklyData, monthlyData } = getWorkshopData(ws.id);
-
-                      return (
-                        <div key={ws.id} className="space-y-3">
-                          <div className="flex items-center gap-2 px-2">
-                            <div className="h-px flex-1 bg-slate-200"></div>
-                            <h3 className="text-[14px] font-black text-slate-600 uppercase tracking-widest">{ws.name}</h3>
-                            <div className="h-px flex-1 bg-slate-200"></div>
-                          </div>
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            {renderChart(weeklyData, `SEMANAL`, ws.id)}
-                            {renderChart(monthlyData, `MENSUAL`, ws.id)}
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {renderEvolutionChart(
+                      ind.data,
+                      'value',
+                      ind.unit,
+                      ind.color,
+                      `${ind.title} (Semanas)`,
+                      ind.workshopId,
+                      ind.isPercentage,
+                      false,
+                      'bar',
+                      ind.indicatorId
+                    )}
+                    {renderEvolutionChart(
+                      mInd.data,
+                      'value',
+                      mInd.unit,
+                      mInd.color,
+                      `${mInd.title} (Meses)`,
+                      mInd.workshopId,
+                      mInd.isPercentage,
+                      false,
+                      'bar',
+                      mInd.indicatorId
+                    )}
                   </div>
                 </div>
               );

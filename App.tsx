@@ -3833,6 +3833,7 @@ const App: React.FC = () => {
                           operarios={operarios}
                           ideasMejora={ideasMejora}
                           passwords={passwords}
+                          mermas={mermas}
                           onSaveIDMObjectives={handleSaveIDMObjectives}
                         />
                       )

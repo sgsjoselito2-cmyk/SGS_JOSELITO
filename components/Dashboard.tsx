@@ -322,30 +322,39 @@ export const calculateStats = (
   let cantidad_colgada = 0;
   const calcPPHFromMinutes = (m: number, qty: number) => m > 0 ? qty / (m / 60) : 0;
 
+  const isP = (a: any) => a.tipoTarea === TaskType.PRODUCCION || a.tipoTarea === 'P';
+  const getDur = (a: any) => Number(a.duracionMin ?? (a as any).duracion_min ?? 0);
+  const getOps = (a: any) => Array.isArray(a.operarios) ? a.operarios.length : (parseInt(a.operarios) || 1);
+
   if (aid.includes('sb-preparacion')) {
-    const acts = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && a.formato?.toUpperCase().includes('PESAR'));
-    const pmInput = acts.reduce((sum, a) => sum + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0);
-    const qtyInput = acts.reduce((sum, a) => sum + (a.cantidad || 0), 0);
+    const acts = data.filter(a => isP(a));
+    const pmInput = acts.reduce((sum, a) => sum + getDur(a) * getOps(a), 0);
+    const qtyInput = acts.reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
     pph = calcPPHFromMinutes(pmInput, qtyInput);
   } else if (aid.includes('sb-empaquetado-deshuesado') || aid.includes('env-envasado') || aid.includes('env-empaquetado')) {
-    const acts = data.filter(a => a.tipoTarea === TaskType.PRODUCCION);
-    const pmInput = acts.reduce((sum, a) => sum + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0);
-    const qtyInput = acts.reduce((sum, a) => sum + (a.cantidad || 0), 0);
+    const acts = data.filter(a => isP(a));
+    const pmInput = acts.reduce((sum, a) => sum + getDur(a) * getOps(a), 0);
+    const qtyInput = acts.reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
     pph = calcPPHFromMinutes(pmInput, qtyInput);
   } else if (aid.includes('sb-empaquetado-loncheado')) {
-    const bActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && (a.formato?.toUpperCase().includes('BLISTER') || a.formato?.toUpperCase().includes('BLÍSTER')));
-    const cuchilloActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && a.formato?.toUpperCase().includes('CUCHILLO'));
-    const sinMarcarActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && a.formato?.toUpperCase().includes('SIN MARCAR'));
-    const jabuActs = data.filter(a => a.tipoTarea === TaskType.PRODUCCION && a.formato?.toUpperCase().includes('JABU'));
+    const bActs = data.filter(a => isP(a) && (!a.formato || a.formato.toUpperCase().includes('BLISTER') || a.formato.toUpperCase().includes('BLÍSTER')));
+    const cuchilloActs = data.filter(a => isP(a) && a.formato?.toUpperCase().includes('CUCHILLO'));
+    const sinMarcarActs = data.filter(a => isP(a) && a.formato?.toUpperCase().includes('SIN MARCAR'));
+    const jabuActs = data.filter(a => isP(a) && a.formato?.toUpperCase().includes('JABU'));
 
-    pph_blister_emp = calcPPHFromMinutes(bActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), bActs.reduce((s, a) => s + (a.cantidad || 0), 0));
-    pph_sin_blister_cuchillo = calcPPHFromMinutes(cuchilloActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), cuchilloActs.reduce((s, a) => s + (a.cantidad || 0), 0));
-    pph_sin_marcar = calcPPHFromMinutes(sinMarcarActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), sinMarcarActs.reduce((s, a) => s + (a.cantidad || 0), 0));
-    pph_empaquetado_jabu = calcPPHFromMinutes(jabuActs.reduce((s, a) => s + (a.duracionMin || 0) * (Array.isArray(a.operarios) ? a.operarios.length : 1), 0), jabuActs.reduce((s, a) => s + (a.cantidad || 0), 0));
+    pph_blister_emp = calcPPHFromMinutes(bActs.reduce((s, a) => s + getDur(a) * getOps(a), 0), bActs.reduce((s, a) => s + Number(a.cantidad || 0), 0));
+    if (pph_blister_emp === 0) {
+      const allP = data.filter(a => isP(a));
+      pph_blister_emp = calcPPHFromMinutes(allP.reduce((s, a) => s + getDur(a) * getOps(a), 0), allP.reduce((s, a) => s + Number(a.cantidad || 0), 0));
+    }
+    pph_sin_blister_cuchillo = calcPPHFromMinutes(cuchilloActs.reduce((s, a) => s + getDur(a) * getOps(a), 0), cuchilloActs.reduce((s, a) => s + Number(a.cantidad || 0), 0));
+    pph_sin_marcar = calcPPHFromMinutes(sinMarcarActs.reduce((s, a) => s + getDur(a) * getOps(a), 0), sinMarcarActs.reduce((s, a) => s + Number(a.cantidad || 0), 0));
+    pph_empaquetado_jabu = calcPPHFromMinutes(jabuActs.reduce((s, a) => s + getDur(a) * getOps(a), 0), jabuActs.reduce((s, a) => s + Number(a.cantidad || 0), 0));
 
     // Support old variables as fallback aliases
     pph_blister = pph_blister_emp;
     pph_sin_blister = pph_sin_blister_cuchillo;
+    pph = pph_blister_emp;
   } else if (aid.includes('movimiento-jamones')) {
     const actsJamones = data.filter(a =>
       a.formato === 'COLGAR JAMONES'
