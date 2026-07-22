@@ -5,7 +5,7 @@ import {
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
 import { Activity as ActivityIcon, ShieldAlert, Clock, Users, Lock, Unlock, Save } from 'lucide-react';
-import { Activity, OEEObjectives, TaskType, User, ActionPlanItem } from '../types';
+import { Activity, OEEObjectives, TaskType, User, ActionPlanItem, PlanAccionCalidad } from '../types';
 import { calculateStats, getWeekNumber } from './Dashboard';
 import { AREA_NAMES, JOSELITO_LOGO } from '../constants';
 import HelpModal from './HelpModal';
@@ -53,9 +53,26 @@ const TABS = [
   { id: 'rrhh', name: 'RRHH' },
   { id: 'calidad', name: 'Calidad' },
   { id: 'cmi', name: 'Cuadros de Mando' },
-  { id: 'adherencia', name: 'Adherencia' },
   { id: 'idm', name: 'IdM' }
 ];
+
+const formatDateDMY = (dateStr: string) => {
+  if (!dateStr) return '';
+  try {
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
+  } catch (e) {
+    return dateStr;
+  }
+};
 
 const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({ 
   activities, 
@@ -161,7 +178,8 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
   });
 
   const [seguridadData, setSeguridadData] = useState<any[]>([]);
-  const [dbSeguridadRecords, setDbSeguridadRecords] = useState<any[]>([]);
+  const [dbPlanAccionRecords, setDbPlanAccionRecords] = useState<any[]>([]);
+  const [dbPlanCalidadRecords, setDbPlanCalidadRecords] = useState<PlanAccionCalidad[]>([]);
   const [dbRrhhRecords, setDbRrhhRecords] = useState<any[]>([]);
   const [rrhhData, setRrhhData] = useState<any[]>([]);
   const [ausentismoData, setAusentismoData] = useState<any[]>([]);
@@ -211,20 +229,33 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
     setCalidadData(safeParse('zitron_top60_calidad', []));
     setActionPlanData(safeParse('zitron_top60_actionplan', []));
 
-    // Fetch seguridad_top60 from Supabase
-    const fetchDbSeguridad = async () => {
+    // Fetch plan_accion_seguridad from Supabase
+    const fetchDbPlanAccion = async () => {
       try {
-        const { data, error } = await supabase.from('seguridad_top60').select('*');
+        const { data, error } = await supabase.from('plan_accion_seguridad').select('*');
         if (error) {
-          console.error("Error fetching seguridad_top60:", error);
+          console.error("Error fetching plan_accion_seguridad:", error);
         } else if (data) {
-          setDbSeguridadRecords(data);
+          setDbPlanAccionRecords(data);
+          const mappedActions = data.map((r: any) => ({
+            id: r.id,
+            fecha: r.fecha,
+            tipo: r.tipo,
+            gap: r.gap,
+            problema: r.que_ha_ocurrido || r.queHaOcurrido || '',
+            accion: r.accion || '',
+            responsable: r.responsable || '',
+            fecha_implantacion_prevista: r.fecha_implantacion_prevista || r.fechaImplantacionPrevista || '',
+            fecha_implantacion_real: r.fecha_implantacion_real || r.fechaImplantacionReal || '',
+            estado: r.estado
+          }));
+          setSeguridadData(mappedActions);
         }
       } catch (e) {
-        console.error("Error in fetchDbSeguridad:", e);
+        console.error("Error in fetchDbPlanAccion:", e);
       }
     };
-    fetchDbSeguridad();
+    fetchDbPlanAccion();
 
     // Fetch top60_rrhh from Supabase
     const fetchDbRrhh = async () => {
@@ -240,7 +271,87 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
       }
     };
     fetchDbRrhh();
+
+    // Fetch plan_accion_calidad from Supabase
+    const fetchDbPlanCalidad = async () => {
+      try {
+        const { data, error } = await supabase.from('plan_accion_calidad').select('*');
+        if (error) {
+          console.error("Error fetching plan_accion_calidad:", error);
+        } else if (data) {
+          const mapped = data.map((dbItem: any) => ({
+            id: dbItem.id,
+            fecha: dbItem.fecha,
+            tipoReclamacion: dbItem.tipo_reclamacion || dbItem.tipoReclamacion || '',
+            areaCausante: dbItem.area_causante || dbItem.areaCausante || '',
+            descripcionProblema: dbItem.descripcion_problema || dbItem.descripcionProblema || '',
+            accionContenedora: dbItem.accion_contenedora || dbItem.accionContenedora || '',
+            responsableContenedora: dbItem.responsable_contenedora || dbItem.responsableContenedora || '',
+            fechaPrevistaContenedora: dbItem.fecha_prevista_contenedora || dbItem.fechaPrevistaContenedora || '',
+            fechaCierreContenedora: dbItem.fecha_cierre_contenedora || dbItem.fechaCierreContenedora || undefined,
+            accionCorrectora: dbItem.accion_correctora || dbItem.accionCorrectora || '',
+            responsableCorrectora: dbItem.responsable_correctora || dbItem.responsableCorrectora || '',
+            fechaPrevistaCorrectora: dbItem.fecha_prevista_correctora || dbItem.fechaPrevistaCorrectora || '',
+            fechaCierreCorrectora: dbItem.fecha_cierre_correctora || dbItem.fechaCierreCorrectora || undefined,
+            origen: dbItem.origen || undefined,
+          }));
+          setDbPlanCalidadRecords(mapped);
+        }
+      } catch (e) {
+        console.error("Error in fetchDbPlanCalidad:", e);
+      }
+    };
+    fetchDbPlanCalidad();
   }, []);
+
+  const getObjectiveForDate = (area: string, date: Date, indicatorId: string = 'productividad') => {
+    const getObjectivesForArea = (areaId: string) => {
+      let objs = allObjectives[areaId];
+      if (!objs) {
+        const key = Object.keys(allObjectives).find(k => k.toLowerCase() === areaId.toLowerCase());
+        objs = key ? allObjectives[key] : undefined;
+      }
+      
+      // Fallback for unified rrhh areas
+      if (!objs || objs.length === 0) {
+        if (areaId === 'absentismo') {
+          objs = allObjectives['absentismo-mod'] || allObjectives['Absentismo-MOD'] || [];
+        } else if (areaId === 'ausentismo') {
+          objs = allObjectives['ausentismo-mod'] || allObjectives['Ausentismo-MOD'] || [];
+        }
+      }
+      return objs || [];
+    };
+    
+    const objs = [...getObjectivesForArea(area)].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    
+    // Exact match for indicator
+    const getVal = (id: string) => {
+      const spec = objs.find(o => o.valid_from <= dateStr && o.indicator_id === id);
+      if (spec && spec.objetivo) return spec.objetivo;
+      
+      const master = objs.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id));
+      if (master) {
+        if (id === 'disponibilidad') return master.disponibilidad || 0;
+        if (id === 'rendimiento') return master.rendimiento || 0;
+        if (id === 'calidad') return master.calidad || 0;
+      }
+      return 0;
+    };
+
+    if (indicatorId === 'productividad' || indicatorId === 'oee') {
+      const specProd = objs.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee'));
+      if (specProd && specProd.objetivo) return specProd.objetivo;
+      
+      const d = getVal('disponibilidad');
+      const r = getVal('rendimiento');
+      const c = getVal('calidad');
+      return parseFloat(((d * r * c) / 10000).toFixed(1));
+    }
+
+    return getVal(indicatorId);
+  };
 
   const allData = useMemo(() => [...history, ...activities], [history, activities]);
 
@@ -270,6 +381,292 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
     }
     return months;
   }, [selectedWeek, selectedYear]);
+
+  const weeklyAbsentismo = useMemo(() => {
+    return last15Weeks.map(w => {
+      // 1. Search for PERSONAL_TOP60 record
+      const personalRecord = dbRrhhRecords.find(r => {
+        if (!r.fecha) return false;
+        const parts = r.fecha.split('-');
+        const d = parts.length === 3 ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])) : new Date(r.fecha);
+        return getWeekNumber(d) === w.week && d.getFullYear() === w.year && r.area === 'PERSONAL_TOP60';
+      });
+
+      // 2. Search for legacy absentismo record
+      const legacyRecord = dbRrhhRecords.find(r => {
+        if (!r.fecha) return false;
+        const parts = r.fecha.split('-');
+        const d = parts.length === 3 ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])) : new Date(r.fecha);
+        return getWeekNumber(d) === w.week && d.getFullYear() === w.year && r.area === 'absentismo';
+      });
+
+      let pct = 0;
+      if (personalRecord) {
+        try {
+          const parsed = JSON.parse(personalRecord.comentarios);
+          const teo = parsed.jornadasTeoricas || 0;
+          const baja = parsed.jornadasPerdidasBaja || 0;
+          pct = teo > 0 ? (baja / teo) * 100 : 0;
+        } catch (e) {
+          pct = Number(personalRecord.valor || 0);
+        }
+      } else if (legacyRecord) {
+        pct = Number(legacyRecord.valor || 0);
+      }
+
+      return {
+        name: w.label,
+        value: pct,
+        week: w.week,
+        year: w.year
+      };
+    });
+  }, [dbRrhhRecords, last15Weeks]);
+
+  const monthlyAbsentismo = useMemo(() => {
+    return last15Months.map(m => {
+      const personalRecords = dbRrhhRecords.filter(r => {
+        if (!r.fecha) return false;
+        const parts = r.fecha.split('-');
+        const d = parts.length === 3 ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])) : new Date(r.fecha);
+        return d.getMonth() === m.month && d.getFullYear() === m.year && r.area === 'PERSONAL_TOP60';
+      });
+
+      const legacyRecords = dbRrhhRecords.filter(r => {
+        if (!r.fecha) return false;
+        const parts = r.fecha.split('-');
+        const d = parts.length === 3 ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])) : new Date(r.fecha);
+        return d.getMonth() === m.month && d.getFullYear() === m.year && r.area === 'absentismo';
+      });
+
+      let pct = 0;
+      if (personalRecords.length > 0) {
+        let totalTeo = 0;
+        let totalBaja = 0;
+        personalRecords.forEach(r => {
+          try {
+            const parsed = JSON.parse(r.comentarios);
+            totalTeo += parsed.jornadasTeoricas || 0;
+            totalBaja += parsed.jornadasPerdidasBaja || 0;
+          } catch (e) {}
+        });
+        pct = totalTeo > 0 ? (totalBaja / totalTeo) * 100 : 0;
+      } else if (legacyRecords.length > 0) {
+        const sum = legacyRecords.reduce((acc, r) => acc + Number(r.valor || 0), 0);
+        pct = sum / legacyRecords.length;
+      }
+
+      return {
+        name: m.label,
+        value: pct,
+        date: new Date(m.year, m.month, 1)
+      };
+    });
+  }, [dbRrhhRecords, last15Months]);
+
+  const weeklyAusentismo = useMemo(() => {
+    return last15Weeks.map(w => {
+      const personalRecord = dbRrhhRecords.find(r => {
+        if (!r.fecha) return false;
+        const parts = r.fecha.split('-');
+        const d = parts.length === 3 ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])) : new Date(r.fecha);
+        return getWeekNumber(d) === w.week && d.getFullYear() === w.year && r.area === 'PERSONAL_TOP60';
+      });
+
+      const legacyRecord = dbRrhhRecords.find(r => {
+        if (!r.fecha) return false;
+        const parts = r.fecha.split('-');
+        const d = parts.length === 3 ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])) : new Date(r.fecha);
+        return getWeekNumber(d) === w.week && d.getFullYear() === w.year && r.area === 'ausentismo';
+      });
+
+      let pct = 0;
+      if (personalRecord) {
+        try {
+          const parsed = JSON.parse(personalRecord.comentarios);
+          const teo = parsed.jornadasTeoricas || 0;
+          const ausen = parsed.jornadasPerdidasAusentismo || 0;
+          pct = teo > 0 ? (ausen / teo) * 100 : 0;
+        } catch (e) {
+          pct = Number(personalRecord.valor || 0);
+        }
+      } else if (legacyRecord) {
+        pct = Number(legacyRecord.valor || 0);
+      }
+
+      return {
+        name: w.label,
+        value: pct,
+        week: w.week,
+        year: w.year
+      };
+    });
+  }, [dbRrhhRecords, last15Weeks]);
+
+  const monthlyAusentismo = useMemo(() => {
+    return last15Months.map(m => {
+      const personalRecords = dbRrhhRecords.filter(r => {
+        if (!r.fecha) return false;
+        const parts = r.fecha.split('-');
+        const d = parts.length === 3 ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])) : new Date(r.fecha);
+        return d.getMonth() === m.month && d.getFullYear() === m.year && r.area === 'PERSONAL_TOP60';
+      });
+
+      const legacyRecords = dbRrhhRecords.filter(r => {
+        if (!r.fecha) return false;
+        const parts = r.fecha.split('-');
+        const d = parts.length === 3 ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])) : new Date(r.fecha);
+        return d.getMonth() === m.month && d.getFullYear() === m.year && r.area === 'ausentismo';
+      });
+
+      let pct = 0;
+      if (personalRecords.length > 0) {
+        let totalTeo = 0;
+        let totalAusen = 0;
+        personalRecords.forEach(r => {
+          try {
+            const parsed = JSON.parse(r.comentarios);
+            totalTeo += parsed.jornadasTeoricas || 0;
+            totalAusen += parsed.jornadasPerdidasAusentismo || 0;
+          } catch (e) {}
+        });
+        pct = totalTeo > 0 ? (totalAusen / totalTeo) * 100 : 0;
+      } else if (legacyRecords.length > 0) {
+        const sum = legacyRecords.reduce((acc, r) => acc + Number(r.valor || 0), 0);
+        pct = sum / legacyRecords.length;
+      }
+
+      return {
+        name: m.label,
+        value: pct,
+        date: new Date(m.year, m.month, 1)
+      };
+    });
+  }, [dbRrhhRecords, last15Months]);
+
+  const weeklyCalidad = useMemo(() => {
+    return last15Weeks.map(w => {
+      const records = dbPlanCalidadRecords.filter(r => {
+        if (!r.fecha) return false;
+        if (!r.origen) return false; // Count only when "origen" is defined (not null/vacío)
+        const d = new Date(r.fecha);
+        return getWeekNumber(d) === w.week && d.getFullYear() === w.year;
+      });
+
+      const total = records.length;
+      const internas = records.filter(r => r.origen === 'Interna').length;
+      const externas = records.filter(r => r.origen === 'Externa').length;
+
+      const date = new Date(w.year, 0, 1);
+      date.setDate(date.getDate() + (w.week - 1) * 7);
+      const objective = getObjectiveForDate('calidad-reclamaciones', date) || 0;
+
+      return {
+        name: w.label,
+        total,
+        internas,
+        externas,
+        Objective: objective,
+        week: w.week,
+        year: w.year
+      };
+    });
+  }, [dbPlanCalidadRecords, last15Weeks, allObjectives]);
+
+  const monthlyCalidad = useMemo(() => {
+    return last15Months.map(m => {
+      const records = dbPlanCalidadRecords.filter(r => {
+        if (!r.fecha) return false;
+        if (!r.origen) return false; // Count only when "origen" is defined (not null/vacío)
+        const d = new Date(r.fecha);
+        return d.getMonth() === m.month && d.getFullYear() === m.year;
+      });
+
+      const total = records.length;
+      const internas = records.filter(r => r.origen === 'Interna').length;
+      const externas = records.filter(r => r.origen === 'Externa').length;
+
+      const date = new Date(m.year, m.month, 1);
+      const objective = getObjectiveForDate('calidad-reclamaciones', date) || 0;
+
+      return {
+        name: m.label,
+        total,
+        internas,
+        externas,
+        Objective: objective,
+        month: m.month,
+        year: m.year
+      };
+    });
+  }, [dbPlanCalidadRecords, last15Months, allObjectives]);
+
+  const dashboardRegistrosPersonal = useMemo(() => {
+    const list: any[] = [];
+    const addedFechas = new Set<string>();
+
+    dbRrhhRecords.forEach(r => {
+      if (r.area === 'PERSONAL_TOP60') {
+        let mapped;
+        if (r.comentarios && r.comentarios.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(r.comentarios);
+            mapped = {
+              id: r.id,
+              fecha: r.fecha,
+              jornadasTeoricas: parsed.jornadasTeoricas || 0,
+              jornadasPerdidasBaja: parsed.jornadasPerdidasBaja || 0,
+              jornadasPerdidasAusentismo: parsed.jornadasPerdidasAusentismo || 0,
+            };
+          } catch (e) {
+            // Fallback
+          }
+        }
+        if (!mapped) {
+          mapped = {
+            id: r.id,
+            fecha: r.fecha,
+            jornadasTeoricas: Number(r.jornadas_teoricas || r.jornadasTeoricas || 100),
+            jornadasPerdidasBaja: Number(r.jornadas_perdidas_baja || r.jornadasPerdidasBaja || 0),
+            jornadasPerdidasAusentismo: Number(r.jornadas_perdidas_ausentismo || r.jornadasPerdidasAusentismo || 0),
+          };
+        }
+        list.push(mapped);
+        addedFechas.add(r.fecha);
+      }
+    });
+
+    const groupedOld: Record<string, { absentismo?: number; ausentismo?: number; comentarios?: string }> = {};
+    dbRrhhRecords.forEach(r => {
+      if (r.area === 'absentismo' || r.area === 'ausentismo') {
+        if (!groupedOld[r.fecha]) {
+          groupedOld[r.fecha] = {};
+        }
+        if (r.area === 'absentismo') {
+          groupedOld[r.fecha].absentismo = r.valor;
+        } else {
+          groupedOld[r.fecha].ausentismo = r.valor;
+        }
+        if (r.comentarios) {
+          groupedOld[r.fecha].comentarios = r.comentarios;
+        }
+      }
+    });
+
+    Object.entries(groupedOld).forEach(([fecha, data]) => {
+      if (!addedFechas.has(fecha)) {
+        list.push({
+          id: `${fecha}_synthesized`,
+          fecha,
+          jornadasTeoricas: 100,
+          jornadasPerdidasBaja: data.absentismo || 0,
+          jornadasPerdidasAusentismo: data.ausentismo || 0
+        });
+      }
+    });
+
+    return list.sort((a, b) => b.fecha.localeCompare(a.fecha));
+  }, [dbRrhhRecords]);
 
   const globalProductivity = useMemo(() => {
     const weekData = history.filter(h => {
@@ -527,43 +924,6 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
     );
   };
 
-  const getObjectiveForDate = (area: string, date: Date, indicatorId: string = 'productividad') => {
-    const getObjectivesForArea = (areaId: string) => {
-      if (allObjectives[areaId]) return allObjectives[areaId];
-      const key = Object.keys(allObjectives).find(k => k.toLowerCase() === areaId.toLowerCase());
-      return key ? allObjectives[key] : [];
-    };
-    
-    const objs = [...getObjectivesForArea(area)].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
-    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    
-    // Exact match for indicator
-    const getVal = (id: string) => {
-      const spec = objs.find(o => o.valid_from <= dateStr && o.indicator_id === id);
-      if (spec && spec.objetivo) return spec.objetivo;
-      
-      const master = objs.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id));
-      if (master) {
-        if (id === 'disponibilidad') return master.disponibilidad || 0;
-        if (id === 'rendimiento') return master.rendimiento || 0;
-        if (id === 'calidad') return master.calidad || 0;
-      }
-      return 0;
-    };
-
-    if (indicatorId === 'productividad' || indicatorId === 'oee') {
-      const specProd = objs.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee'));
-      if (specProd && specProd.objetivo) return specProd.objetivo;
-      
-      const d = getVal('disponibilidad');
-      const r = getVal('rendimiento');
-      const c = getVal('calidad');
-      return parseFloat(((d * r * c) / 10000).toFixed(1));
-    }
-
-    return getVal(indicatorId);
-  };
-
   const handleSendReport = async () => {
     if (isGeneratingReport) return;
     
@@ -670,7 +1030,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
     }
   };
 
-  const renderEvolutionChart = (data: any[], dataKey: string, name: string, color: string, title: string, objectiveArea?: string, isPercentage?: boolean, isReport = false) => {
+  const renderEvolutionChart = (data: any[], dataKey: string, name: string, color: string, title: string, objectiveArea?: string, isPercentage?: boolean, isReport = false, chartType: 'area' | 'bar' = 'area') => {
     const chartData = data.map(d => {
       let objValue = 0;
       if (objectiveArea) {
@@ -702,7 +1062,11 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
             formatter={(val: any, name: string) => isPercentage ? [`${Number(val).toFixed(1)}%`, name] : [val, name]}
           />
           <Legend wrapperStyle={{fontSize: '8px', fontWeight: 'bold', paddingTop: '15px'}} />
-          <Area type="monotone" dataKey={dataKey} name={name} stroke={color} fill={color} fillOpacity={0.1} strokeWidth={3} isAnimationActive={false} />
+          {chartType === 'bar' ? (
+            <Bar dataKey={dataKey} name={name} fill={color} radius={[2, 2, 0, 0]} maxBarSize={20} isAnimationActive={false} />
+          ) : (
+            <Area type="monotone" dataKey={dataKey} name={name} stroke={color} fill={color} fillOpacity={0.1} strokeWidth={3} isAnimationActive={false} />
+          )}
           {objectiveArea && (
             <Line type="stepAfter" dataKey="Objective" name="OBJETIVO" stroke="#ef4444" strokeWidth={3} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={false} />
           )}
@@ -722,6 +1086,122 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
     );
   };
 
+  const renderQualityMultiBarChart = (data: any[], title: string, isReport = false) => {
+    const chart = (
+      <ResponsiveContainer width="100%" height="100%" minHeight={isReport ? 220 : 250} debounce={100}>
+        <ComposedChart data={data} margin={{ top: 10, right: 10, bottom: 30, left: -20 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<CustomXAxisTick />} interval={0} />
+          <YAxis 
+            tick={{fontSize: 8, fontWeight: 700, fill: '#64748b'}} 
+            axisLine={false} 
+            tickLine={false}
+            allowDecimals={false}
+          />
+          <Tooltip 
+            contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '9px', fontWeight: 'bold'}}
+          />
+          <Legend wrapperStyle={{fontSize: '8px', fontWeight: 'bold', paddingTop: '15px'}} />
+          <Bar dataKey="total" name="Total" fill="#64748b" radius={[2, 2, 0, 0]} maxBarSize={12} isAnimationActive={false} />
+          <Bar dataKey="internas" name="Internas" fill="#ef4444" radius={[2, 2, 0, 0]} maxBarSize={12} isAnimationActive={false} />
+          <Bar dataKey="externas" name="Externas" fill="#3b82f6" radius={[2, 2, 0, 0]} maxBarSize={12} isAnimationActive={false} />
+          <Line type="stepAfter" dataKey="Objective" name="OBJETIVO" stroke="#10b981" strokeWidth={3} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={false} />
+        </ComposedChart>
+      </ResponsiveContainer>
+    );
+
+    return (
+      <div className={`bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col ${isReport ? 'h-[280px]' : 'h-[300px]'} cursor-zoom-in`}
+        onDoubleClick={() => setFullscreenChart({ title, chart })}
+      >
+        <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 text-center">{title}</h3>
+        <div className="flex-1 w-full">
+          {chart}
+        </div>
+      </div>
+    );
+  };
+
+  const renderQualityEvolutionChart = (data: any[], dataKey: string, name: string, color: string, title: string, isReport = false) => {
+    const chart = (
+      <ResponsiveContainer width="100%" height="100%" minHeight={isReport ? 220 : 250} debounce={100}>
+        <ComposedChart data={data} margin={{ top: 10, right: 10, bottom: 30, left: -20 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<CustomXAxisTick />} interval={0} />
+          <YAxis 
+            tick={{fontSize: 8, fontWeight: 700, fill: '#64748b'}} 
+            axisLine={false} 
+            tickLine={false}
+            allowDecimals={false}
+          />
+          <Tooltip 
+            contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '9px', fontWeight: 'bold'}}
+          />
+          <Legend wrapperStyle={{fontSize: '8px', fontWeight: 'bold', paddingTop: '15px'}} />
+          <Bar dataKey={dataKey} name={name} fill={color} radius={[2, 2, 0, 0]} maxBarSize={12} isAnimationActive={false} />
+          <Line type="stepAfter" dataKey="Objective" name="OBJETIVO" stroke="#10b981" strokeWidth={3} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={false} />
+        </ComposedChart>
+      </ResponsiveContainer>
+    );
+
+    return (
+      <div className={`bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col ${isReport ? 'h-[280px]' : 'h-[300px]'} cursor-zoom-in`}
+        onDoubleClick={() => setFullscreenChart({ title, chart })}
+      >
+        <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 text-center">{title}</h3>
+        <div className="flex-1 w-full">
+          {chart}
+        </div>
+      </div>
+    );
+  };
+
+  const renderIdMEvolutionChart = (
+    data: any[],
+    series: { key: string; name: string; color: string }[],
+    objKey?: string,
+    objName?: string,
+    objColor?: string,
+    title?: string,
+    isReport = false
+  ) => {
+    const chart = (
+      <ResponsiveContainer width="100%" height="100%" minHeight={isReport ? 220 : 250} debounce={100}>
+        <ComposedChart data={data} margin={{ top: 10, right: 10, bottom: 30, left: -20 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<CustomXAxisTick />} interval={0} />
+          <YAxis 
+            tick={{fontSize: 8, fontWeight: 700, fill: '#64748b'}} 
+            axisLine={false} 
+            tickLine={false}
+            allowDecimals={false}
+          />
+          <Tooltip 
+            contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '9px', fontWeight: 'bold'}}
+          />
+          <Legend wrapperStyle={{fontSize: '8px', fontWeight: 'bold', paddingTop: '15px'}} />
+          {series.map(s => (
+            <Bar key={s.key} dataKey={s.key} name={s.name} fill={s.color} radius={[2, 2, 0, 0]} maxBarSize={12} isAnimationActive={false} />
+          ))}
+          {objKey && (
+            <Line type="stepAfter" dataKey={objKey} name={objName || "OBJETIVO"} stroke={objColor || "#10b981"} strokeWidth={3} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={false} />
+          )}
+        </ComposedChart>
+      </ResponsiveContainer>
+    );
+
+    return (
+      <div className={`bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col ${isReport ? 'h-[280px]' : 'h-[300px]'} cursor-zoom-in`}
+        onDoubleClick={() => setFullscreenChart({ title: title || '', chart })}
+      >
+        <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 text-center">{title}</h3>
+        <div className="flex-1 w-full">
+          {chart}
+        </div>
+      </div>
+    );
+  };
+
   const chunkArray = (arr: any[], size: number) => {
     const chunks = [];
     for (let i = 0; i < arr.length; i += size) {
@@ -731,39 +1211,48 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
   };
 
   const renderSeguridadTab = (isReport = false, onlyCharts = false, onlyTable = false) => {
+    const parseDate = (dStr: string) => {
+      if (!dStr) return new Date(NaN);
+      const parts = dStr.split('-');
+      if (parts.length === 3) {
+        return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      }
+      return new Date(dStr);
+    };
+
     const weeklyAccidents = last15Weeks.map(w => {
-      const recordsForWeek = dbSeguridadRecords.filter(r => {
-        const d = new Date(r.fecha);
-        return getWeekNumber(d) === w.week && d.getFullYear() === w.year;
-      });
-      const count = recordsForWeek.reduce((sum, r) => sum + (Number(r.accidentes) || 0), 0);
+      const count = dbPlanAccionRecords.filter(r => {
+        if (!r.fecha) return false;
+        const d = parseDate(r.fecha);
+        return getWeekNumber(d) === w.week && d.getFullYear() === w.year && r.tipo?.trim().toLowerCase() === 'accidente';
+      }).length;
       return { name: w.label, count, week: w.week, year: w.year };
     });
 
     const monthlyAccidents = last15Months.map(m => {
-      const recordsForMonth = dbSeguridadRecords.filter(r => {
-        const d = new Date(r.fecha);
-        return d.getMonth() === m.month && d.getFullYear() === m.year;
-      });
-      const count = recordsForMonth.reduce((sum, r) => sum + (Number(r.accidentes) || 0), 0);
+      const count = dbPlanAccionRecords.filter(r => {
+        if (!r.fecha) return false;
+        const d = parseDate(r.fecha);
+        return d.getMonth() === m.month && d.getFullYear() === m.year && r.tipo?.trim().toLowerCase() === 'accidente';
+      }).length;
       return { name: m.label, count, date: new Date(m.year, m.month, 1) };
     });
 
     const weeklyIncidentes = last15Weeks.map(w => {
-      const recordsForWeek = dbSeguridadRecords.filter(r => {
-        const d = new Date(r.fecha);
-        return getWeekNumber(d) === w.week && d.getFullYear() === w.year;
-      });
-      const count = recordsForWeek.reduce((sum, r) => sum + (Number(r.incidentes) || 0), 0);
+      const count = dbPlanAccionRecords.filter(r => {
+        if (!r.fecha) return false;
+        const d = parseDate(r.fecha);
+        return getWeekNumber(d) === w.week && d.getFullYear() === w.year && r.tipo?.trim().toLowerCase() === 'incidente';
+      }).length;
       return { name: w.label, count, week: w.week, year: w.year };
     });
 
     const monthlyIncidentes = last15Months.map(m => {
-      const recordsForMonth = dbSeguridadRecords.filter(r => {
-        const d = new Date(r.fecha);
-        return d.getMonth() === m.month && d.getFullYear() === m.year;
-      });
-      const count = recordsForMonth.reduce((sum, r) => sum + (Number(r.incidentes) || 0), 0);
+      const count = dbPlanAccionRecords.filter(r => {
+        if (!r.fecha) return false;
+        const d = parseDate(r.fecha);
+        return d.getMonth() === m.month && d.getFullYear() === m.year && r.tipo?.trim().toLowerCase() === 'incidente';
+      }).length;
       return { name: m.label, count, date: new Date(m.year, m.month, 1) };
     });
 
@@ -771,14 +1260,75 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
     // Show all actions as per user request
     const securityActions = seguridadData;
 
+    // Group dbPlanAccionRecords by Monday date
+    const getMondayOfDateString = (dateStr: string) => {
+      try {
+        const parts = dateStr.split('-');
+        if (parts.length !== 3) return dateStr;
+        const year = Number(parts[0]);
+        const month = Number(parts[1]) - 1;
+        const day = Number(parts[2]);
+        const d = new Date(year, month, day);
+        const dayOfWeek = d.getDay();
+        const diff = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+        const monday = new Date(year, month, diff);
+        const yyyy = monday.getFullYear();
+        const mm = String(monday.getMonth() + 1).padStart(2, '0');
+        const dd = String(monday.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      } catch (e) {
+        return dateStr;
+      }
+    };
+
+    const groupedWeeks: Record<string, {
+      fecha: string;
+      accidentes: number;
+      incidentes: number;
+      comentarios: string[];
+    }> = {};
+
+    dbPlanAccionRecords.forEach(r => {
+      if (!r.fecha) return;
+      const monday = getMondayOfDateString(r.fecha);
+      const isAcc = r.tipo?.trim().toLowerCase() === 'accidente';
+      const isInc = r.tipo?.trim().toLowerCase() === 'incidente';
+      if (!isAcc && !isInc) return;
+
+      if (!groupedWeeks[monday]) {
+        groupedWeeks[monday] = {
+          fecha: monday,
+          accidentes: 0,
+          incidentes: 0,
+          comentarios: []
+        };
+      }
+
+      if (isAcc) groupedWeeks[monday].accidentes += 1;
+      if (isInc) groupedWeeks[monday].incidentes += 1;
+      const desc = r.que_ha_ocurrido || r.queHaOcurrido || r.accion || '';
+      if (desc) {
+        groupedWeeks[monday].comentarios.push(`[${r.tipo}] ${desc}`);
+      }
+    });
+
+    const securityIndicatorRows = Object.values(groupedWeeks).sort((a, b) => b.fecha.localeCompare(a.fecha));
+
     return (
       <div className="flex flex-col gap-8">
         {!onlyTable && (
           <div className={`grid ${isReport ? 'grid-cols-2' : 'grid-cols-1 lg:grid-cols-2'} gap-6`}>
-            {renderEvolutionChart(weeklyAccidents, 'count', 'ACCIDENTES', '#ef4444', 'Evolución Accidentes (Semanas)', 'accidentes', false, isReport)}
-            {renderEvolutionChart(monthlyAccidents, 'count', 'ACCIDENTES', '#ef4444', 'Evolución Accidentes (Meses)', 'accidentes', false, isReport)}
-            {renderEvolutionChart(weeklyIncidentes, 'count', 'INCIDENTES', '#f97316', 'Evolución Incidentes (Semanas)', 'incidentes', false, isReport)}
-            {renderEvolutionChart(monthlyIncidentes, 'count', 'INCIDENTES', '#f97316', 'Evolución Incidentes (Meses)', 'incidentes', false, isReport)}
+            <div className="col-span-full border-b border-slate-200 pb-2 mb-2">
+              <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">ACCIDENTES</h4>
+            </div>
+            {renderEvolutionChart(weeklyAccidents, 'count', 'ACCIDENTES', '#ef4444', 'Evolución Accidentes (Semanas)', 'accidentes', false, isReport, 'bar')}
+            {renderEvolutionChart(monthlyAccidents, 'count', 'ACCIDENTES', '#ef4444', 'Evolución Accidentes (Meses)', 'accidentes', false, isReport, 'bar')}
+            
+            <div className="col-span-full border-b border-slate-200 pb-2 mb-2 mt-6">
+              <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">INCIDENTES</h4>
+            </div>
+            {renderEvolutionChart(weeklyIncidentes, 'count', 'INCIDENTES', '#f97316', 'Evolución Incidentes (Semanas)', 'incidentes', false, isReport, 'bar')}
+            {renderEvolutionChart(monthlyIncidentes, 'count', 'INCIDENTES', '#f97316', 'Evolución Incidentes (Meses)', 'incidentes', false, isReport, 'bar')}
           </div>
         )}
 
@@ -796,7 +1346,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
             </div>
 
             <div className="overflow-x-auto max-h-[350px] overflow-y-auto">
-              {dbSeguridadRecords.length === 0 ? (
+              {securityIndicatorRows.length === 0 ? (
                 <div className="text-center py-8 text-slate-400 font-bold uppercase tracking-wider text-xs">
                   No hay indicadores registrados todavía.
                 </div>
@@ -811,12 +1361,13 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
                     </tr>
                   </thead>
                   <tbody>
-                    {[...dbSeguridadRecords].sort((a, b) => b.fecha.localeCompare(a.fecha)).map((r) => {
-                      const d = new Date(r.fecha);
+                    {securityIndicatorRows.map((r) => {
+                      const d = parseDate(r.fecha);
                       const weekNum = getWeekNumber(d);
                       const formattedDate = d.toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
+                      const comentariosText = r.comentarios.length > 0 ? r.comentarios.join(' | ') : 'Sin comentarios';
                       return (
-                        <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                        <tr key={r.fecha} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                           <td className="py-3 px-4 text-xs font-bold text-slate-800">
                             Semana {weekNum} ({formattedDate})
                           </td>
@@ -834,8 +1385,8 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
                               {r.incidentes}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-xs text-slate-500 italic max-w-xs truncate" title={r.comentarios}>
-                            {r.comentarios || 'Sin comentarios'}
+                          <td className="py-3 px-4 text-xs text-slate-500 italic max-w-xs truncate" title={comentariosText}>
+                            {comentariosText}
                           </td>
                         </tr>
                       );
@@ -926,80 +1477,6 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
   };
 
   const renderRRHHTab = (isReport = false) => {
-    const weeklyAbsentismo = last15Weeks.map(w => {
-      const records = rrhhData.filter(r => {
-        const d = new Date(r.fecha);
-        return getWeekNumber(d) === w.week && d.getFullYear() === w.year;
-      });
-      if (records.length === 0) return { name: w.label, MOD: 0, MOI: 0, week: w.week, year: w.year };
-      const totalMod = records.reduce((acc, r) => acc + r.totalMod, 0);
-      const totalMoi = records.reduce((acc, r) => acc + r.totalMoi, 0);
-      const modBaja = records.reduce((acc, r) => acc + r.modBaja, 0);
-      const moiBaja = records.reduce((acc, r) => acc + r.moiBaja, 0);
-      return { 
-        name: w.label, 
-        MOD: totalMod > 0 ? (modBaja / totalMod) * 100 : 0, 
-        MOI: totalMoi > 0 ? (moiBaja / totalMoi) * 100 : 0,
-        week: w.week,
-        year: w.year
-      };
-    });
-
-    const monthlyAbsentismo = last15Months.map(m => {
-      const records = rrhhData.filter(r => {
-        const d = new Date(r.fecha);
-        return d.getMonth() === m.month && d.getFullYear() === m.year;
-      });
-      if (records.length === 0) return { name: m.label, MOD: 0, MOI: 0, date: new Date(m.year, m.month, 1) };
-      const totalMod = records.reduce((acc, r) => acc + r.totalMod, 0);
-      const totalMoi = records.reduce((acc, r) => acc + r.totalMoi, 0);
-      const modBaja = records.reduce((acc, r) => acc + r.modBaja, 0);
-      const moiBaja = records.reduce((acc, r) => acc + r.moiBaja, 0);
-      return { 
-        name: m.label, 
-        MOD: totalMod > 0 ? (modBaja / totalMod) * 100 : 0, 
-        MOI: totalMoi > 0 ? (moiBaja / totalMoi) * 100 : 0,
-        date: new Date(m.year, m.month, 1)
-      };
-    });
-
-    const weeklyAusentismo = last15Weeks.map(w => {
-      const records = ausentismoData.filter(r => {
-        const d = new Date(r.fecha);
-        return getWeekNumber(d) === w.week && d.getFullYear() === w.year;
-      });
-      if (records.length === 0) return { name: w.label, MOD: 0, MOI: 0, week: w.week, year: w.year };
-      const totalMod = records.reduce((acc, r) => acc + r.mod, 0);
-      const totalMoi = records.reduce((acc, r) => acc + r.moi, 0);
-      const jornadasMod = records.reduce((acc, r) => acc + r.jornadasPerdidasMod, 0);
-      const jornadasMoi = records.reduce((acc, r) => acc + r.jornadasPerdidasMoi, 0);
-      return { 
-        name: w.label, 
-        MOD: jornadasMod, 
-        MOI: jornadasMoi,
-        week: w.week,
-        year: w.year
-      };
-    });
-
-    const monthlyAusentismo = last15Months.map(m => {
-      const records = ausentismoData.filter(r => {
-        const d = new Date(r.fecha);
-        return d.getMonth() === m.month && d.getFullYear() === m.year;
-      });
-      if (records.length === 0) return { name: m.label, MOD: 0, MOI: 0, date: new Date(m.year, m.month, 1) };
-      const totalMod = records.reduce((acc, r) => acc + r.mod, 0);
-      const totalMoi = records.reduce((acc, r) => acc + r.moi, 0);
-      const jornadasMod = records.reduce((acc, r) => acc + r.jornadasPerdidasMod, 0);
-      const jornadasMoi = records.reduce((acc, r) => acc + r.jornadasPerdidasMoi, 0);
-      return { 
-        name: m.label, 
-        MOD: jornadasMod, 
-        MOI: jornadasMoi,
-        date: new Date(m.year, m.month, 1)
-      };
-    });
-
     // Group dbRrhhRecords by fecha (from Supabase)
     const groupedRrhh: Record<string, { fecha: string; absentismo: number; ausentismo: number; comentarios: string }> = {};
 
@@ -1064,71 +1541,59 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
           <div className="col-span-full border-b border-slate-200 pb-2 mb-2">
             <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">Absentismo (Bajas)</h4>
           </div>
-          {renderEvolutionChart(weeklyAbsentismo, 'MOD', 'MOD %', '#3b82f6', 'Absentismo MOD % (Semanas)', 'absentismo-mod', true, isReport)}
-          {renderEvolutionChart(monthlyAbsentismo, 'MOD', 'MOD %', '#3b82f6', 'Absentismo MOD % (Meses)', 'absentismo-mod', true, isReport)}
-          {renderEvolutionChart(weeklyAbsentismo, 'MOI', 'MOI %', '#8b5cf6', 'Absentismo MOI % (Semanas)', 'absentismo-moi', true, isReport)}
-          {renderEvolutionChart(monthlyAbsentismo, 'MOI', 'MOI %', '#8b5cf6', 'Absentismo MOI % (Meses)', 'absentismo-moi', true, isReport)}
+          {renderEvolutionChart(weeklyAbsentismo, 'value', 'ABSENTISMO %', '#3b82f6', 'Absentismo % (Semanas)', 'absentismo', true, isReport, 'bar')}
+          {renderEvolutionChart(monthlyAbsentismo, 'value', 'ABSENTISMO %', '#3b82f6', 'Absentismo % (Meses)', 'absentismo', true, isReport, 'bar')}
           
           <div className="col-span-full border-b border-slate-200 pb-2 mb-2 mt-6">
             <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">Ausentismo (Jornadas Perdidas)</h4>
           </div>
-          {renderEvolutionChart(weeklyAusentismo, 'MOD', 'MOD', '#3b82f6', 'Ausentismo MOD (Semanas)', 'ausentismo-mod', false, isReport)}
-          {renderEvolutionChart(monthlyAusentismo, 'MOD', 'MOD', '#3b82f6', 'Ausentismo MOD (Meses)', 'ausentismo-mod', false, isReport)}
-          {renderEvolutionChart(weeklyAusentismo, 'MOI', 'MOI', '#8b5cf6', 'Ausentismo MOI (Semanas)', 'ausentismo-moi', false, isReport)}
-          {renderEvolutionChart(monthlyAusentismo, 'MOI', 'MOI', '#8b5cf6', 'Ausentismo MOI (Meses)', 'ausentismo-moi', false, isReport)}
+          {renderEvolutionChart(weeklyAusentismo, 'value', 'AUSENTISMO %', '#f59e0b', 'Ausentismo % (Semanas)', 'ausentismo', true, isReport, 'bar')}
+          {renderEvolutionChart(monthlyAusentismo, 'value', 'AUSENTISMO %', '#f59e0b', 'Ausentismo % (Meses)', 'ausentismo', true, isReport, 'bar')}
         </div>
 
-        {/* Histórico de Indicadores de Personal */}
+        {/* Historial de Registros */}
         {!isReport && (
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col">
             <div className="flex items-center gap-3 mb-6 border-b border-slate-50 pb-4">
               <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
                 <Users size={20} />
               </div>
               <div>
-                <h3 className="font-serif font-black text-slate-900 uppercase">Histórico de Indicadores de Personal</h3>
-                <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Registros semanales de Absentismo y Ausentismo</p>
+                <h3 className="font-serif font-black text-slate-900 uppercase">Historial de Registros</h3>
+                <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Registros históricos de personal y ausentismo sincronizados desde Supabase</p>
               </div>
             </div>
 
-            <div className="overflow-x-auto max-h-[350px] overflow-y-auto">
-              {historicalRows.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 font-bold uppercase tracking-wider text-xs">
-                  No hay indicadores registrados todavía.
+            <div className="overflow-x-auto max-h-[350px] overflow-y-auto border border-slate-100 rounded-2xl">
+              {dashboardRegistrosPersonal.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-slate-400 bg-slate-50/50 h-full">
+                  <Users className="w-12 h-12 mb-3 text-slate-300" />
+                  <p className="text-xs font-bold uppercase tracking-widest">Sin registros históricos</p>
                 </div>
               ) : (
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                      <th className="py-3 px-4">Semana (Lunes)</th>
-                      <th className="py-3 px-4 text-center">NÚMERO DE ABSENTISMO</th>
-                      <th className="py-3 px-4 text-center">NÚMERO DE AUSENTISMO</th>
-                      <th className="py-3 px-4">Comentarios</th>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider sticky top-0 z-10">
+                      <th className="p-4">Fecha</th>
+                      <th className="p-4 text-center">Jornadas Teóricas</th>
+                      <th className="p-4 text-center">Jornadas Perdidas Baja</th>
+                      <th className="p-4 text-center">% Absentismo</th>
+                      <th className="p-4 text-center">Jornadas Perdidas Ausen.</th>
+                      <th className="p-4 text-center">% Ausentismo</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {historicalRows.map((r) => {
-                      const d = new Date(r.fecha);
-                      const weekNum = getWeekNumber(d);
-                      const formattedDate = d.toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
+                  <tbody className="divide-y divide-slate-50 text-xs font-bold text-slate-600">
+                    {dashboardRegistrosPersonal.map((reg) => {
+                      const pctAb = reg.jornadasTeoricas > 0 ? (reg.jornadasPerdidasBaja / reg.jornadasTeoricas) * 100 : 0;
+                      const pctAu = reg.jornadasTeoricas > 0 ? (reg.jornadasPerdidasAusentismo / reg.jornadasTeoricas) * 100 : 0;
                       return (
-                        <tr key={r.fecha} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                          <td className="py-3 px-4 text-xs font-bold text-slate-800">
-                            Semana {weekNum} ({formattedDate})
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-black bg-slate-100 text-slate-600`}>
-                              {r.absentismo}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-black bg-slate-100 text-slate-600`}>
-                              {r.ausentismo}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-xs text-slate-500 italic max-w-xs truncate" title={r.comentarios}>
-                            {r.comentarios || 'Sin comentarios'}
-                          </td>
+                        <tr key={reg.id} className="hover:bg-slate-50/40 transition-colors">
+                          <td className="p-4 text-slate-950">{formatDateDMY(reg.fecha)}</td>
+                          <td className="p-4 text-center text-slate-500">{reg.jornadasTeoricas}</td>
+                          <td className="p-4 text-center text-red-500">{reg.jornadasPerdidasBaja}</td>
+                          <td className="p-4 text-center text-indigo-600 font-extrabold">{pctAb.toFixed(1)}%</td>
+                          <td className="p-4 text-center text-amber-500">{reg.jornadasPerdidasAusentismo}</td>
+                          <td className="p-4 text-center text-indigo-600 font-extrabold">{pctAu.toFixed(1)}%</td>
                         </tr>
                       );
                     })}
@@ -1143,58 +1608,256 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
   };
 
   const renderCalidadTab = () => {
-    const currentRecord = calidadData.find(r => r.semana === selectedWeek && r.anio === selectedYear);
-    
+    const getCalidadActionStatusLocal = (fechaPrevista: string, fechaCierre?: string): string => {
+      if (fechaCierre) return 'Cerrado';
+      if (!fechaPrevista) return 'Abierto';
+      const hoy = new Date().toISOString().split('T')[0];
+      if (fechaPrevista < hoy) return 'Retrasado';
+      return 'En Marcha';
+    };
+
+    const getCalidadGlobalStatusLocal = (item: PlanAccionCalidad): 'Abierto' | 'En Marcha' | 'Cerrado' | 'Retrasado' => {
+      const estCont = getCalidadActionStatusLocal(item.fechaPrevistaContenedora, item.fechaCierreContenedora);
+      const estCorr = getCalidadActionStatusLocal(item.fechaPrevistaCorrectora, item.fechaCierreCorrectora);
+      
+      if (estCont === 'Cerrado' && estCorr === 'Cerrado') return 'Cerrado';
+      if (estCont === 'Retrasado' || estCorr === 'Retrasado') return 'Retrasado';
+      if (estCont === 'En Marcha' || estCorr === 'En Marcha') return 'En Marcha';
+      return 'Abierto';
+    };
+
+    const formatDateDMY = (dateStr: string) => {
+      if (!dateStr) return '';
+      try {
+        const parts = dateStr.split('-');
+        if (parts.length === 3) {
+          return `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+        return dateStr;
+      } catch (e) {
+        return dateStr;
+      }
+    };
+
+    const sortedCalidad = [...dbPlanCalidadRecords].sort((a, b) => b.fecha.localeCompare(a.fecha));
+
     return (
-      <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm min-h-[400px] relative flex flex-col items-center">
-        <div className="mb-10">
-          <button 
-            onClick={() => setShowPowerBI(true)}
-            className="flex flex-col items-center gap-3 group transition-all hover:scale-110"
-            title="Abrir Cuadro de Mando de Calidad en Power BI"
-          >
-            <div className="w-20 h-20 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-amber-200 group-hover:bg-amber-600 transition-colors animate-pulse">
-              <svg className="w-12 h-12" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M19 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 16H7v-6h4v6zm4 0h-4V9h4v9zm4 0h-4V6h4v9z"/>
-              </svg>
-            </div>
-            <span className="text-xs font-black text-amber-600 uppercase tracking-[0.3em] animate-bounce">Power BI Calidad</span>
-          </button>
+      <div className="flex flex-col gap-8">
+        {/* GRÁFICOS */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* TOTAL */}
+          <div className="col-span-full border-b border-slate-200 pb-2 mb-2">
+            <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">TOTAL</h4>
+          </div>
+          {renderQualityEvolutionChart(weeklyCalidad, 'total', 'Total', '#64748b', 'No Conformidades Total (Semanas)')}
+          {renderQualityEvolutionChart(monthlyCalidad, 'total', 'Total', '#64748b', 'No Conformidades Total (Meses)')}
+
+          {/* INTERNAS */}
+          <div className="col-span-full border-b border-slate-200 pb-2 mb-2 mt-6">
+            <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">INTERNAS</h4>
+          </div>
+          {renderQualityEvolutionChart(weeklyCalidad, 'internas', 'Internas', '#ef4444', 'No Conformidades Internas (Semanas)')}
+          {renderQualityEvolutionChart(monthlyCalidad, 'internas', 'Internas', '#ef4444', 'No Conformidades Internas (Meses)')}
+
+          {/* EXTERNAS */}
+          <div className="col-span-full border-b border-slate-200 pb-2 mb-2 mt-6">
+            <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">EXTERNAS</h4>
+          </div>
+          {renderQualityEvolutionChart(weeklyCalidad, 'externas', 'Externas', '#3b82f6', 'No Conformidades Externas (Semanas)')}
+          {renderQualityEvolutionChart(monthlyCalidad, 'externas', 'Externas', '#3b82f6', 'No Conformidades Externas (Meses)')}
         </div>
 
-        <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest mb-8 text-center w-full">Calidad - Semana {selectedWeek} ({selectedYear})</h3>
-        {currentRecord && currentRecord.imagenes && currentRecord.imagenes.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {currentRecord.imagenes.map((img: string, idx: number) => (
-              <div key={idx} className="rounded-2xl overflow-hidden border-4 border-slate-50 shadow-lg hover:scale-105 transition-all cursor-pointer" onClick={() => setFullscreenImage(img)}>
-                {img ? (
-                  <img src={img} alt={`Calidad ${idx}`} className="w-full h-auto object-cover aspect-video" referrerPolicy="no-referrer" />
-                ) : null}
+        {/* TABLA HISTORIAL */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col mt-6">
+          <div className="flex items-center gap-3 mb-6 border-b border-slate-50 pb-4">
+            <div className="w-10 h-10 bg-rose-100 rounded-xl flex items-center justify-center text-rose-600">
+              <ShieldAlert size={20} />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Historial de No Conformidades</h3>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Plan de Acción de Calidad Completo</p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            {sortedCalidad.length === 0 ? (
+              <div className="text-center py-8 text-slate-400 font-bold uppercase tracking-wider text-xs">
+                No hay reclamaciones registradas todavía.
               </div>
-            ))}
+            ) : (
+              <table className="min-w-[1500px] w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipo Reclamación</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Origen</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Área Causante</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Descripción del Problema</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Acción Contenedora</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Responsable Contenedora</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">F. Prevista Contenedora</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">F. Cierre Contenedora</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Acción Correctora</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Responsable Correctora</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">F. Prevista Correctora</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">F. Cierre Correctora</th>
+                    <th className="py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedCalidad.map((r) => {
+                    const status = getCalidadGlobalStatusLocal(r);
+                    let statusBg = 'bg-slate-100 text-slate-600';
+                    if (status === 'Cerrado') statusBg = 'bg-emerald-100 text-emerald-700';
+                    else if (status === 'Retrasado') statusBg = 'bg-rose-100 text-rose-700 font-extrabold scale-105';
+                    else if (status === 'En Marcha') statusBg = 'bg-blue-100 text-blue-700';
+
+                    let origenBadge = 'text-slate-500 italic';
+                    let origenText = 'Sin especificar';
+                    if (r.origen === 'Interna') {
+                      origenBadge = 'bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded-full text-[10px] font-bold';
+                      origenText = 'Interna';
+                    } else if (r.origen === 'Externa') {
+                      origenBadge = 'bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full text-[10px] font-bold';
+                      origenText = 'Externa';
+                    }
+
+                    const contStatus = getCalidadActionStatusLocal(r.fechaPrevistaContenedora, r.fechaCierreContenedora);
+                    const contOverdue = contStatus === 'Retrasado';
+
+                    const corrStatus = getCalidadActionStatusLocal(r.fechaPrevistaCorrectora, r.fechaCierreCorrectora);
+                    const corrOverdue = corrStatus === 'Retrasado';
+
+                    return (
+                      <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                        <td className="py-4 px-4 text-xs font-bold text-slate-800 whitespace-nowrap">
+                          {formatDateDMY(r.fecha)}
+                        </td>
+                        <td className="py-4 px-4 text-xs font-bold text-slate-700">
+                          {r.tipoReclamacion}
+                        </td>
+                        <td className="py-4 px-4 text-xs">
+                          <span className={origenBadge}>{origenText}</span>
+                        </td>
+                        <td className="py-4 px-4 text-xs text-slate-600 font-semibold">
+                          {r.areaCausante}
+                        </td>
+                        <td className="py-4 px-4 text-xs text-slate-500 max-w-xs truncate" title={r.descripcionProblema}>
+                          {r.descripcionProblema || '-'}
+                        </td>
+                        {/* Acción Contenedora */}
+                        <td className="py-4 px-4 text-xs text-slate-700 max-w-xs truncate" title={r.accionContenedora}>
+                          {r.accionContenedora || '-'}
+                        </td>
+                        {/* Responsable Contenedora */}
+                        <td className="py-4 px-4 text-xs">
+                          {r.responsableContenedora ? (
+                            <span className="text-[10px] font-black text-slate-600 bg-slate-100 px-2 py-1 rounded-md uppercase whitespace-nowrap">
+                              {r.responsableContenedora}
+                            </span>
+                          ) : '-'}
+                        </td>
+                        {/* F. Prevista Contenedora */}
+                        <td className="py-4 px-4 text-xs font-semibold whitespace-nowrap">
+                          {r.fechaPrevistaContenedora ? (
+                            <span className={contOverdue ? 'text-rose-600 font-bold' : 'text-slate-600'}>
+                              {formatDateDMY(r.fechaPrevistaContenedora)}
+                            </span>
+                          ) : '-'}
+                        </td>
+                        {/* F. Cierre Contenedora */}
+                        <td className="py-4 px-4 text-xs whitespace-nowrap">
+                          {r.fechaCierreContenedora ? (
+                            <span className="text-emerald-600 font-bold">✅ {formatDateDMY(r.fechaCierreContenedora)}</span>
+                          ) : '-'}
+                        </td>
+                        {/* Acción Correctora */}
+                        <td className="py-4 px-4 text-xs text-slate-700 max-w-xs truncate" title={r.accionCorrectora}>
+                          {r.accionCorrectora || '-'}
+                        </td>
+                        {/* Responsable Correctora */}
+                        <td className="py-4 px-4 text-xs">
+                          {r.responsableCorrectora ? (
+                            <span className="text-[10px] font-black text-slate-600 bg-slate-100 px-2 py-1 rounded-md uppercase whitespace-nowrap">
+                              {r.responsableCorrectora}
+                            </span>
+                          ) : '-'}
+                        </td>
+                        {/* F. Prevista Correctora */}
+                        <td className="py-4 px-4 text-xs font-semibold whitespace-nowrap">
+                          {r.fechaPrevistaCorrectora ? (
+                            <span className={corrOverdue ? 'text-rose-600 font-bold' : 'text-slate-600'}>
+                              {formatDateDMY(r.fechaPrevistaCorrectora)}
+                            </span>
+                          ) : '-'}
+                        </td>
+                        {/* F. Cierre Correctora */}
+                        <td className="py-4 px-4 text-xs whitespace-nowrap">
+                          {r.fechaCierreCorrectora ? (
+                            <span className="text-emerald-600 font-bold">✅ {formatDateDMY(r.fechaCierreCorrectora)}</span>
+                          ) : '-'}
+                        </td>
+                        <td className="py-4 px-4 text-center whitespace-nowrap">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-black uppercase ${statusBg}`}>
+                            {status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-300">
-            <svg className="w-20 h-20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-            <p className="font-black uppercase tracking-widest text-xs">No hay imágenes para esta semana</p>
-          </div>
-        )}
+        </div>
       </div>
     );
   };
 
   const renderIdMTab = (isReport = false) => {
+    const getIdeaStatus = (i: any): string => {
+      const fechaCierre = i.fecha_cierre || i.fechaCierre;
+      if (fechaCierre) return 'Cerrado';
+      const fechaPrevista = i.fecha_ejecucion_prevista || i.fechaEjecucionPrevista || i.fecha_prevista || i.fechaPrevista;
+      if (!fechaPrevista) return 'Abierto';
+      const hoy = new Date().toISOString().split('T')[0];
+      if (fechaPrevista < hoy) return 'Retrasado';
+      return 'En Marcha';
+    };
+
+    const getIdeaEmisionDate = (i: any): Date | null => {
+      const dateStr = i.fecha_emision || i.fechaEmision;
+      if (!dateStr) return null;
+      return new Date(dateStr);
+    };
+
     const weeklyIdM = last15Weeks.map(w => {
-      const presentadas = ideasMejora.filter(i => {
-        if (!i.fecha_emision) return false;
-        const d = new Date(i.fecha_emision);
+      const ideasThisWeek = ideasMejora.filter(i => {
+        const d = getIdeaEmisionDate(i);
+        if (!d) return false;
         return getWeekNumber(d) === w.week && d.getFullYear() === w.year;
+      });
+
+      const presentadas = ideasThisWeek.length;
+
+      const enCurso = ideasThisWeek.filter(i => {
+        const isAprobada = i.aprobada === 'Sí' || i.aprobada === 'SI' || i.aprobada === 'si';
+        if (!isAprobada) return false;
+        const status = getIdeaStatus(i);
+        return status === 'En Marcha' || status === 'Abierto';
+      }).length;
+
+      const atrasadas = ideasThisWeek.filter(i => {
+        const isAprobada = i.aprobada === 'Sí' || i.aprobada === 'SI' || i.aprobada === 'si';
+        if (!isAprobada) return false;
+        const status = getIdeaStatus(i);
+        return status === 'Retrasado';
       }).length;
 
       const cerradas = ideasMejora.filter(i => {
-        const isCerrado = i.fecha_cierre || i.estado === 'Cerrado';
+        const isCerrado = i.fecha_cierre || i.estado === 'Cerrado' || getIdeaStatus(i) === 'Cerrado';
         if (!isCerrado) return false;
-        const dateStr = i.fecha_ejecucion_prevista || i.fecha_prevista || i.created_at || i.updated_at;
+        const dateStr = i.fecha_ejecucion_prevista || i.fecha_prevista || i.fecha_cierre || i.fechaCierre || i.created_at || i.updated_at;
         if (!dateStr) return false;
         const d = new Date(dateStr);
         return getWeekNumber(d) === w.week && d.getFullYear() === w.year;
@@ -1203,31 +1866,58 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
       const rechazadas = ideasMejora.filter(i => {
         const isRechazada = i.aprobada === 'No' || i.aprobada === 'NO' || i.aprobada === 'no';
         if (!isRechazada) return false;
-        if (!i.fecha_emision) return false;
-        const d = new Date(i.fecha_emision);
+        const d = getIdeaEmisionDate(i);
+        if (!d) return false;
         return getWeekNumber(d) === w.week && d.getFullYear() === w.year;
       }).length;
-      
+
       const date = new Date(w.year, 0, 1);
       date.setDate(date.getDate() + (w.week - 1) * 7);
       
       const objPres = getObjectiveForDate('idm-presentadas', date);
       const objCerr = getObjectiveForDate('idm-cerradas', date);
-      
-      return { name: w.label, presentadas, cerradas, rechazadas, ObjPres: objPres, ObjCerr: objCerr };
+      const objAcep = getObjectiveForDate('idm-aceptadas', date);
+
+      return {
+        name: w.label,
+        presentadas,
+        enCurso,
+        atrasadas,
+        cerradas,
+        rechazadas,
+        ObjPres: objPres,
+        ObjCerr: objCerr,
+        ObjAcep: objAcep
+      };
     });
 
     const monthlyIdM = last15Months.map(m => {
-      const presentadas = ideasMejora.filter(i => {
-        if (!i.fecha_emision) return false;
-        const d = new Date(i.fecha_emision);
+      const ideasThisMonth = ideasMejora.filter(i => {
+        const d = getIdeaEmisionDate(i);
+        if (!d) return false;
         return d.getMonth() === m.month && d.getFullYear() === m.year;
+      });
+
+      const presentadas = ideasThisMonth.length;
+
+      const enCurso = ideasThisMonth.filter(i => {
+        const isAprobada = i.aprobada === 'Sí' || i.aprobada === 'SI' || i.aprobada === 'si';
+        if (!isAprobada) return false;
+        const status = getIdeaStatus(i);
+        return status === 'En Marcha' || status === 'Abierto';
+      }).length;
+
+      const atrasadas = ideasThisMonth.filter(i => {
+        const isAprobada = i.aprobada === 'Sí' || i.aprobada === 'SI' || i.aprobada === 'si';
+        if (!isAprobada) return false;
+        const status = getIdeaStatus(i);
+        return status === 'Retrasado';
       }).length;
 
       const cerradas = ideasMejora.filter(i => {
-        const isCerrado = i.fecha_cierre || i.estado === 'Cerrado';
+        const isCerrado = i.fecha_cierre || i.estado === 'Cerrado' || getIdeaStatus(i) === 'Cerrado';
         if (!isCerrado) return false;
-        const dateStr = i.fecha_ejecucion_prevista || i.fecha_prevista || i.created_at || i.updated_at;
+        const dateStr = i.fecha_ejecucion_prevista || i.fecha_prevista || i.fecha_cierre || i.fechaCierre || i.created_at || i.updated_at;
         if (!dateStr) return false;
         const d = new Date(dateStr);
         return d.getMonth() === m.month && d.getFullYear() === m.year;
@@ -1236,16 +1926,27 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
       const rechazadas = ideasMejora.filter(i => {
         const isRechazada = i.aprobada === 'No' || i.aprobada === 'NO' || i.aprobada === 'no';
         if (!isRechazada) return false;
-        if (!i.fecha_emision) return false;
-        const d = new Date(i.fecha_emision);
+        const d = getIdeaEmisionDate(i);
+        if (!d) return false;
         return d.getMonth() === m.month && d.getFullYear() === m.year;
       }).length;
-      
+
       const date = new Date(m.year, m.month, 1);
       const objPres = getObjectiveForDate('idm-presentadas', date);
       const objCerr = getObjectiveForDate('idm-cerradas', date);
-      
-      return { name: m.label, presentadas, cerradas, rechazadas, ObjPres: objPres, ObjCerr: objCerr };
+      const objAcep = getObjectiveForDate('idm-aceptadas', date);
+
+      return {
+        name: m.label,
+        presentadas,
+        enCurso,
+        atrasadas,
+        cerradas,
+        rechazadas,
+        ObjPres: objPres,
+        ObjCerr: objCerr,
+        ObjAcep: objAcep
+      };
     });
 
     return (
@@ -1322,45 +2023,56 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
           </div>
         )}
 
-        <div className={`grid ${isReport ? 'grid-cols-2' : 'grid-cols-1 lg:grid-cols-2'} gap-6`}>
-          <div className={`bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col ${isReport ? 'h-[320px]' : 'h-[300px]'}`}>
-            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 text-center">Evolución IdM (Semanas)</h3>
-            <div className="flex-1 w-full min-h-0">
-              <ResponsiveContainer width="100%" height="100%" minHeight={isReport ? 240 : 250} debounce={100}>
-                <ComposedChart data={weeklyIdM} margin={{ top: 10, right: 10, bottom: 10, left: -20 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<CustomXAxisTick />} />
-                  <YAxis tick={{fontSize: 8, fontWeight: 700, fill: '#64748b'}} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '9px', fontWeight: 'bold'}} />
-                  <Legend wrapperStyle={{fontSize: '8px', fontWeight: 'bold', paddingTop: '5px'}} />
-                  <Bar dataKey="presentadas" name="PRESENTADAS" fill="#3b82f6" radius={[1, 1, 0, 0]} maxBarSize={20} />
-                  <Bar dataKey="cerradas" name="CERRADAS" fill="#10b981" radius={[1, 1, 0, 0]} maxBarSize={20} />
-                  <Bar dataKey="rechazadas" name="RECHAZADAS" fill="#ef4444" radius={[1, 1, 0, 0]} maxBarSize={20} />
-                  <Line type="step" dataKey="ObjPres" name="OBJ. PRES" stroke="#3b82f6" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} />
-                  <Line type="step" dataKey="ObjCerr" name="OBJ. CERR" stroke="#10b981" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* PRESENTADAS */}
+          <div className="col-span-full border-b border-slate-200 pb-2 mb-2">
+            <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">PRESENTADAS</h4>
           </div>
-          <div className={`bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col ${isReport ? 'h-[320px]' : 'h-[300px]'}`}>
-            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 text-center">Evolución IdM (Meses)</h3>
-            <div className="flex-1 w-full min-h-0">
-              <ResponsiveContainer width="100%" height="100%" minHeight={isReport ? 240 : 250} debounce={100}>
-                <ComposedChart data={monthlyIdM} margin={{ top: 10, right: 10, bottom: 10, left: -20 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<CustomXAxisTick />} />
-                  <YAxis tick={{fontSize: 8, fontWeight: 700, fill: '#64748b'}} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '9px', fontWeight: 'bold'}} />
-                  <Legend wrapperStyle={{fontSize: '8px', fontWeight: 'bold', paddingTop: '5px'}} />
-                  <Bar dataKey="presentadas" name="PRESENTADAS" fill="#3b82f6" radius={[1, 1, 0, 0]} maxBarSize={20} />
-                  <Bar dataKey="cerradas" name="CERRADAS" fill="#10b981" radius={[1, 1, 0, 0]} maxBarSize={20} />
-                  <Bar dataKey="rechazadas" name="RECHAZADAS" fill="#ef4444" radius={[1, 1, 0, 0]} maxBarSize={20} />
-                  <Line type="step" dataKey="ObjPres" name="OBJ. PRES" stroke="#3b82f6" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} />
-                  <Line type="step" dataKey="ObjCerr" name="OBJ. CERR" stroke="#10b981" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
+          {renderIdMEvolutionChart(weeklyIdM, [{ key: 'presentadas', name: 'PRESENTADAS', color: '#3b82f6' }], 'ObjPres', 'OBJETIVO', '#10b981', 'Ideas Presentadas (Semanas)', isReport)}
+          {renderIdMEvolutionChart(monthlyIdM, [{ key: 'presentadas', name: 'PRESENTADAS', color: '#3b82f6' }], 'ObjPres', 'OBJETIVO', '#10b981', 'Ideas Presentadas (Meses)', isReport)}
+
+          {/* ACEPTADAS */}
+          <div className="col-span-full border-b border-slate-200 pb-2 mb-2 mt-6">
+            <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">ACEPTADAS</h4>
           </div>
+          {renderIdMEvolutionChart(
+            weeklyIdM, 
+            [
+              { key: 'enCurso', name: 'EN CURSO', color: '#4f46e5' },
+              { key: 'atrasadas', name: 'ATRASADAS', color: '#ef4444' }
+            ], 
+            weeklyIdM.some(d => typeof d.ObjAcep === 'number' && d.ObjAcep > 0) ? 'ObjAcep' : undefined, 
+            'OBJETIVO', 
+            '#10b981', 
+            'Ideas Aceptadas (Semanas)', 
+            isReport
+          )}
+          {renderIdMEvolutionChart(
+            monthlyIdM, 
+            [
+              { key: 'enCurso', name: 'EN CURSO', color: '#4f46e5' },
+              { key: 'atrasadas', name: 'ATRASADAS', color: '#ef4444' }
+            ], 
+            monthlyIdM.some(d => typeof d.ObjAcep === 'number' && d.ObjAcep > 0) ? 'ObjAcep' : undefined, 
+            'OBJETIVO', 
+            '#10b981', 
+            'Ideas Aceptadas (Meses)', 
+            isReport
+          )}
+
+          {/* CERRADAS */}
+          <div className="col-span-full border-b border-slate-200 pb-2 mb-2 mt-6">
+            <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">CERRADAS</h4>
+          </div>
+          {renderIdMEvolutionChart(weeklyIdM, [{ key: 'cerradas', name: 'CERRADAS', color: '#10b981' }], 'ObjCerr', 'OBJETIVO', '#10b981', 'Ideas Cerradas (Semanas)', isReport)}
+          {renderIdMEvolutionChart(monthlyIdM, [{ key: 'cerradas', name: 'CERRADAS', color: '#10b981' }], 'ObjCerr', 'OBJETIVO', '#10b981', 'Ideas Cerradas (Meses)', isReport)}
+
+          {/* RECHAZADAS */}
+          <div className="col-span-full border-b border-slate-200 pb-2 mb-2 mt-6">
+            <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">RECHAZADAS</h4>
+          </div>
+          {renderIdMEvolutionChart(weeklyIdM, [{ key: 'rechazadas', name: 'RECHAZADAS', color: '#ef4444' }], undefined, undefined, undefined, 'Ideas Rechazadas (Semanas)', isReport)}
+          {renderIdMEvolutionChart(monthlyIdM, [{ key: 'rechazadas', name: 'RECHAZADAS', color: '#ef4444' }], undefined, undefined, undefined, 'Ideas Rechazadas (Meses)', isReport)}
         </div>
 
         {/* PIN modal */}
@@ -1558,10 +2270,12 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
                 <div className="bg-slate-50 p-8 rounded-[3rem] border-2 border-red-100 flex flex-col items-center text-center justify-center shadow-sm">
                   <h3 className="text-xl font-black text-slate-400 uppercase tracking-widest mb-4">Seguridad</h3>
                   <div className="text-8xl font-black text-red-600">
-                    {dbSeguridadRecords.filter(r => {
-                      const d = new Date(r.fecha);
-                      return getWeekNumber(d) === selectedWeek && d.getFullYear() === selectedYear;
-                    }).reduce((sum, r) => sum + (Number(r.accidentes) || 0), 0)}
+                    {dbPlanAccionRecords.filter(r => {
+                      if (!r.fecha) return false;
+                      const parts = r.fecha.split('-');
+                      const d = parts.length === 3 ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])) : new Date(r.fecha);
+                      return getWeekNumber(d) === selectedWeek && d.getFullYear() === selectedYear && r.tipo?.trim().toLowerCase() === 'accidente';
+                    }).length}
                   </div>
                   <p className="text-sm font-black text-slate-400 uppercase tracking-widest mt-4">Accidentes S{selectedWeek}</p>
                 </div>
@@ -1777,40 +2491,10 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
               </div>
             </div>
             <div className="flex-1">
-              {(() => {
-                const weeklyAbsentismo = last15Weeks.map(w => {
-                  const records = rrhhData.filter(r => {
-                    const d = new Date(r.fecha);
-                    return getWeekNumber(d) === w.week && d.getFullYear() === w.year;
-                  });
-                  if (records.length === 0) return { name: w.label, MOD: 0, MOI: 0, week: w.week, year: w.year };
-                  const totalMod = records.reduce((acc, r) => acc + r.totalMod, 0);
-                  const totalMoi = records.reduce((acc, r) => acc + r.totalMoi, 0);
-                  const modBaja = records.reduce((acc, r) => acc + r.modBaja, 0);
-                  const moiBaja = records.reduce((acc, r) => acc + r.moiBaja, 0);
-                  return { name: w.label, MOD: totalMod > 0 ? (modBaja / totalMod) * 100 : 0, MOI: totalMoi > 0 ? (moiBaja / totalMoi) * 100 : 0, week: w.week, year: w.year };
-                });
-                const monthlyAbsentismo = last15Months.map(m => {
-                  const records = rrhhData.filter(r => {
-                    const d = new Date(r.fecha);
-                    return d.getMonth() === m.month && d.getFullYear() === m.year;
-                  });
-                  if (records.length === 0) return { name: m.label, MOD: 0, MOI: 0, date: new Date(m.year, m.month, 1) };
-                  const totalMod = records.reduce((acc, r) => acc + r.totalMod, 0);
-                  const totalMoi = records.reduce((acc, r) => acc + r.totalMoi, 0);
-                  const modBaja = records.reduce((acc, r) => acc + r.modBaja, 0);
-                  const moiBaja = records.reduce((acc, r) => acc + r.moiBaja, 0);
-                  return { name: m.label, MOD: totalMod > 0 ? (modBaja / totalMod) * 100 : 0, MOI: totalMoi > 0 ? (moiBaja / totalMoi) * 100 : 0, date: new Date(m.year, m.month, 1) };
-                });
-                return (
-                  <div className="grid grid-cols-2 gap-8">
-                    {renderEvolutionChart(weeklyAbsentismo, 'MOD', 'MOD %', '#3b82f6', 'Absentismo MOD % (Semanas)', 'absentismo-mod', true, true)}
-                    {renderEvolutionChart(monthlyAbsentismo, 'MOD', 'MOD %', '#3b82f6', 'Absentismo MOD % (Meses)', 'absentismo-mod', true, true)}
-                    {renderEvolutionChart(weeklyAbsentismo, 'MOI', 'MOI %', '#8b5cf6', 'Absentismo MOI % (Semanas)', 'absentismo-moi', true, true)}
-                    {renderEvolutionChart(monthlyAbsentismo, 'MOI', 'MOI %', '#8b5cf6', 'Absentismo MOI % (Meses)', 'absentismo-moi', true, true)}
-                  </div>
-                );
-              })()}
+              <div className="grid grid-cols-2 gap-8">
+                {renderEvolutionChart(weeklyAbsentismo, 'value', 'ABSENTISMO %', '#3b82f6', 'Absentismo % (Semanas)', 'absentismo', true, true, 'bar')}
+                {renderEvolutionChart(monthlyAbsentismo, 'value', 'ABSENTISMO %', '#3b82f6', 'Absentismo % (Meses)', 'absentismo', true, true, 'bar')}
+              </div>
             </div>
           </div>
 
@@ -1841,36 +2525,10 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
               </div>
             </div>
             <div className="flex-1">
-              {(() => {
-                const weeklyAusentismo = last15Weeks.map(w => {
-                  const records = ausentismoData.filter(r => {
-                    const d = new Date(r.fecha);
-                    return getWeekNumber(d) === w.week && d.getFullYear() === w.year;
-                  });
-                  if (records.length === 0) return { name: w.label, MOD: 0, MOI: 0, week: w.week, year: w.year };
-                  const jornadasMod = records.reduce((acc, r) => acc + r.jornadasPerdidasMod, 0);
-                  const jornadasMoi = records.reduce((acc, r) => acc + r.jornadasPerdidasMoi, 0);
-                  return { name: w.label, MOD: jornadasMod, MOI: jornadasMoi, week: w.week, year: w.year };
-                });
-                const monthlyAusentismo = last15Months.map(m => {
-                  const records = ausentismoData.filter(r => {
-                    const d = new Date(r.fecha);
-                    return d.getMonth() === m.month && d.getFullYear() === m.year;
-                  });
-                  if (records.length === 0) return { name: m.label, MOD: 0, MOI: 0, date: new Date(m.year, m.month, 1) };
-                  const jornadasMod = records.reduce((acc, r) => acc + r.jornadasPerdidasMod, 0);
-                  const jornadasMoi = records.reduce((acc, r) => acc + r.jornadasPerdidasMoi, 0);
-                  return { name: m.label, MOD: jornadasMod, MOI: jornadasMoi, date: new Date(m.year, m.month, 1) };
-                });
-                return (
-                  <div className="grid grid-cols-2 gap-8">
-                    {renderEvolutionChart(weeklyAusentismo, 'MOD', 'MOD', '#3b82f6', 'Ausentismo MOD (Semanas)', 'absentismo-mod', false, true)}
-                    {renderEvolutionChart(monthlyAusentismo, 'MOD', 'MOD', '#3b82f6', 'Ausentismo MOD (Meses)', 'absentismo-mod', false, true)}
-                    {renderEvolutionChart(weeklyAusentismo, 'MOI', 'MOI', '#8b5cf6', 'Ausentismo MOI (Semanas)', 'absentismo-moi', false, true)}
-                    {renderEvolutionChart(monthlyAusentismo, 'MOI', 'MOI', '#8b5cf6', 'Ausentismo MOI (Meses)', 'absentismo-moi', false, true)}
-                  </div>
-                );
-              })()}
+              <div className="grid grid-cols-2 gap-8">
+                {renderEvolutionChart(weeklyAusentismo, 'value', 'AUSENTISMO %', '#f59e0b', 'Ausentismo % (Semanas)', 'ausentismo', true, true, 'bar')}
+                {renderEvolutionChart(monthlyAusentismo, 'value', 'AUSENTISMO %', '#f59e0b', 'Ausentismo % (Meses)', 'ausentismo', true, true, 'bar')}
+              </div>
             </div>
           </div>
 
@@ -2218,13 +2876,6 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
         {activeTab === 'rrhh' && renderRRHHTab()}
         {activeTab === 'calidad' && renderCalidadTab()}
         {activeTab === 'idm' && renderIdMTab()}
-        {activeTab === 'adherencia' && (
-          <div className="flex flex-col items-center justify-center py-40 text-slate-300 bg-white rounded-[3rem] border border-slate-100 shadow-sm">
-            <svg className="w-20 h-20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
-            <h3 className="text-xl font-black text-slate-400 uppercase tracking-widest">En Construcción</h3>
-            <p className="text-[14px] font-bold uppercase tracking-[0.3em] mt-2">Módulo de Adherencia a la Planificación</p>
-          </div>
-        )}
         {activeTab === 'cmi' && (
           <div className="space-y-8">
             {TALLERES_POR_AREA.map(areaGroup => {

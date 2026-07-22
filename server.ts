@@ -14,18 +14,38 @@ try {
 console.log("Starting Joselito Backend Server...");
 console.log("NODE_ENV:", process.env.NODE_ENV);
 
-// Run startup database migration to add fecha_emision column if needed
+// Run startup database migration to check and add required columns if needed
 const dbUrlForMigration = process.env.DATABASE_URL || process.env.VITE_DATABASE_URL;
 if (dbUrlForMigration) {
   const pool = new Pool({
     connectionString: dbUrlForMigration,
     ssl: { rejectUnauthorized: false }
   });
-  pool.query("ALTER TABLE ideas_mejora ADD COLUMN IF NOT EXISTS fecha_emision TEXT;")
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS plan_accion_calidad (
+      id TEXT PRIMARY KEY,
+      fecha TEXT NOT NULL,
+      tipo_reclamacion TEXT,
+      area_causante TEXT,
+      descripcion_problema TEXT,
+      accion_contenedora TEXT,
+      responsable_contenedora TEXT,
+      fecha_prevista_contenedora TEXT,
+      fecha_cierre_contenedora TEXT,
+      accion_correctora TEXT,
+      responsable_correctora TEXT,
+      fecha_prevista_correctora TEXT,
+      fecha_cierre_correctora TEXT,
+      origen TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    ALTER TABLE ideas_mejora ADD COLUMN IF NOT EXISTS fecha_emision TEXT;
+    ALTER TABLE plan_accion_calidad ADD COLUMN IF NOT EXISTS origen TEXT;
+  `)
     .then(() => {
-      console.log("Database Migration: Checked/Added column fecha_emision to ideas_mejora successfully.");
+      console.log("Database Migration: Checked plan_accion_calidad and ideas_mejora tables and columns successfully.");
       try {
-        fs.appendFileSync("server-log.txt", "Migration success: added fecha_emision to ideas_mejora\n");
+        fs.appendFileSync("server-log.txt", "Migration success: checked plan_accion_calidad (with origen) and ideas_mejora (with fecha_emision)\n");
       } catch (e) {}
       return pool.end();
     })

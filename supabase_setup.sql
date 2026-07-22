@@ -469,9 +469,30 @@ CREATE TABLE IF NOT EXISTS ideas_mejora (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS plan_accion_calidad (
+  id TEXT PRIMARY KEY,
+  fecha TEXT NOT NULL,
+  tipo_reclamacion TEXT,
+  area_causante TEXT,
+  descripcion_problema TEXT,
+  accion_contenedora TEXT,
+  responsable_contenedora TEXT,
+  fecha_prevista_contenedora TEXT,
+  fecha_cierre_contenedora TEXT,
+  accion_correctora TEXT,
+  responsable_correctora TEXT,
+  fecha_prevista_correctora TEXT,
+  fecha_cierre_correctora TEXT,
+  origen TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 ALTER TABLE ideas_mejora DISABLE ROW LEVEL SECURITY;
+ALTER TABLE plan_accion_calidad DISABLE ROW LEVEL SECURITY;
 
 GRANT ALL ON TABLE ideas_mejora TO anon;
 GRANT ALL ON TABLE ideas_mejora TO authenticated;
+GRANT ALL ON TABLE plan_accion_calidad TO anon;
+GRANT ALL ON TABLE plan_accion_calidad TO authenticated;
 
 

@@ -2200,7 +2200,11 @@ const App: React.FC = () => {
             .from('resumen_productividad')
             .upsert(rows, { onConflict: 'fecha,area,producto' });
           if (error) {
-            console.error('Error updating resumen_productividad:', error.message);
+            if (error.message?.includes('fetch') || error.message?.includes('NetworkError') || error.message?.includes('Failed to fetch')) {
+              console.warn('Network issue updating resumen_productividad:', error.message);
+            } else {
+              console.error('Error updating resumen_productividad:', error.message);
+            }
           }
         }
       } else {
@@ -2212,12 +2216,20 @@ const App: React.FC = () => {
             .eq('area', area)
             .eq('producto', producto);
           if (error) {
-            console.error('Error deleting from resumen_productividad:', error.message);
+            if (error.message?.includes('fetch') || error.message?.includes('NetworkError') || error.message?.includes('Failed to fetch')) {
+              console.warn('Network issue deleting from resumen_productividad:', error.message);
+            } else {
+              console.error('Error deleting from resumen_productividad:', error.message);
+            }
           }
         }
       }
     } catch (e: any) {
-      console.error('Error in updateProductivityRow:', e.message);
+      if (e?.message?.includes('fetch') || e?.message?.includes('NetworkError') || e?.message?.includes('Failed to fetch')) {
+        console.warn('Network issue in updateProductivityRow:', e.message);
+      } else {
+        console.error('Error in updateProductivityRow:', e.message);
+      }
     }
   }, [activities, history, masterSpeeds, isOnline, isConfigured]);
 
@@ -2240,7 +2252,11 @@ const App: React.FC = () => {
       }
       return { success: true, count: rows.length };
     } catch (e: any) {
-      console.error("Error in handleRecalculateProductivity:", e.message);
+      if (e?.message?.includes('fetch') || e?.message?.includes('NetworkError') || e?.message?.includes('Failed to fetch')) {
+        console.warn("Network issue in handleRecalculateProductivity:", e.message);
+      } else {
+        console.error("Error in handleRecalculateProductivity:", e.message);
+      }
       return { success: false, error: e.message };
     }
   }, [activities, history, masterSpeeds, isOnline, isConfigured]);

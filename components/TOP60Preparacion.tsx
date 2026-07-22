@@ -101,8 +101,7 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
     }
   });
 
-  // State for Supabase seguridad_top60 records
-  const [supabaseSeguridadRecords, setSupabaseSeguridadRecords] = useState<any[]>([]);
+  // State for Supabase rrhh records
   const [supabaseRrhhRecords, setSupabaseRrhhRecords] = useState<any[]>([]);
   const [loadingSupabase, setLoadingSupabase] = useState(false);
 
@@ -233,7 +232,8 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
     accionCorrectora: '',
     responsableCorrectora: '',
     fechaPrevistaCorrectora: '',
-    fechaCierreCorrectora: ''
+    fechaCierreCorrectora: '',
+    origen: undefined
   });
 
   const [showAddTipoReclamacionModal, setShowAddTipoReclamacionModal] = useState(false);
@@ -356,6 +356,7 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
       responsableCorrectora: dbItem.responsable_correctora || dbItem.responsableCorrectora || '',
       fechaPrevistaCorrectora: dbItem.fecha_prevista_correctora || dbItem.fechaPrevistaCorrectora || '',
       fechaCierreCorrectora: dbItem.fecha_cierre_correctora || dbItem.fechaCierreCorrectora || undefined,
+      origen: dbItem.origen || undefined,
     };
   };
 
@@ -374,6 +375,7 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
       responsable_correctora: uiItem.responsableCorrectora,
       fecha_prevista_correctora: uiItem.fechaPrevistaCorrectora,
       fecha_cierre_correctora: uiItem.fechaCierreCorrectora || null,
+      origen: uiItem.origen || null,
     };
   };
 
@@ -661,22 +663,6 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
     });
   };
 
-  const fetchSupabaseSeguridad = async () => {
-    try {
-      setLoadingSupabase(true);
-      const { data, error } = await supabase.from('seguridad_top60').select('*');
-      if (error) {
-        console.error("Error fetching seguridad_top60:", error);
-      } else if (data) {
-        setSupabaseSeguridadRecords(data);
-      }
-    } catch (e) {
-      console.error("Error in fetchSupabaseSeguridad:", e);
-    } finally {
-      setLoadingSupabase(false);
-    }
-  };
-
   const fetchSupabaseRrhh = async () => {
     try {
       const { data, error } = await supabase.from('top60_rrhh').select('*');
@@ -691,7 +677,6 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
   };
 
   useEffect(() => {
-    fetchSupabaseSeguridad();
     fetchSupabaseRrhh();
     fetchSecurityPlan();
     fetchGaps();
@@ -713,13 +698,6 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
   // Active modal state
   const [activeModal, setActiveModal] = useState<'seguridad' | 'personal' | 'calidad' | 'produccion' | 'idm' | null>(null);
 
-  // Form states
-  const [seguridadForm, setSeguridadForm] = useState({
-    accidentes: 0,
-    incidentes: 0,
-    comentarios: ''
-  });
-
   const [produccionForm, setProduccionForm] = useState({
     cantidad: '',
     tiempoProduccion: '',
@@ -732,16 +710,7 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
   useEffect(() => {
     const dayRecords = records[selectedDate];
     
-    if (activeModal === 'seguridad') {
-      const mondayDate = getMondayDateString(selectedDate);
-      const dbRecord = supabaseSeguridadRecords.find(r => getMondayDateString(r.fecha) === mondayDate);
-      const localRecord = dayRecords?.seguridad?.data;
-      setSeguridadForm({
-        accidentes: dbRecord?.accidentes ?? localRecord?.accidentes ?? 0,
-        incidentes: dbRecord?.incidentes ?? localRecord?.incidentes ?? 0,
-        comentarios: dbRecord?.comentarios ?? localRecord?.comentarios ?? ''
-      });
-    } else if (activeModal === 'personal') {
+    if (activeModal === 'personal') {
       const fridayDate = getFridayOfWeek(selectedDate);
       const mondayDate = getMondayDateString(selectedDate);
       const existing = registrosPersonal.find(r => getMondayDateString(r.fecha) === mondayDate);
@@ -762,7 +731,7 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
         observaciones: existing?.observaciones ?? ''
       });
     }
-  }, [activeModal, selectedDate, records, operarios, supabaseSeguridadRecords, supabaseRrhhRecords, registrosPersonal]);
+  }, [activeModal, selectedDate, records, operarios, supabaseRrhhRecords, registrosPersonal]);
 
   // Helper to format date relative to today
   const formatLastUpdate = (timestampStr: string) => {
@@ -1173,6 +1142,10 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
     }
     if (!currentCalidadForm.areaCausante) {
       alert("Debe seleccionar el área causante.");
+      return;
+    }
+    if (!currentCalidadForm.origen) {
+      alert("Debe seleccionar el origen (Interna o Externa) de la reclamación.");
       return;
     }
     if (!currentCalidadForm.descripcionProblema) {
@@ -2110,7 +2083,8 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
                       accionCorrectora: '',
                       responsableCorrectora: getResponsablesDisponibles().length > 0 ? getResponsablesDisponibles()[0].nombre : '',
                       fechaPrevistaCorrectora: selectedDate,
-                      fechaCierreCorrectora: ''
+                      fechaCierreCorrectora: '',
+                      origen: undefined
                     });
                     setShowAddCalidadModal(true);
                   }}
@@ -2380,7 +2354,7 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
 
             <div className="p-6 overflow-y-auto space-y-6">
               {/* General Block */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {/* Fecha */}
                 <div className="space-y-1">
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha:</label>
@@ -2453,6 +2427,21 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
                     {areasCausantesCalidad.map((a) => (
                       <option key={a.id} value={a.nombre}>{a.nombre}</option>
                     ))}
+                  </select>
+                </div>
+
+                {/* Origen */}
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Origen:</label>
+                  <select
+                    value={currentCalidadForm.origen || ''}
+                    onChange={(e) => setCurrentCalidadForm({ ...currentCalidadForm, origen: e.target.value as 'Interna' | 'Externa' })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-xs"
+                    required
+                  >
+                    <option value="">Selecciona...</option>
+                    <option value="Interna">Interna</option>
+                    <option value="Externa">Externa</option>
                   </select>
                 </div>
               </div>

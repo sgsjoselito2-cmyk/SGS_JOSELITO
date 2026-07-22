@@ -163,6 +163,7 @@ export interface PlanAccionCalidad {
   responsableCorrectora: string;
   fechaPrevistaCorrectora: string;
   fechaCierreCorrectora?: string;
+  origen?: 'Interna' | 'Externa';
 }
 
 export interface TipoReclamacion {
