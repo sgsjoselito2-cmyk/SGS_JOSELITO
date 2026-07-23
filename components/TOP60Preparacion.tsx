@@ -3063,8 +3063,8 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
                     <p className="text-xs text-slate-400/85 mt-1">Usa los filtros o añade una nueva en el formulario lateral.</p>
                   </div>
                 ) : (
-                  <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
-                    <table className="w-full text-left text-xs font-bold text-slate-700">
+                  <div className="border border-slate-100 rounded-2xl overflow-x-auto shadow-sm">
+                    <table className="w-full min-w-[900px] text-left text-xs font-bold text-slate-700">
                       <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-wider border-b border-slate-100">
                         <tr>
                           <th className="px-4 py-3 text-center w-12">Nº</th>
@@ -3139,19 +3139,21 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
                                   {idea.estado}
                                 </span>
                               </td>
-                              <td className="px-4 py-3.5 text-center">
-                                <div className="flex items-center justify-center gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                              <td className="px-4 py-3.5 text-center relative z-10">
+                                <div className="flex items-center justify-center gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity relative z-10 pointer-events-auto">
                                   <button
+                                    type="button"
                                     onClick={() => handleEditIdea(idea)}
                                     title="Editar"
-                                    className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all cursor-pointer"
+                                    className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all cursor-pointer relative z-10 pointer-events-auto"
                                   >
                                     <Pencil className="w-3.5 h-3.5" />
                                   </button>
                                   <button
+                                    type="button"
                                     onClick={() => handleDeleteIdea(idea.id)}
                                     title="Eliminar"
-                                    className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
+                                    className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer relative z-10 pointer-events-auto"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
