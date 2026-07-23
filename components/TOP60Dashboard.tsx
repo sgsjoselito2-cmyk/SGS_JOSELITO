@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { 
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList, AreaChart, Area
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList, AreaChart, Area, BarChart, Cell
 } from 'recharts';
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
@@ -10,6 +10,15 @@ import { calculateStats, getWeekNumber } from './Dashboard';
 import { AREA_NAMES, JOSELITO_LOGO } from '../constants';
 import HelpModal from './HelpModal';
 import { supabase } from '../lib/supabase';
+
+const parseLocalDate = (dateStr: string) => {
+  if (!dateStr) return new Date();
+  const [year, month, day] = dateStr.split('-').map(Number);
+  if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+    return new Date(year, month - 1, day);
+  }
+  return new Date(dateStr);
+};
 
 interface TOP60DashboardProps {
   activities: Activity[];
@@ -108,6 +117,10 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
   // Calidad action plan table filters
   const [calFilterEstado, setCalFilterEstado] = useState('Todos');
   const [calFilterOrigen, setCalFilterOrigen] = useState('Todos');
+
+  // Breakdown toggle state for OEE indicators
+  const [openBreakdownId, setOpenBreakdownId] = useState<string | null>(null);
+  const [selectedBreakdownWeekObj, setSelectedBreakdownWeekObj] = useState<{ week: number; year: number } | null>(null);
 
   const getSecurityActionStatus = (r: any) => {
     const real = r.fecha_implantacion_real || r.fechaImplantacionReal || '';
@@ -396,7 +409,10 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
       const d = getVal('disponibilidad');
       const r = getVal('rendimiento');
       const c = getVal('calidad');
-      return parseFloat(((d * r * c) / 10000).toFixed(1));
+      const calcObj = parseFloat(((d * r * c) / 10000).toFixed(1));
+      if (calcObj > 0) return calcObj;
+      if (area === 'env-envasado' || area === 'env-empaquetado') return 45.0;
+      return 0;
     }
 
     return getVal(indicatorId);
@@ -485,15 +501,6 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
     }
   ], []);
 
-  const parseLocalDate = (dateStr: string) => {
-    if (!dateStr) return new Date();
-    const parts = dateStr.split('-');
-    if (parts.length === 3) {
-      return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-    }
-    return new Date(dateStr);
-  };
-
   const salaBlancaWeeklyData = useMemo(() => {
     return SALA_BLANCA_INDICATORS.map(ind => {
       const dataPoints = last15Weeks.map(w => {
@@ -524,6 +531,9 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
         let obj = getObjectiveForDate(ind.workshopId, date, ind.indicatorId);
         if (!obj && ind.id === 'merma_loncheado') {
           obj = getObjectiveForDate(ind.workshopId, date, 'merma');
+        }
+        if (ind.id === 'oee_loncheado' && (!obj || obj === 40)) {
+          obj = 45.0;
         }
 
         return {
@@ -570,6 +580,9 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
         if (!obj && ind.id === 'merma_loncheado') {
           obj = getObjectiveForDate(ind.workshopId, date, 'merma');
         }
+        if (ind.id === 'oee_loncheado' && (!obj || obj === 40)) {
+          obj = 45.0;
+        }
 
         return {
           name: m.label,
@@ -584,6 +597,115 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
       return { ...ind, data: dataPoints };
     });
   }, [allData, mermas, last15Months, allObjectives, SALA_BLANCA_INDICATORS]);
+
+  // EMBUTIDO Indicators configuration
+  const EMBUTIDO_INDICATORS = useMemo(() => [
+    {
+      id: 'oee_envasado',
+      workshopId: 'env-envasado',
+      title: 'OEE Envasado',
+      getValue: (stats: any) => parseFloat(stats.productividad) || 0,
+      indicatorId: 'productividad',
+      isPercentage: true,
+      color: '#3b82f6',
+      unit: '%'
+    },
+    {
+      id: 'oee_empaquetado',
+      workshopId: 'env-empaquetado',
+      title: 'OEE Empaquetado',
+      getValue: (stats: any) => parseFloat(stats.productividad) || 0,
+      indicatorId: 'productividad',
+      isPercentage: true,
+      color: '#10b981',
+      unit: '%'
+    }
+  ], []);
+
+  const embutidoWeeklyData = useMemo(() => {
+    return EMBUTIDO_INDICATORS.map(ind => {
+      const dataPoints = last15Weeks.map(w => {
+        const weekActivities = allData.filter(a => {
+          if (!a.area || !a.fecha) return false;
+          if (a.area.toLowerCase() !== ind.workshopId.toLowerCase()) return false;
+          const d = parseLocalDate(a.fecha);
+          return getWeekNumber(d) === w.week && d.getFullYear() === w.year;
+        });
+
+        const weekMermas = (mermas || []).filter(m => {
+          if (!m.fecha || !m.area) return false;
+          if (m.area.toLowerCase() !== ind.workshopId.toLowerCase()) return false;
+          const md = parseLocalDate(m.fecha);
+          return getWeekNumber(md) === w.week && md.getFullYear() === w.year;
+        });
+
+        const date = new Date(w.year, 0, 1);
+        date.setDate(date.getDate() + (w.week - 1) * 7);
+
+        const hasData = weekActivities.length > 0 || weekMermas.length > 0;
+        let val = 0;
+        if (hasData) {
+          const stats = calculateStats(weekActivities, ind.workshopId, weekMermas);
+          val = ind.getValue(stats);
+        }
+
+        const obj = getObjectiveForDate(ind.workshopId, date, ind.indicatorId);
+
+        return {
+          name: `S${w.week}`,
+          value: val,
+          Objective: obj || 0,
+          week: w.week,
+          year: w.year,
+          date
+        };
+      });
+
+      return { ...ind, data: dataPoints };
+    });
+  }, [allData, mermas, last15Weeks, allObjectives, EMBUTIDO_INDICATORS]);
+
+  const embutidoMonthlyData = useMemo(() => {
+    return EMBUTIDO_INDICATORS.map(ind => {
+      const dataPoints = last15Months.map(m => {
+        const monthActivities = allData.filter(a => {
+          if (!a.area || !a.fecha) return false;
+          if (a.area.toLowerCase() !== ind.workshopId.toLowerCase()) return false;
+          const d = parseLocalDate(a.fecha);
+          return d.getMonth() === m.month && d.getFullYear() === m.year;
+        });
+
+        const monthMermas = (mermas || []).filter(m => {
+          if (!m.fecha || !m.area) return false;
+          if (m.area.toLowerCase() !== ind.workshopId.toLowerCase()) return false;
+          const md = parseLocalDate(m.fecha);
+          return md.getMonth() === m.month && md.getFullYear() === m.year;
+        });
+
+        const date = new Date(m.year, m.month, 1);
+
+        const hasData = monthActivities.length > 0 || monthMermas.length > 0;
+        let val = 0;
+        if (hasData) {
+          const stats = calculateStats(monthActivities, ind.workshopId, monthMermas);
+          val = ind.getValue(stats);
+        }
+
+        const obj = getObjectiveForDate(ind.workshopId, date, ind.indicatorId);
+
+        return {
+          name: m.label,
+          value: val,
+          Objective: obj || 0,
+          month: m.month,
+          year: m.year,
+          date
+        };
+      });
+
+      return { ...ind, data: dataPoints };
+    });
+  }, [allData, mermas, last15Months, allObjectives, EMBUTIDO_INDICATORS]);
 
   const weeklyAbsentismo = useMemo(() => {
     return last15Weeks.map(w => {
@@ -873,7 +995,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
 
   const globalProductivity = useMemo(() => {
     const weekData = history.filter(h => {
-      const d = new Date(h.fecha);
+      const d = parseLocalDate(h.fecha);
       return getWeekNumber(d) === selectedWeek && d.getFullYear() === selectedYear;
     });
     if (weekData.length === 0) return 0;
@@ -903,7 +1025,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
 
     wsData.forEach(a => {
       if (!a.fecha) return;
-      const ad = new Date(a.fecha);
+      const ad = parseLocalDate(a.fecha);
       const week = getWeekNumber(ad);
       const year = ad.getFullYear();
       const month = ad.getMonth();
@@ -1292,6 +1414,162 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
         <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 text-center">{title}</h3>
         <div className="flex-1 w-full">
           {chart}
+        </div>
+      </div>
+    );
+  };
+
+  const renderOEEBreakdown = (ind: any) => {
+    if (openBreakdownId !== ind.id) return null;
+
+    const targetWeek = selectedBreakdownWeekObj || { week: selectedWeek, year: selectedYear };
+
+    const weekActivities = allData.filter(a => {
+      if (!a.area || !a.fecha) return false;
+      if (a.area.toLowerCase() !== ind.workshopId.toLowerCase()) return false;
+      const d = parseLocalDate(a.fecha);
+      return getWeekNumber(d) === targetWeek.week && d.getFullYear() === targetWeek.year;
+    });
+
+    const weekMermas = (mermas || []).filter(m => {
+      if (!m.fecha || !m.area) return false;
+      if (m.area.toLowerCase() !== ind.workshopId.toLowerCase()) return false;
+      const md = parseLocalDate(m.fecha);
+      return getWeekNumber(md) === targetWeek.week && md.getFullYear() === targetWeek.year;
+    });
+
+    const stats = calculateStats(weekActivities, ind.workshopId, weekMermas);
+
+    // Pareto for Esperas/Averias
+    const esperas: Record<string, number> = {};
+    weekActivities.forEach(act => {
+      const isEA = act.tipoTarea === 'E' || act.tipoTarea === 'A' || act.tipoTarea === TaskType.ESPERAS || act.tipoTarea === TaskType.AVERIA;
+      if (isEA) {
+        const key = act.formato || 'Sin formato / Varios';
+        esperas[key] = (esperas[key] || 0) + (act.duracionMin || 0);
+      }
+    });
+
+    const paretoData = Object.entries(esperas)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8);
+
+    const PARETO_COLORS = ['#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6366f1', '#64748b'];
+
+    return (
+      <div className="mt-4 p-4 bg-white rounded-xl border border-blue-200 shadow-md space-y-4">
+        {/* Header & Week Selector */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-black text-slate-800 uppercase tracking-tight">
+              Desglose D/R/C & Pareto — {ind.title}
+            </span>
+            <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full border border-blue-200">
+              Semana {targetWeek.week} ({targetWeek.year})
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 overflow-x-auto max-w-full py-0.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">Semana:</span>
+            {last15Weeks.slice(-8).map(w => (
+              <button
+                key={`${w.year}-${w.week}`}
+                type="button"
+                onClick={() => setSelectedBreakdownWeekObj(w)}
+                className={`px-2 py-0.5 text-[10px] font-bold rounded-md border transition-colors cursor-pointer ${
+                  targetWeek.week === w.week && targetWeek.year === w.year
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                S{w.week}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+          {/* 1. D/R/C Breakdown */}
+          <div className="lg:col-span-1 space-y-2">
+            <h4 className="text-[11px] font-black text-slate-700 uppercase tracking-wider mb-2">
+              1. Desglose D / R / C
+            </h4>
+            <div className="grid grid-cols-1 gap-2">
+              <div className="p-3 bg-blue-50/60 rounded-lg border border-blue-100 flex items-center justify-between">
+                <div>
+                  <div className="text-[10px] font-bold text-blue-700 uppercase">Disponibilidad</div>
+                  <div className="text-[10px] text-blue-500 font-medium">Tiempo operativo / disponible</div>
+                </div>
+                <div className="text-lg font-black text-blue-800">
+                  {parseFloat(stats.disponibilidad || '0').toFixed(1)}%
+                </div>
+              </div>
+
+              <div className="p-3 bg-emerald-50/60 rounded-lg border border-emerald-100 flex items-center justify-between">
+                <div>
+                  <div className="text-[10px] font-bold text-emerald-700 uppercase">Rendimiento</div>
+                  <div className="text-[10px] text-emerald-500 font-medium">Velocidad real / estándar</div>
+                </div>
+                <div className="text-lg font-black text-emerald-800">
+                  {parseFloat(stats.rendimiento || '0').toFixed(1)}%
+                </div>
+              </div>
+
+              <div className="p-3 bg-amber-50/60 rounded-lg border border-amber-100 flex items-center justify-between">
+                <div>
+                  <div className="text-[10px] font-bold text-amber-700 uppercase">Calidad</div>
+                  <div className="text-[10px] text-amber-500 font-medium">Conforme / total</div>
+                </div>
+                <div className="text-lg font-black text-amber-800">
+                  {parseFloat(stats.calidad || '0').toFixed(1)}%
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-900 text-white rounded-lg flex items-center justify-between shadow-xs">
+                <div>
+                  <div className="text-[10px] font-bold text-slate-300 uppercase">Productividad (OEE)</div>
+                  <div className="text-[10px] text-slate-400">D × R × C</div>
+                </div>
+                <div className="text-xl font-black text-white">
+                  {parseFloat(stats.productividad || '0').toFixed(1)}%
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Pareto Chart */}
+          <div className="lg:col-span-2 space-y-2">
+            <h4 className="text-[11px] font-black text-slate-700 uppercase tracking-wider mb-2">
+              2. Pareto Causas de Baja Disponibilidad (Top 8 Minutos Esperas/Averías)
+            </h4>
+            {paretoData.length > 0 ? (
+              <div className="h-56 w-full bg-slate-50/50 p-2 rounded-lg border border-slate-100">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={paretoData} layout="vertical" margin={{ top: 5, right: 35, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
+                    <XAxis type="number" tick={{ fontSize: 9, fontWeight: 700 }} tickFormatter={(val) => `${val}m`} />
+                    <YAxis dataKey="name" type="category" tick={{ fontSize: 8, fontWeight: 700 }} width={120} axisLine={false} tickLine={false} />
+                    <Tooltip 
+                      formatter={(val: number) => [`${val} minutos`, 'Duración']}
+                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '10px', fontWeight: 'bold' }}
+                    />
+                    <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} maxBarSize={20}>
+                      {paretoData.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={PARETO_COLORS[index % PARETO_COLORS.length]} />
+                      ))}
+                      <LabelList dataKey="value" position="right" formatter={(val: number) => `${val}m`} style={{ fontSize: '8px', fontWeight: 'bold', fill: '#475569' }} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-56 w-full bg-slate-50 rounded-lg border border-slate-200 border-dashed flex flex-col items-center justify-center text-slate-400 text-xs font-semibold p-4">
+                <span>No hay registros de esperas o averías en la Semana {targetWeek.week}.</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -3414,11 +3692,30 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
 
             {salaBlancaWeeklyData.map((ind, idx) => {
               const mInd = salaBlancaMonthlyData[idx];
+              const isOEE = ind.indicatorId === 'productividad';
+              const showBreakdownBtn = isOEE;
               return (
                 <div key={ind.id} className="space-y-3 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
                   <div className="flex items-center gap-2 px-2">
                     <div className="h-px flex-1 bg-slate-200"></div>
                     <h3 className="text-xs font-black text-slate-700 uppercase tracking-widest">{ind.title}</h3>
+                    {showBreakdownBtn && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (openBreakdownId === ind.id) {
+                            setOpenBreakdownId(null);
+                          } else {
+                            setOpenBreakdownId(ind.id);
+                            setSelectedBreakdownWeekObj({ week: selectedWeek, year: selectedYear });
+                          }
+                        }}
+                        className="px-2.5 py-1 text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 active:bg-blue-200 rounded-lg border border-blue-200 transition-colors flex items-center gap-1 shadow-xs cursor-pointer ml-2"
+                      >
+                        <ActivityIcon className="w-3 h-3 text-blue-500" />
+                        {openBreakdownId === ind.id ? 'Ocultar desglose' : 'Ver desglose'}
+                      </button>
+                    )}
                     <div className="h-px flex-1 bg-slate-200"></div>
                   </div>
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -3447,6 +3744,73 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
                       mInd.indicatorId
                     )}
                   </div>
+                  {renderOEEBreakdown(ind)}
+                </div>
+              );
+            })}
+
+            {/* EMBUTIDO Section */}
+            <div className="flex items-center gap-2 px-2 pt-4">
+              <div className="h-0.5 flex-1 bg-slate-800 rounded-full"></div>
+              <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">EMBUTIDO</h2>
+              <div className="h-0.5 flex-1 bg-slate-800 rounded-full"></div>
+            </div>
+
+            {embutidoWeeklyData.map((ind, idx) => {
+              const mInd = embutidoMonthlyData[idx];
+              const isOEE = ind.indicatorId === 'productividad';
+              const showBreakdownBtn = isOEE;
+              return (
+                <div key={ind.id} className="space-y-3 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                  <div className="flex items-center gap-2 px-2">
+                    <div className="h-px flex-1 bg-slate-200"></div>
+                    <h3 className="text-xs font-black text-slate-700 uppercase tracking-widest">{ind.title}</h3>
+                    {showBreakdownBtn && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (openBreakdownId === ind.id) {
+                            setOpenBreakdownId(null);
+                          } else {
+                            setOpenBreakdownId(ind.id);
+                            setSelectedBreakdownWeekObj({ week: selectedWeek, year: selectedYear });
+                          }
+                        }}
+                        className="px-2.5 py-1 text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 active:bg-blue-200 rounded-lg border border-blue-200 transition-colors flex items-center gap-1 shadow-xs cursor-pointer ml-2"
+                      >
+                        <ActivityIcon className="w-3 h-3 text-blue-500" />
+                        {openBreakdownId === ind.id ? 'Ocultar desglose' : 'Ver desglose'}
+                      </button>
+                    )}
+                    <div className="h-px flex-1 bg-slate-200"></div>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {renderEvolutionChart(
+                      ind.data,
+                      'value',
+                      ind.unit,
+                      ind.color,
+                      `${ind.title} (Semanas)`,
+                      ind.workshopId,
+                      ind.isPercentage,
+                      false,
+                      'bar',
+                      ind.indicatorId
+                    )}
+                    {renderEvolutionChart(
+                      mInd.data,
+                      'value',
+                      mInd.unit,
+                      mInd.color,
+                      `${mInd.title} (Meses)`,
+                      mInd.workshopId,
+                      mInd.isPercentage,
+                      false,
+                      'bar',
+                      mInd.indicatorId
+                    )}
+                  </div>
+                  {renderOEEBreakdown(ind)}
                 </div>
               );
             })}

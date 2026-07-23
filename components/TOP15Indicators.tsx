@@ -432,7 +432,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
       const dayDataMap = last7Days.map(date => {
         const data = allData.filter(a => a.area === ws.id && a.fecha && a.fecha === date);
         const dayMermas = mermas.filter(m => m.fecha === date && m.area === ws.id);
-        return (data.length === 0 && dayMermas.length === 0) ? null : calculateStats(data, ws.id, dayMermas);
+        return (data.length === 0 && dayMermas.length === 0) ? null : calculateStats(data, ws.id, dayMermas, workshopIndicators);
       });
 
       indicators.forEach(ind => {
@@ -451,7 +451,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
       });
     });
     return rows;
-  }, [allData, last7Days, mermas]);
+  }, [allData, last7Days, mermas, workshopIndicators]);
 
   // Calculate stats for each workshop and each week
   const weeklyStats = useMemo(() => {
@@ -510,7 +510,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
         }
 
         if (data.length === 0 && weekMermas.length === 0) return { stats: null, objective };
-        return { stats: calculateStats(data, ws.id, weekMermas), objective };
+        return { stats: calculateStats(data, ws.id, weekMermas, workshopIndicators), objective };
       });
 
       indicators.forEach(ind => {
@@ -530,7 +530,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
       });
     });
     return rows;
-  }, [allData, last7Weeks, allObjectives, mermas]);
+  }, [allData, last7Weeks, allObjectives, mermas, workshopIndicators]);
 
   // Calculate workshop-level data for charts (one row per workshop, containing all metrics)
   const workshopWeeklyData = useMemo(() => {
@@ -575,7 +575,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
 
         if (weekActivities.length === 0) return { name: `S${w.week}`, Disp: 0, Rto: 0, Prod: 0, Obj: objective };
         
-        const stats = calculateStats(weekActivities, ws.id, weekMermas);
+        const stats = calculateStats(weekActivities, ws.id, weekMermas, workshopIndicators);
         return { 
           name: `S${w.week}`, 
           Disp: stats.disponibilidad || 0, 
@@ -586,7 +586,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
       });
       return { id: ws.id, name: ws.name, values: data };
     });
-  }, [allData, last7Weeks, allObjectives, mermas]);
+  }, [allData, last7Weeks, allObjectives, mermas, workshopIndicators]);
 
   // Pareto data for selected workshop
   const paretos = useMemo(() => {

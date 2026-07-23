@@ -483,8 +483,9 @@ export const calculateStats = (
   }
 
   const rawIndicators = (resolvedIndicators && targetArea) ? (resolvedIndicators[targetArea] || resolvedIndicators.default || []) : [];
+  const standardKpiIds = ['productividad', 'oee', 'disponibilidad', 'rendimiento', 'calidad', 'pph', 'merma1', 'merma2', 'pph_blister_emp', 'pph_sin_blister_cuchillo', 'pph_sin_marcar', 'pph_empaquetado_jabu', 'subproducto'];
   rawIndicators.forEach((ind: any) => {
-    if (ind.formula) {
+    if (ind.formula && !standardKpiIds.includes(ind.id)) {
       const val = evaluateFormula(ind.formula, baseVars, ind.escala);
       // store the result as a key in the stats object
       statsObj[ind.id] = val.toFixed(1);

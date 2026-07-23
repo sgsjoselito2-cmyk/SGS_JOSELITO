@@ -153,17 +153,28 @@ const App: React.FC = () => {
     const parsed = safeParse('zitron_workshop_indicators', INITIAL_WORKSHOP_INDICATORS);
     let changed = false;
     
+    // Purge any residual formulas or escala properties from native standard KPI indicators across all workshops
+    const standardKpiIds = ['productividad', 'oee', 'disponibilidad', 'rendimiento', 'calidad', 'pph', 'merma1', 'merma2', 'pph_blister_emp', 'pph_sin_blister_cuchillo', 'pph_sin_marcar', 'pph_empaquetado_jabu', 'subproducto'];
+    if (parsed) {
+      Object.keys(parsed).forEach(wsKey => {
+        if (Array.isArray(parsed[wsKey])) {
+          parsed[wsKey].forEach((ind: any) => {
+            if (standardKpiIds.includes(ind.id)) {
+              if (ind.formula !== undefined || ind.escala !== undefined) {
+                delete ind.formula;
+                delete ind.escala;
+                changed = true;
+              }
+            }
+          });
+        }
+      });
+    }
+
     if (parsed && parsed['sb-loncheado']) {
       if (!parsed['sb-loncheado'].some((ind: any) => ind.id === 'productividad')) {
         parsed['sb-loncheado'].splice(3, 0, { id: 'productividad', name: 'Productividad (OEE)' });
         changed = true;
-      } else {
-        const prodInd = parsed['sb-loncheado'].find((ind: any) => ind.id === 'productividad');
-        if (prodInd && (prodInd.formula !== undefined || prodInd.escala !== undefined)) {
-          delete prodInd.formula;
-          delete prodInd.escala;
-          changed = true;
-        }
       }
     }
     
