@@ -184,19 +184,11 @@ const App: React.FC = () => {
       changed = true;
     }
 
-    // Ensure sb-empaquetado-loncheado indicators exist and are correct
+    // Ensure sb-empaquetado-loncheado indicators are strictly restricted to PPH blister empaquetado
     if (parsed && parsed['sb-empaquetado-loncheado']) {
-      if (!parsed['sb-empaquetado-loncheado'].some((ind: any) => ind.id === 'disponibilidad')) {
-        parsed['sb-empaquetado-loncheado'].push({ id: 'disponibilidad', name: 'Disponibilidad (%)' });
-        changed = true;
-      }
-      if (!parsed['sb-empaquetado-loncheado'].some((ind: any) => ind.id === 'calidad')) {
-        parsed['sb-empaquetado-loncheado'].push({ id: 'calidad', name: 'Calidad (%)' });
-        changed = true;
-      }
-      const filtered = parsed['sb-empaquetado-loncheado'].filter((ind: any) => ind.id !== 'rendimiento' && ind.id !== 'productividad');
-      if (filtered.length !== parsed['sb-empaquetado-loncheado'].length) {
-        parsed['sb-empaquetado-loncheado'] = filtered;
+      const filtered = parsed['sb-empaquetado-loncheado'].filter((ind: any) => ind.id === 'pph_blister_emp' || ind.id === 'pph');
+      if (filtered.length !== parsed['sb-empaquetado-loncheado'].length || filtered.length === 0) {
+        parsed['sb-empaquetado-loncheado'] = [{ id: 'pph_blister_emp', name: 'PPH blister empaquetado' }];
         changed = true;
       }
     }

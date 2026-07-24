@@ -379,8 +379,8 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
     const objs = [...getObjectivesForArea(area)].sort((a, b) => {
       const vComp = (b.valid_from || '').localeCompare(a.valid_from || '');
       if (vComp !== 0) return vComp;
-      const aTop = (a.show_in_top15 || a.showInTop15 || a.show_in_top60 || a.showInTop60) ? 1 : 0;
-      const bTop = (b.show_in_top15 || b.showInTop15 || b.show_in_top60 || b.showInTop60) ? 1 : 0;
+      const aTop = ((a as any).show_in_top15 || a.showInTop15 || (a as any).show_in_top60 || a.showInTop60) ? 1 : 0;
+      const bTop = ((b as any).show_in_top15 || b.showInTop15 || (b as any).show_in_top60 || b.showInTop60) ? 1 : 0;
       return bTop - aTop;
     });
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -1214,11 +1214,13 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
             <Area type="monotone" dataKey="Prod" fill="#eab308" fillOpacity={0.1} stroke="none" legendType="none" isAnimationActive={false} />
           )}
           
-          <Bar dataKey="Disp" name="Disponibilidad" fill="#3b82f6" radius={[1, 1, 0, 0]} maxBarSize={15} isAnimationActive={false} />
+          {!isMovimientoJamones && !isEmpaquetadoLoncheado && (
+            <Bar dataKey="Disp" name="Disponibilidad" fill="#3b82f6" radius={[1, 1, 0, 0]} maxBarSize={15} isAnimationActive={false} />
+          )}
           {!isMovimientoJamones && !isEmpaquetadoLoncheado && (
             <Bar dataKey="Rto" name="Rendimiento" fill="#f97316" radius={[1, 1, 0, 0]} maxBarSize={15} isAnimationActive={false} />
           )}
-          {!isMovimientoJamones && (
+          {!isMovimientoJamones && !isEmpaquetadoLoncheado && (
             <Bar dataKey="Cal" name="Calidad" fill="#94a3b8" radius={[1, 1, 0, 0]} maxBarSize={15} isAnimationActive={false} />
           )}
           
@@ -1443,7 +1445,8 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
     // Pareto for Esperas/Averias
     const esperas: Record<string, number> = {};
     weekActivities.forEach(act => {
-      const isEA = act.tipoTarea === 'E' || act.tipoTarea === 'A' || act.tipoTarea === TaskType.ESPERAS || act.tipoTarea === TaskType.AVERIA;
+      const t = act.tipoTarea as any;
+      const isEA = t === 'E' || t === 'A' || t === TaskType.ESPERAS || t === TaskType.AVERIA;
       if (isEA) {
         const key = act.formato || 'Sin formato / Varios';
         esperas[key] = (esperas[key] || 0) + (act.duracionMin || 0);

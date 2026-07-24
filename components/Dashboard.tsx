@@ -854,7 +854,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     });
 
     const indicadoresFiltrados = indicators.filter(ind => {
-      if (selectedArea === 'sb-empaquetado-loncheado' && (ind.id === 'rendimiento' || ind.id === 'productividad')) {
+      if (selectedArea === 'sb-empaquetado-loncheado' && (ind.id === 'rendimiento' || ind.id === 'productividad' || ind.id === 'disponibilidad' || ind.id === 'calidad' || ind.id === 'oee')) {
         return false;
       }
       return ind.showInTop5 === true;
@@ -924,9 +924,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
     if (aid.includes('sb-empaquetado-loncheado')) {
       kpis.push({ label: 'PPH Blister Emp', val: stats.pph_blister_emp, obj: getObjectiveForDate('pph_blister_emp', selectedDate), color: 'indigo', key: 'pph_blister_emp' });
-      kpis.push({ label: 'PPH Sin Blister Cuchillo', val: stats.pph_sin_blister_cuchillo, obj: getObjectiveForDate('pph_sin_blister_cuchillo', selectedDate), color: 'indigo', key: 'pph_sin_blister_cuchillo' });
-      kpis.push({ label: 'PPH Sin Marcar', val: stats.pph_sin_marcar, obj: getObjectiveForDate('pph_sin_marcar', selectedDate), color: 'indigo', key: 'pph_sin_marcar' });
-      kpis.push({ label: 'PPH Emp Jabu', val: stats.pph_empaquetado_jabu, obj: getObjectiveForDate('pph_empaquetado_jabu', selectedDate), color: 'indigo', key: 'pph_empaquetado_jabu' });
     }
     if (aid.includes('sb-empaquetado-deshuesado') || aid.includes('env-envasado') || aid.includes('env-empaquetado')) {
       kpis.push({ label: 'PPH', val: stats.pph, obj: getObjectiveForDate('pph', selectedDate), color: 'indigo', key: 'pph' });
@@ -1008,7 +1005,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           if (selectedArea === 'movimiento-jamones' && kpi.key !== 'disponibilidad') {
             return false;
           }
-          if (selectedArea === 'sb-empaquetado-loncheado' && (kpi.key === 'rendimiento' || kpi.key === 'productividad')) {
+          if (selectedArea === 'sb-empaquetado-loncheado') {
             return false;
           }
           const objs = allObjectives[selectedArea || ''] || [];
@@ -1037,7 +1034,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             if (selectedArea === 'movimiento-jamones' && kpi.key !== 'disponibilidad') {
               return false;
             }
-            if (selectedArea === 'sb-empaquetado-loncheado' && (kpi.key === 'rendimiento' || kpi.key === 'productividad')) {
+            if (selectedArea === 'sb-empaquetado-loncheado') {
               return false;
             }
             const objs = allObjectives[selectedArea || ''] || [];
@@ -1135,7 +1132,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           if (selectedArea === 'movimiento-jamones' && pareto.type !== 'disponibilidad') {
             return false;
           }
-          if (selectedArea === 'sb-empaquetado-loncheado' && pareto.type === 'rendimiento') {
+          if (selectedArea === 'sb-empaquetado-loncheado') {
             return false;
           }
           return true;

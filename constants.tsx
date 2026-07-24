@@ -147,12 +147,7 @@ export const INITIAL_WORKSHOP_INDICATORS: Record<string, {id: string, name: stri
     { id: 'pph', name: 'PPH' }
   ],
   'sb-empaquetado-loncheado': [
-    { id: 'pph_blister_emp', name: 'PPH blister empaquetado' },
-    { id: 'pph_sin_blister_cuchillo', name: 'PPH sin blister cuchillo' },
-    { id: 'pph_sin_marcar', name: 'PPH sin marcar' },
-    { id: 'pph_empaquetado_jabu', name: 'PPH empaquetado Jabu' },
-    { id: 'disponibilidad', name: 'Disponibilidad (%)' },
-    { id: 'calidad', name: 'Calidad (%)' }
+    { id: 'pph_blister_emp', name: 'PPH blister empaquetado' }
   ],
   'sb-empaquetado-deshuesado': [
     { id: 'pph', name: 'PPH' }

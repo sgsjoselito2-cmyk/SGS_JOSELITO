@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  Cell as RechartsCell, ComposedChart, Line, Legend
+  Cell as RechartsCell, ComposedChart, Line, Legend, LabelList
 } from 'recharts';
 import Markdown from 'react-markdown';
 import { GoogleGenAI } from "@google/genai";
@@ -18,6 +18,88 @@ const parseLocalDate = (dateStr: string) => {
   if (!dateStr) return new Date();
   const [year, month, day] = dateStr.split('-').map(Number);
   return new Date(year, month - 1, day, 12, 0, 0);
+};
+
+const CustomXAxisTick = ({ x, y, payload }: any) => {
+  const parts = (payload?.value || '').split('\n');
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text x={0} y={0} dy={10} textAnchor="middle" fill="#64748b" fontSize={8} fontWeight={700}>
+        {parts[0]}
+      </text>
+      {parts[1] && (
+        <text x={0} y={0} dy={18} textAnchor="middle" fill="#94a3b8" fontSize={7} fontWeight={600}>
+          {parts[1]}
+        </text>
+      )}
+    </g>
+  );
+};
+
+const renderCompactIndicatorChart = (
+  data: { name: string; value: number; Objective: number }[],
+  unit: string,
+  color: string,
+  title: string,
+  isPercentage: boolean,
+  workshopName?: string
+) => {
+  const hasObjective = data.some(d => d.Objective > 0);
+
+  return (
+    <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-sm flex flex-col h-[215px] hover:border-slate-300 transition-colors">
+      <div className="text-center mb-1 flex flex-col items-center">
+        {workshopName && (
+          <span className="inline-block px-2 py-0.5 rounded text-[8px] font-black tracking-wider uppercase bg-slate-100 text-slate-700 border border-slate-200/80 mb-1">
+            {workshopName}
+          </span>
+        )}
+        <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-tight truncate w-full" title={title}>
+          {title}
+        </h4>
+      </div>
+      <div className="flex-1 w-full min-h-[135px]">
+        <ResponsiveContainer width="100%" height="100%" minHeight={135} debounce={100}>
+          <ComposedChart data={data} margin={{ top: 12, right: 8, bottom: 20, left: -22 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<CustomXAxisTick />} interval={0} />
+            <YAxis 
+              tick={{fontSize: 8, fontWeight: 700, fill: '#64748b'}} 
+              axisLine={false} 
+              tickLine={false}
+              tickFormatter={(val) => isPercentage ? `${val}%` : val}
+            />
+            <Tooltip 
+              contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '9px', fontWeight: 'bold'}}
+              formatter={(val: any) => isPercentage ? [`${Number(val).toFixed(1)}%`, title] : [val, title]}
+            />
+            <Legend wrapperStyle={{fontSize: '8px', fontWeight: 'bold', paddingTop: '6px'}} />
+            <Bar dataKey="value" name={unit} fill={color} radius={[2, 2, 0, 0]} maxBarSize={18} isAnimationActive={false}>
+              <LabelList 
+                dataKey="value" 
+                position="top" 
+                formatter={(val: number) => val > 0 ? (isPercentage ? `${val.toFixed(1)}%` : `${val.toFixed(0)}`) : ''} 
+                style={{ fontSize: '7px', fontWeight: 'bold', fill: '#334155' }} 
+              />
+            </Bar>
+            {hasObjective && (
+              <Line 
+                type="stepAfter" 
+                dataKey="Objective" 
+                name="OBJETIVO" 
+                stroke="#ef4444" 
+                strokeWidth={2} 
+                strokeDasharray="5 5" 
+                dot={false} 
+                activeDot={false} 
+                isAnimationActive={false} 
+              />
+            )}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
 };
 
 interface TOP15IndicatorsProps {
@@ -421,6 +503,9 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
         if (ws.id === 'movimiento-jamones' && ind.id !== 'cantidad_colgada') {
           return false;
         }
+        if (ws.id === 'sb-empaquetado-loncheado' && ind.id !== 'pph_blister_emp' && ind.id !== 'pph') {
+          return false;
+        }
         const objs = allObjectives[ws.id] || [];
         const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
         const spec = sorted.find(o => o.indicator_id === ind.id);
@@ -460,6 +545,9 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
       const rawIndicators = workshopIndicators[ws.id] || workshopIndicators.default;
       const indicators = rawIndicators.filter(ind => {
         if (ws.id === 'movimiento-jamones' && ind.id !== 'cantidad_colgada') {
+          return false;
+        }
+        if (ws.id === 'sb-empaquetado-loncheado' && ind.id !== 'pph_blister_emp' && ind.id !== 'pph') {
           return false;
         }
         const objs = allObjectives[ws.id] || [];
@@ -532,61 +620,80 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
     return rows;
   }, [allData, last7Weeks, allObjectives, mermas, workshopIndicators]);
 
-  // Calculate workshop-level data for charts (one row per workshop, containing all metrics)
-  const workshopWeeklyData = useMemo(() => {
-    return TALLERES.map(ws => {
-      const data = last7Weeks.map(w => {
-        const weekActivities = allData.filter(a => {
-          if (a.area !== ws.id || !a.fecha) return false;
-          const ad = parseLocalDate(a.fecha);
-          return getWeekNumber(ad) === w.week && ad.getFullYear() === w.year;
-        });
-        const weekMermas = mermas.filter(m => {
-          if (!m.fecha || m.area !== ws.id) return false;
-          const md = parseLocalDate(m.fecha);
-          return getWeekNumber(md) === w.week && md.getFullYear() === w.year;
-        });
-
-        const date = new Date(w.year, 0, 1);
-        date.setDate(date.getDate() + (w.week - 1) * 7);
-        const dateStr = date.toISOString().split('T')[0];
-        const objs = [...(allObjectives[ws.id] || [])].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
-        const found = objs.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id));
-        
-        let objective = 62;
-        if (ws.id === 'env-envasado' || ws.id === 'env-empaquetado') {
-          objective = 45;
-        }
-        if (found) {
-          let d = found.disponibilidad || 0;
-          let r = found.rendimiento || 0;
-          let c = found.calidad || 0;
-          if (ws.id === 'env-envasado' || ws.id === 'env-empaquetado') {
-            if (d === 90 && r === 70 && c === 99) {
-              d = 90;
-              r = 50;
-              c = 100;
-            }
-          }
-          if (d > 0 || r > 0 || c > 0) {
-            objective = Math.round((d * r * c) / 10000);
-          }
-        }
-
-        if (weekActivities.length === 0) return { name: `S${w.week}`, Disp: 0, Rto: 0, Prod: 0, Obj: objective };
-        
-        const stats = calculateStats(weekActivities, ws.id, weekMermas, workshopIndicators);
-        return { 
-          name: `S${w.week}`, 
-          Disp: stats.disponibilidad || 0, 
-          Rto: stats.rendimiento || 0, 
-          Prod: stats.productividad || 0, 
-          Obj: objective 
-        };
-      });
-      return { id: ws.id, name: ws.name, values: data };
+  // Group weeklyStats by workshop for individual indicator charts
+  const weeklyStatsByWorkshop = useMemo(() => {
+    const map: Record<string, { id: string; name: string; taller: string; indicators: any[] }> = {};
+    
+    TALLERES.forEach(ws => {
+      map[ws.id] = {
+        id: ws.id,
+        name: ws.name,
+        taller: ws.taller,
+        indicators: []
+      };
     });
-  }, [allData, last7Weeks, allObjectives, mermas, workshopIndicators]);
+
+    weeklyStats.forEach(row => {
+      if (map[row.id]) {
+        map[row.id].indicators.push(row);
+      }
+    });
+
+    return Object.values(map).filter(ws => ws.indicators.length > 0);
+  }, [weeklyStats]);
+
+  // Flatten all weekly indicator cards across all workshops into a single continuous list
+  const allWeeklyChartCards = useMemo(() => {
+    const cards: {
+      key: string;
+      workshopName: string;
+      indicatorName: string;
+      indicatorId: string;
+      chartData: { name: string; value: number; Objective: number }[];
+      unit: string;
+      color: string;
+      isPerc: boolean;
+    }[] = [];
+
+    weeklyStatsByWorkshop.forEach(ws => {
+      ws.indicators.forEach(indRow => {
+        const chartData = last7Weeks.map((w, idx) => {
+          const date = new Date(w.year, 0, 1);
+          date.setDate(date.getDate() + (w.week - 1) * 7);
+          const dateStr = date.toISOString().split('T')[0];
+          const val = indRow.values ? indRow.values[idx] : 0;
+          const obj = getWorkshopObjective(indRow.id, indRow.indicatorId, dateStr);
+          return {
+            name: `S${w.week}`,
+            value: val !== null && val !== undefined ? Number(val) : 0,
+            Objective: Number(obj || 0)
+          };
+        });
+
+        const isPerc = ['productividad', 'oee', 'disponibilidad', 'rendimiento', 'calidad'].includes(indRow.indicatorId) || indRow.indicatorId.includes('merma');
+        let unit = isPerc ? '%' : 'PPH';
+        if (indRow.indicatorId === 'cantidad_colgada') unit = 'uds';
+
+        let color = '#3b82f6';
+        if (indRow.indicatorId.includes('merma')) color = '#f59e0b';
+        else if (indRow.indicatorId.startsWith('pph')) color = '#6366f1';
+        else if (indRow.indicatorId === 'cantidad_colgada') color = '#10b981';
+
+        cards.push({
+          key: `${ws.id}-${indRow.indicatorId}`,
+          workshopName: ws.name,
+          indicatorName: indRow.indicatorName,
+          indicatorId: indRow.indicatorId,
+          chartData,
+          unit,
+          color,
+          isPerc
+        });
+      });
+    });
+
+    return cards;
+  }, [weeklyStatsByWorkshop, last7Weeks, allObjectives]);
 
   // Pareto data for selected workshop
   const paretos = useMemo(() => {
@@ -1058,28 +1165,25 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
         </div>
 
         {/* Weekly Workshop Charts */}
-        <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
-          <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-tighter mb-2">Evolución Semanal por Taller (Últimas 7 Semanas)</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {workshopWeeklyData.map(ww => (
-              <div key={ww.id} className="bg-slate-50/50 p-2 rounded-xl border border-slate-100 flex flex-col h-[240px]">
-                <h4 className="text-[15px] font-black text-slate-700 uppercase mb-1 text-center">{ww.name}</h4>
-                <div className="h-[180px] w-full">
-                  <ResponsiveContainer width="100%" height="100%" minHeight={180} debounce={100}>
-                    <ComposedChart data={ww.values} margin={{ top: 5, right: 5, bottom: 5, left: -25 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 6, fontWeight: 700}} />
-                      <YAxis tick={{fontSize: 6, fontWeight: 700}} axisLine={false} tickLine={false} domain={[0, 100]} />
-                      <Tooltip contentStyle={{fontSize: '7px', fontWeight: 'bold', borderRadius: '8px'}} />
-                      <Legend wrapperStyle={{fontSize: '6px', fontWeight: 'bold'}} />
-                      <Bar dataKey="Disp" name="DIS" fill="#3b82f6" radius={[1, 1, 0, 0]} />
-                      <Bar dataKey="Rto" name="RTO" fill="#f97316" radius={[1, 1, 0, 0]} />
-                      <Line type="monotone" dataKey="Prod" name="PROD" stroke="#eab308" strokeWidth={2} dot={{r: 2}} />
-                      <Line type="step" dataKey="Obj" name="OBJ" stroke="#ef4444" strokeWidth={1} strokeDasharray="3 3" dot={false} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+        <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h3 className="text-[13px] font-black text-slate-900 uppercase tracking-tighter">
+              Evolución Semanal por Taller (Últimas 7 Semanas)
+            </h3>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {allWeeklyChartCards.map(card => (
+              <React.Fragment key={card.key}>
+                {renderCompactIndicatorChart(
+                  card.chartData,
+                  card.unit,
+                  card.color,
+                  card.indicatorName,
+                  card.isPerc,
+                  card.workshopName
+                )}
+              </React.Fragment>
             ))}
           </div>
         </div>
@@ -1230,28 +1334,23 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
             {renderTable('Rendimiento Semanal (%)', last7Weeks.map(w => `S${w.week}`), weeklyStats)}
           </div>
 
-          {/* Charts Section - 4 Columns */}
+          {/* Charts Section - Continuous Grid */}
           <div className="space-y-4">
-            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter border-l-8 border-blue-600 pl-4">Evolución Semanal por Taller</h3>
-            <div className="grid grid-cols-4 gap-6">
-              {workshopWeeklyData.map(ww => (
-                <div key={`report-${ww.id}`} className="bg-slate-50 p-4 rounded-3xl border border-slate-200 flex flex-col h-[350px]">
-                  <h4 className="text-xl font-black text-slate-800 uppercase mb-3 text-center">{ww.name}</h4>
-                  <div className="flex-1 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={ww.values} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 800, fill: '#475569'}} />
-                        <YAxis tick={{fontSize: 10, fontWeight: 800, fill: '#475569'}} axisLine={false} tickLine={false} domain={[0, 100]} />
-                        <Legend wrapperStyle={{fontSize: '10px', fontWeight: 'bold', paddingTop: '10px'}} />
-                        <Bar dataKey="Disp" name="DIS" fill="#3b82f6" radius={[2, 2, 0, 0]} isAnimationActive={false} />
-                        <Bar dataKey="Rto" name="RTO" fill="#f97316" radius={[2, 2, 0, 0]} isAnimationActive={false} />
-                        <Line type="monotone" dataKey="Prod" name="PROD" stroke="#eab308" strokeWidth={3} dot={{r: 4, fill: '#eab308'}} isAnimationActive={false} />
-                        <Line type="step" dataKey="Obj" name="OBJ" stroke="#ef4444" strokeWidth={2} strokeDasharray="5 5" dot={false} isAnimationActive={false} />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
+            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter border-l-8 border-blue-600 pl-4">
+              Evolución Semanal por Taller
+            </h3>
+            <div className="grid grid-cols-4 gap-4">
+              {allWeeklyChartCards.map(card => (
+                <React.Fragment key={`report-${card.key}`}>
+                  {renderCompactIndicatorChart(
+                    card.chartData,
+                    card.unit,
+                    card.color,
+                    card.indicatorName,
+                    card.isPerc,
+                    card.workshopName
+                  )}
+                </React.Fragment>
               ))}
             </div>
           </div>
