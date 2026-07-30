@@ -1,9 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Database, Activity as ActivityIcon, Upload } from 'lucide-react';
+import { Database, Activity as ActivityIcon, Upload, Shield, Users, Award, Lightbulb, Save, Target } from 'lucide-react';
 import Papa from 'papaparse';
 import { isConfigured, supabase } from '../lib/supabase';
 import { MasterSpeed, IncidenceMaster, TaskType, OEEObjectives, User, Activity } from '../types';
 import { AREA_NAMES, AREA_COLUMNS, getInitialMasterSpeeds, getInitialIncidenceMaster, getInitialOperarios } from '../constants';
+
+const NON_PROD_INDICATORS = [
+  { area: 'accidentes', label: 'Accidentes', category: 'SEGURIDAD' },
+  { area: 'incidentes', label: 'Incidentes', category: 'SEGURIDAD' },
+  { area: 'absentismo', label: 'Absentismo (%)', category: 'RRHH' },
+  { area: 'ausentismo', label: 'Ausentismo (%)', category: 'RRHH' },
+  { area: 'calidad-reclamaciones', label: 'No Conformidades Total', category: 'CALIDAD' },
+  { area: 'calidad-internas', label: 'No Conformidades Internas', category: 'CALIDAD' },
+  { area: 'calidad-externas', label: 'No Conformidades Externas', category: 'CALIDAD' },
+  { area: 'idm-presentadas', label: 'Ideas Presentadas', category: 'IDEAS DE MEJORA' },
+  { area: 'idm-aceptadas', label: 'Ideas Aceptadas', category: 'IDEAS DE MEJORA' },
+  { area: 'idm-cerradas', label: 'Ideas Cerradas', category: 'IDEAS DE MEJORA' },
+  { area: 'idm-rechazadas', label: 'Ideas Rechazadas', category: 'IDEAS DE MEJORA' },
+];
 
 interface ConfigPanelProps {
   masterSpeeds: MasterSpeed[];
@@ -117,6 +131,25 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
   const [localMasterObjectives, setLocalMasterObjectives] = useState<Record<string, OEEObjectives>>({});
   const [initKey, setInitKey] = useState('');
   const [objectiveValidFrom, setObjectiveValidFrom] = useState(new Date().toISOString().split('T')[0]);
+
+  // Estado local para Objetivos No Producción
+  const [nonProdState, setNonProdState] = useState<Record<string, { objetivo: number; valid_from: string }>>({});
+
+  useEffect(() => {
+    if (allObjectives) {
+      const initial: Record<string, { objetivo: number; valid_from: string }> = {};
+      NON_PROD_INDICATORS.forEach(ind => {
+        const list = allObjectives[ind.area] || [];
+        const desc = [...list].sort((a, b) => (b.valid_from || '').localeCompare(a.valid_from || ''));
+        const currentObj = desc.find(o => o.valid_from <= objectiveValidFrom) || desc[0];
+        initial[ind.area] = {
+          objetivo: currentObj ? Number(currentObj.objetivo) || 0 : 0,
+          valid_from: currentObj && currentObj.valid_from ? currentObj.valid_from : objectiveValidFrom
+        };
+      });
+      setNonProdState(initial);
+    }
+  }, [allObjectives, objectiveValidFrom]);
 
   // Estado local para notificaciones, modal
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'info' | 'error' } | null>(null);
@@ -560,6 +593,50 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
     }
   };
 
+  const handleUpdateNonProdField = (areaKey: string, field: 'objetivo' | 'valid_from', value: any) => {
+    setNonProdState(prev => ({
+      ...prev,
+      [areaKey]: {
+        ...(prev[areaKey] || { objetivo: 0, valid_from: objectiveValidFrom }),
+        [field]: field === 'objetivo' ? (value === '' ? 0 : parseFloat(value) || 0) : value
+      }
+    }));
+  };
+
+  const saveNonProdObjectives = async (targetArea?: string) => {
+    if (!onUpdateAllObjectives) return;
+    const mapToSave: Record<string, OEEObjectives> = {};
+    
+    const areasToProcess = targetArea 
+      ? NON_PROD_INDICATORS.filter(i => i.area === targetArea)
+      : NON_PROD_INDICATORS;
+
+    areasToProcess.forEach(item => {
+      const currentVal = nonProdState[item.area] || { objetivo: 0, valid_from: objectiveValidFrom };
+      mapToSave[item.area] = {
+        area: item.area,
+        indicator_id: 'productividad',
+        objetivo: Number(currentVal.objetivo) || 0,
+        disponibilidad: 0,
+        rendimiento: 0,
+        calidad: 0,
+        productividad: 0,
+        valid_from: currentVal.valid_from || objectiveValidFrom,
+        showInTop5: true,
+        showInTop15: true,
+        showInTop60: true
+      };
+    });
+
+    await onUpdateAllObjectives(mapToSave, objectiveValidFrom);
+    setNotification({
+      message: targetArea 
+        ? `Objetivo no producción guardado correctamente.`
+        : `Todos los objetivos no producción han sido guardados.`,
+      type: 'success'
+    });
+  };
+
   // Filtrar listas por tipo
   const stopsList = incidenceMaster.filter(i => i.tipo === TaskType.ESPERAS);
   const breakdownsList = incidenceMaster.filter(i => i.tipo === TaskType.AVERIA);
@@ -945,6 +1022,101 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 })}
               </tbody>
             </table>
+          </div>
+        </section>
+      )}
+
+      {/* SECCIÓN: OBJETIVOS NO PRODUCCIÓN (SOLO TOP 60) */}
+      {selectedArea === 'TOP 60' && (
+        <section className={`p-10 rounded-[4rem] border shadow-2xl flex flex-col transition-colors ${isAdminMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-100'}`}>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center shadow-inner">
+                <Target className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-black uppercase tracking-tighter text-purple-600">Objetivos No Producción</h2>
+                <p className="text-[14px] font-black uppercase tracking-widest opacity-50">Metas para Seguridad, RRHH, Calidad e Ideas de Mejora</p>
+              </div>
+            </div>
+            {isAdminMode && (
+              <button 
+                type="button"
+                onClick={() => saveNonProdObjectives()}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-xl font-black text-[14px] uppercase tracking-widest shadow-lg shadow-purple-200 transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                Guardar Objetivos No Producción
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {['SEGURIDAD', 'RRHH', 'CALIDAD', 'IDEAS DE MEJORA'].map(category => {
+              const categoryIndicators = NON_PROD_INDICATORS.filter(i => i.category === category);
+              const CategoryIcon = category === 'SEGURIDAD' ? Shield : category === 'RRHH' ? Users : category === 'CALIDAD' ? Award : Lightbulb;
+              const categoryColor = category === 'SEGURIDAD' ? 'text-red-500' : category === 'RRHH' ? 'text-blue-500' : category === 'CALIDAD' ? 'text-emerald-500' : 'text-purple-500';
+
+              return (
+                <div key={category} className={`p-6 rounded-3xl border ${isAdminMode ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-50/80 border-slate-100'} shadow-sm flex flex-col gap-4`}>
+                  <div className="flex items-center gap-3 border-b pb-3 border-slate-200/50">
+                    <CategoryIcon className={`w-5 h-5 ${categoryColor}`} />
+                    <h3 className={`text-sm font-black uppercase tracking-wider ${categoryColor}`}>{category}</h3>
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    {categoryIndicators.map(ind => {
+                      const stateVal = nonProdState[ind.area] || { objetivo: 0, valid_from: objectiveValidFrom };
+                      return (
+                        <div key={ind.area} className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${isAdminMode ? 'bg-slate-900/60 border-slate-700' : 'bg-white border-slate-200/80'}`}>
+                          <div className="flex-1">
+                            <span className={`text-xs font-black uppercase tracking-tight ${isAdminMode ? 'text-slate-200' : 'text-slate-800'}`}>
+                              {ind.label}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <div className="flex flex-col">
+                              <label className="text-[10px] font-extrabold uppercase text-slate-400">Objetivo</label>
+                              <input 
+                                type="number"
+                                step="any"
+                                disabled={!isAdminMode}
+                                value={stateVal.objetivo}
+                                onChange={(e) => handleUpdateNonProdField(ind.area, 'objetivo', e.target.value)}
+                                className={`w-24 px-3 py-1.5 rounded-xl border text-center text-xs font-black outline-none transition-all ${isAdminMode ? 'bg-slate-800 border-purple-500/50 text-white focus:border-purple-400' : 'bg-slate-100 border-slate-200 text-slate-700'}`}
+                              />
+                            </div>
+
+                            <div className="flex flex-col">
+                              <label className="text-[10px] font-extrabold uppercase text-slate-400">Aplicable desde</label>
+                              <input 
+                                type="date"
+                                disabled={!isAdminMode}
+                                value={stateVal.valid_from}
+                                onChange={(e) => handleUpdateNonProdField(ind.area, 'valid_from', e.target.value)}
+                                className={`px-2 py-1.5 rounded-xl border text-center text-xs font-black outline-none transition-all ${isAdminMode ? 'bg-slate-800 border-purple-500/50 text-white focus:border-purple-400' : 'bg-slate-100 border-slate-200 text-slate-700'}`}
+                              />
+                            </div>
+
+                            {isAdminMode && (
+                              <button
+                                type="button"
+                                onClick={() => saveNonProdObjectives(ind.area)}
+                                title="Guardar este objetivo"
+                                className="mt-4 p-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center"
+                              >
+                                <Save className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}

@@ -163,19 +163,34 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
         .order('numero', { ascending: true });
 
       if (!error && data && data.length > 0) {
-        loadedData = data.map((d: any) => ({
-          id: d.id,
-          numero: d.numero || d.num || 0,
-          seccion: d.seccion || d.area || '',
-          problema: d.problema || d.asunto || '',
-          accion: d.accion || '',
-          responsable: d.responsable || '',
-          soporte: d.soporte || '',
-          fecha_lanzamiento: d.fecha_lanzamiento || d.fechaLanzamiento || '',
-          fecha_objetivo: d.fecha_objetivo || d.fechaObjetivo || '',
-          fecha_cierre: d.fecha_cierre || d.fechaCierre || null,
-          comentarios: d.comentarios || d.observaciones || ''
-        }));
+        loadedData = data.map((d: any) => {
+          let num = d.numero || d.num || 0;
+          let sec = d.seccion || d.area || '';
+          let com = d.comentarios || d.observaciones || '';
+
+          if (d.observaciones && typeof d.observaciones === 'string' && d.observaciones.trim().startsWith('{')) {
+            try {
+              const parsed = JSON.parse(d.observaciones);
+              if (parsed.numero !== undefined) num = parsed.numero;
+              if (parsed.seccion !== undefined) sec = parsed.seccion;
+              if (parsed.comentarios !== undefined) com = parsed.comentarios;
+            } catch (err) {}
+          }
+
+          return {
+            id: d.id,
+            numero: num,
+            seccion: sec,
+            problema: d.problema || d.asunto || '',
+            accion: d.accion || '',
+            responsable: d.responsable || '',
+            soporte: d.soporte || '',
+            fecha_lanzamiento: d.fecha_lanzamiento || d.fechaLanzamiento || '',
+            fecha_objetivo: d.fecha_objetivo || d.fechaObjetivo || '',
+            fecha_cierre: d.fecha_cierre || d.fechaCierre || null,
+            comentarios: com
+          };
+        });
         fromDb = true;
       }
     } catch (e) {
@@ -279,7 +294,11 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
         fechaLanzamiento: payloadToSave.fecha_lanzamiento,
         fechaObjetivo: payloadToSave.fecha_objetivo,
         fechaCierre: payloadToSave.fecha_cierre,
-        observaciones: payloadToSave.comentarios || ''
+        observaciones: JSON.stringify({
+          numero: payloadToSave.numero,
+          seccion: payloadToSave.seccion,
+          comentarios: payloadToSave.comentarios || ''
+        })
       };
 
       await supabase.from(dbTable).upsert(dbItem);
