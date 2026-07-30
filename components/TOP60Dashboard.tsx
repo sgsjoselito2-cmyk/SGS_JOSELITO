@@ -379,6 +379,9 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
     const objs = [...getObjectivesForArea(area)].sort((a, b) => {
       const vComp = (b.valid_from || '').localeCompare(a.valid_from || '');
       if (vComp !== 0) return vComp;
+      const objA = Number(a.objetivo || 0) > 0 ? 1 : 0;
+      const objB = Number(b.objetivo || 0) > 0 ? 1 : 0;
+      if (objB !== objA) return objB - objA;
       const aTop = ((a as any).show_in_top15 || a.showInTop15 || (a as any).show_in_top60 || a.showInTop60) ? 1 : 0;
       const bTop = ((b as any).show_in_top15 || b.showInTop15 || (b as any).show_in_top60 || b.showInTop60) ? 1 : 0;
       return bTop - aTop;
@@ -387,13 +390,26 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
     
     // Exact match for indicator
     const getVal = (id: string) => {
-      const spec = objs.find(o => (o.valid_from || '') <= dateStr && (
+      let spec = objs.find(o => (o.valid_from || '') <= dateStr && (
         o.indicator_id === id ||
         (id === 'pph_blister_emp' && (o.indicator_id === 'pph_blister' || o.indicator_id === 'pph_blister_emp' || o.indicator_id === 'pph'))
-      ));
-      if (spec && spec.objetivo !== undefined && spec.objetivo !== null) return spec.objetivo;
+      ) && Number(o.objetivo) > 0);
+      if (!spec) {
+        spec = objs.find(o => (o.valid_from || '') <= dateStr && (
+          o.indicator_id === id ||
+          (id === 'pph_blister_emp' && (o.indicator_id === 'pph_blister' || o.indicator_id === 'pph_blister_emp' || o.indicator_id === 'pph'))
+        ));
+      }
+      if (!spec && objs.length > 0) {
+        spec = objs.find(o => (o.indicator_id === id || (id === 'productividad' && (!o.indicator_id || o.indicator_id === 'productividad'))) && Number(o.objetivo) > 0)
+          || objs.find(o => o.indicator_id === id || (id === 'productividad' && (!o.indicator_id || o.indicator_id === 'productividad')));
+      }
+      if (spec && spec.objetivo !== undefined && spec.objetivo !== null) return Number(spec.objetivo);
       
-      const master = objs.find(o => (o.valid_from || '') <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id));
+      let master = objs.find(o => (o.valid_from || '') <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id));
+      if (!master && objs.length > 0) {
+        master = objs.find(o => o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id);
+      }
       if (master) {
         if (id === 'disponibilidad') return master.disponibilidad || 0;
         if (id === 'rendimiento') return master.rendimiento || 0;
@@ -403,8 +419,17 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
     };
 
     if (indicatorId === 'productividad' || indicatorId === 'oee') {
-      const specProd = objs.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee'));
-      if (specProd && specProd.objetivo) return specProd.objetivo;
+      let specProd = objs.find(o => (o.valid_from || '') <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee') && Number(o.objetivo) > 0);
+      if (!specProd) {
+        specProd = objs.find(o => (o.valid_from || '') <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee'));
+      }
+      if (!specProd && objs.length > 0) {
+        specProd = objs.find(o => (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id) && Number(o.objetivo) > 0)
+          || objs.find(o => o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id);
+      }
+      if (specProd && specProd.objetivo !== undefined && specProd.objetivo !== null && Number(specProd.objetivo) > 0) {
+        return Number(specProd.objetivo);
+      }
       
       const d = getVal('disponibilidad');
       const r = getVal('rendimiento');
@@ -412,6 +437,9 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
       const calcObj = parseFloat(((d * r * c) / 10000).toFixed(1));
       if (calcObj > 0) return calcObj;
       if (area === 'env-envasado' || area === 'env-empaquetado') return 45.0;
+      if (specProd && specProd.objetivo !== undefined && specProd.objetivo !== null) {
+        return Number(specProd.objetivo);
+      }
       return 0;
     }
 
@@ -884,14 +912,19 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
 
       const date = new Date(w.year, 0, 1);
       date.setDate(date.getDate() + (w.week - 1) * 7);
-      const objective = getObjectiveForDate('calidad-reclamaciones', date) || 0;
+      const objTotal = getObjectiveForDate('calidad-reclamaciones', date) || 0;
+      const objInternas = getObjectiveForDate('calidad-internas', date) || 0;
+      const objExternas = getObjectiveForDate('calidad-externas', date) || 0;
 
       return {
         name: w.label,
         total,
         internas,
         externas,
-        Objective: objective,
+        ObjTotal: objTotal,
+        ObjInternas: objInternas,
+        ObjExternas: objExternas,
+        Objective: objTotal,
         week: w.week,
         year: w.year
       };
@@ -912,14 +945,19 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
       const externas = records.filter(r => r.origen === 'Externa').length;
 
       const date = new Date(m.year, m.month, 1);
-      const objective = getObjectiveForDate('calidad-reclamaciones', date) || 0;
+      const objTotal = getObjectiveForDate('calidad-reclamaciones', date) || 0;
+      const objInternas = getObjectiveForDate('calidad-internas', date) || 0;
+      const objExternas = getObjectiveForDate('calidad-externas', date) || 0;
 
       return {
         name: m.label,
         total,
         internas,
         externas,
-        Objective: objective,
+        ObjTotal: objTotal,
+        ObjInternas: objInternas,
+        ObjExternas: objExternas,
+        Objective: objTotal,
         month: m.month,
         year: m.year
       };
@@ -1614,7 +1652,8 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
     );
   };
 
-  const renderQualityEvolutionChart = (data: any[], dataKey: string, name: string, color: string, title: string, isReport = false) => {
+  const renderQualityEvolutionChart = (data: any[], dataKey: string, name: string, color: string, title: string, isReport = false, objKey = 'Objective') => {
+    const hasObjective = data.some(d => typeof d[objKey] === 'number' && d[objKey] > 0);
     const chart = (
       <ResponsiveContainer width="100%" height="100%" minHeight={isReport ? 220 : 250} debounce={100}>
         <ComposedChart data={data} margin={{ top: 10, right: 10, bottom: 30, left: -20 }}>
@@ -1631,7 +1670,9 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
           />
           <Legend wrapperStyle={{fontSize: '8px', fontWeight: 'bold', paddingTop: '15px'}} />
           <Bar dataKey={dataKey} name={name} fill={color} radius={[2, 2, 0, 0]} maxBarSize={12} isAnimationActive={false} />
-          <Line type="stepAfter" dataKey="Objective" name="OBJETIVO" stroke="#10b981" strokeWidth={3} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={false} />
+          {hasObjective && (
+            <Line type="stepAfter" dataKey={objKey} name="OBJETIVO" stroke="#10b981" strokeWidth={3} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={false} />
+          )}
         </ComposedChart>
       </ResponsiveContainer>
     );
@@ -2203,7 +2244,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
     );
   };
 
-  const renderCalidadTab = () => {
+  const renderCalidadTab = (isReport = false) => {
     const getCalidadActionStatusLocal = (fechaPrevista: string, fechaCierre?: string): string => {
       if (fechaCierre) return 'Cerrado';
       if (!fechaPrevista) return 'Abierto';
@@ -2266,22 +2307,22 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
           <div className="col-span-full border-b border-slate-200 pb-2 mb-2">
             <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">TOTAL</h4>
           </div>
-          {renderQualityEvolutionChart(weeklyCalidad, 'total', 'Total', '#64748b', 'No Conformidades Total (Semanas)')}
-          {renderQualityEvolutionChart(monthlyCalidad, 'total', 'Total', '#64748b', 'No Conformidades Total (Meses)')}
+          {renderQualityEvolutionChart(weeklyCalidad, 'total', 'Total', '#64748b', 'No Conformidades Total (Semanas)', isReport, 'ObjTotal')}
+          {renderQualityEvolutionChart(monthlyCalidad, 'total', 'Total', '#64748b', 'No Conformidades Total (Meses)', isReport, 'ObjTotal')}
 
           {/* INTERNAS */}
           <div className="col-span-full border-b border-slate-200 pb-2 mb-2 mt-6">
             <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">INTERNAS</h4>
           </div>
-          {renderQualityEvolutionChart(weeklyCalidad, 'internas', 'Internas', '#ef4444', 'No Conformidades Internas (Semanas)')}
-          {renderQualityEvolutionChart(monthlyCalidad, 'internas', 'Internas', '#ef4444', 'No Conformidades Internas (Meses)')}
+          {renderQualityEvolutionChart(weeklyCalidad, 'internas', 'Internas', '#ef4444', 'No Conformidades Internas (Semanas)', isReport, 'ObjInternas')}
+          {renderQualityEvolutionChart(monthlyCalidad, 'internas', 'Internas', '#ef4444', 'No Conformidades Internas (Meses)', isReport, 'ObjInternas')}
 
           {/* EXTERNAS */}
           <div className="col-span-full border-b border-slate-200 pb-2 mb-2 mt-6">
             <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">EXTERNAS</h4>
           </div>
-          {renderQualityEvolutionChart(weeklyCalidad, 'externas', 'Externas', '#3b82f6', 'No Conformidades Externas (Semanas)')}
-          {renderQualityEvolutionChart(monthlyCalidad, 'externas', 'Externas', '#3b82f6', 'No Conformidades Externas (Meses)')}
+          {renderQualityEvolutionChart(weeklyCalidad, 'externas', 'Externas', '#3b82f6', 'No Conformidades Externas (Semanas)', isReport, 'ObjExternas')}
+          {renderQualityEvolutionChart(monthlyCalidad, 'externas', 'Externas', '#3b82f6', 'No Conformidades Externas (Meses)', isReport, 'ObjExternas')}
         </div>
 
         {/* TABLA HISTORIAL */}
@@ -2533,6 +2574,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
       const objPres = getObjectiveForDate('idm-presentadas', date);
       const objCerr = getObjectiveForDate('idm-cerradas', date);
       const objAcep = getObjectiveForDate('idm-aceptadas', date);
+      const objRech = getObjectiveForDate('idm-rechazadas', date);
 
       return {
         name: w.label,
@@ -2543,7 +2585,8 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
         rechazadas,
         ObjPres: objPres,
         ObjCerr: objCerr,
-        ObjAcep: objAcep
+        ObjAcep: objAcep,
+        ObjRech: objRech
       };
     });
 
@@ -2591,6 +2634,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
       const objPres = getObjectiveForDate('idm-presentadas', date);
       const objCerr = getObjectiveForDate('idm-cerradas', date);
       const objAcep = getObjectiveForDate('idm-aceptadas', date);
+      const objRech = getObjectiveForDate('idm-rechazadas', date);
 
       return {
         name: m.label,
@@ -2601,7 +2645,8 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
         rechazadas,
         ObjPres: objPres,
         ObjCerr: objCerr,
-        ObjAcep: objAcep
+        ObjAcep: objAcep,
+        ObjRech: objRech
       };
     });
 
@@ -2727,8 +2772,8 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
           <div className="col-span-full border-b border-slate-200 pb-2 mb-2 mt-6">
             <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">RECHAZADAS</h4>
           </div>
-          {renderIdMEvolutionChart(weeklyIdM, [{ key: 'rechazadas', name: 'RECHAZADAS', color: '#ef4444' }], undefined, undefined, undefined, 'Ideas Rechazadas (Semanas)', isReport)}
-          {renderIdMEvolutionChart(monthlyIdM, [{ key: 'rechazadas', name: 'RECHAZADAS', color: '#ef4444' }], undefined, undefined, undefined, 'Ideas Rechazadas (Meses)', isReport)}
+          {renderIdMEvolutionChart(weeklyIdM, [{ key: 'rechazadas', name: 'RECHAZADAS', color: '#ef4444' }], 'ObjRech', 'OBJETIVO', '#10b981', 'Ideas Rechazadas (Semanas)', isReport)}
+          {renderIdMEvolutionChart(monthlyIdM, [{ key: 'rechazadas', name: 'RECHAZADAS', color: '#ef4444' }], 'ObjRech', 'OBJETIVO', '#10b981', 'Ideas Rechazadas (Meses)', isReport)}
         </div>
 
         {/* Historial de Ideas de Mejora Table */}
