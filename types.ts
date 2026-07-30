@@ -37,6 +37,21 @@ export interface ActionPlanItem {
   observaciones: string;
 }
 
+export interface PlanAccionTop60 {
+  id?: number | string;
+  numero: number;
+  seccion: string;
+  problema: string;
+  accion: string;
+  responsable: string;
+  soporte: string;
+  fecha_lanzamiento: string;
+  fecha_objetivo: string;
+  fecha_cierre?: string | null;
+  comentarios?: string;
+  created_at?: string;
+}
+
 export interface OEEObjectives {
   id?: string;
   disponibilidad: number;

@@ -3824,7 +3824,7 @@ const App: React.FC = () => {
                           storageKey="zitron_top60_actionplan"
                           title="Plan de Acción Estratégico TOP 60"
                           responsibles={responsibles.length > 0 ? responsibles : filteredOperarios.map(o => o.nombre)}
-                          dbTable="action_plan_top60"
+                          dbTable="plan_accion_top60"
                           passwords={passwords}
                           requiredLevel={3}
                         />
