@@ -415,8 +415,14 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
         if (id === 'rendimiento') return master.rendimiento || 0;
         if (id === 'calidad') return master.calidad || 0;
       }
-      if (area === 'absentismo') return 2.0;
-      if (area === 'ausentismo') return 0.5;
+      if (area === 'absentismo') {
+        const obj = (allObjectives['absentismo'] || []).find(o => o.indicator_id === 'productividad');
+        return obj ? Number(obj.objetivo) : 2.0;
+      }
+      if (area === 'ausentismo') {
+        const obj = (allObjectives['ausentismo'] || []).find(o => o.indicator_id === 'productividad');
+        return obj ? Number(obj.objetivo) : 0.5;
+      }
       return 0;
     };
 
@@ -442,8 +448,14 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
       if (specProd && specProd.objetivo !== undefined && specProd.objetivo !== null) {
         return Number(specProd.objetivo);
       }
-      if (area === 'absentismo') return 2.0;
-      if (area === 'ausentismo') return 0.5;
+      if (area === 'absentismo') {
+        const obj = (allObjectives['absentismo'] || []).find(o => o.indicator_id === 'productividad');
+        return obj ? Number(obj.objetivo) : 2.0;
+      }
+      if (area === 'ausentismo') {
+        const obj = (allObjectives['ausentismo'] || []).find(o => o.indicator_id === 'productividad');
+        return obj ? Number(obj.objetivo) : 0.5;
+      }
       return 0;
     }
 
