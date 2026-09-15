@@ -119,6 +119,7 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
     id: '',
     fecha: '',
     tipo: 'Accidente',
+    localAccidente: '',
     gap: '',
     queHaOcurrido: '',
     accion: '',
@@ -255,6 +256,21 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
     'EXPEDICIONES'
   ];
 
+  const LOCALES_ACCIDENTE_DEFAULT = [
+    'SALA BLANCA',
+    'EMBUTIDO',
+    'MOVIMIENTOS',
+    'EXPEDICIONES',
+    'EQUIPO CAMPILLO',
+    'PREPARACIÓN',
+    'LONCHEADO',
+    'ENVASADO',
+    'SECADEROS',
+    'OBRADOR',
+    'ALMACÉN',
+    'MANTENIMIENTO'
+  ];
+
   const calcularEstado = (fechaPrevista: string, fechaReal?: string): string => {
     if (fechaReal) return 'Cerrado';
     if (!fechaPrevista) return 'Abierto';
@@ -279,12 +295,28 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
   const mapDbToUi = (dbItem: any): PlanAccionSeguridad => {
     const prev = dbItem.fecha_implantacion_prevista || dbItem.fechaImplantacionPrevista || '';
     const real = dbItem.fecha_implantacion_real || dbItem.fechaImplantacionReal || '';
+    
+    let localAccidente = dbItem.local_accidente || dbItem.localAccidente || '';
+    let rawQueHaOcurrido = dbItem.que_ha_ocurrido || dbItem.queHaOcurrido || '';
+    const gap = dbItem.gap || '';
+
+    // Extract [Local: ...] if encoded in que_ha_ocurrido
+    if (rawQueHaOcurrido.startsWith('[Local: ') && rawQueHaOcurrido.includes(']')) {
+      const closeIdx = rawQueHaOcurrido.indexOf(']');
+      localAccidente = rawQueHaOcurrido.substring(8, closeIdx).trim();
+      rawQueHaOcurrido = rawQueHaOcurrido.substring(closeIdx + 1).replace(/^\n+/, '');
+    } else if (!localAccidente && gap) {
+      // Legacy records where the workshop/local was put into gap
+      localAccidente = gap;
+    }
+
     return {
       id: dbItem.id,
       fecha: dbItem.fecha,
       tipo: dbItem.tipo,
-      gap: dbItem.gap,
-      queHaOcurrido: dbItem.que_ha_ocurrido || dbItem.queHaOcurrido || '',
+      localAccidente: localAccidente,
+      gap: gap,
+      queHaOcurrido: rawQueHaOcurrido,
       accion: dbItem.accion || '',
       responsable: dbItem.responsable || '',
       fechaImplantacionPrevista: prev,
@@ -296,12 +328,16 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
   const mapUiToDb = (uiItem: PlanAccionSeguridad) => {
     const prev = uiItem.fechaImplantacionPrevista || '';
     const real = uiItem.fechaImplantacionReal || '';
+    const local = uiItem.localAccidente ? uiItem.localAccidente.trim() : '';
+    const desc = uiItem.queHaOcurrido || '';
+    const formattedDesc = local ? `[Local: ${local}]\n${desc}` : desc;
+
     return {
       id: uiItem.id,
       fecha: uiItem.fecha,
       tipo: uiItem.tipo,
-      gap: uiItem.gap,
-      que_ha_ocurrido: uiItem.queHaOcurrido,
+      gap: uiItem.gap || local || '',
+      que_ha_ocurrido: formattedDesc,
       accion: uiItem.accion,
       responsable: uiItem.responsable,
       fecha_implantacion_prevista: prev,
@@ -963,15 +999,18 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
   };
 
   const handleDeleteAction = async (id: string) => {
+    setPlanAccionRecords(prev => prev.filter(a => a.id !== id));
     try {
       const { error } = await supabase.from('plan_accion_seguridad').delete().eq('id', id);
       if (error) {
-        alert("Error al eliminar la acción: " + error.message);
+        console.error("Error al eliminar la acción: " + error.message);
+        await fetchSecurityPlan();
       } else {
         await fetchSecurityPlan();
       }
     } catch (e: any) {
-      alert("Error: " + e.message);
+      console.error("Error: " + e.message);
+      await fetchSecurityPlan();
     }
   };
 
@@ -1359,6 +1398,7 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
                       id: 'action_' + Date.now(),
                       fecha: selectedDate,
                       tipo: 'Accidente',
+                      localAccidente: 'SALA BLANCA',
                       gap: 'SALA BLANCA',
                       queHaOcurrido: '',
                       accion: '',
@@ -1454,20 +1494,21 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
                   )}
                 </div>
               ) : (
-                <div className="min-w-full overflow-hidden border border-slate-100 rounded-2xl bg-white shadow-sm">
-                  <table className="min-w-full divide-y divide-slate-100 text-left text-xs text-slate-700">
+                <div className="w-full overflow-x-auto border border-slate-100 rounded-2xl bg-white shadow-sm">
+                  <table className="w-full min-w-[1200px] divide-y divide-slate-100 text-left text-xs text-slate-700">
                     <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-wider">
                       <tr>
-                        <th className="px-4 py-3">Fecha</th>
-                        <th className="px-4 py-3">Tipo</th>
-                        <th className="px-4 py-3">Gap Seguridad</th>
-                        <th className="px-4 py-3 max-w-xs">Qué ha ocurrido</th>
-                        <th className="px-4 py-3 max-w-xs">Acción correctora</th>
-                        <th className="px-4 py-3">Responsable</th>
-                        <th className="px-4 py-3">F. Prevista</th>
-                        <th className="px-4 py-3">F. Real</th>
-                        <th className="px-4 py-3">Estado</th>
-                        <th className="px-4 py-3 text-right">Acciones</th>
+                        <th className="px-4 py-3 whitespace-nowrap">Fecha</th>
+                        <th className="px-4 py-3 whitespace-nowrap">Tipo</th>
+                        <th className="px-4 py-3 whitespace-nowrap">Local Accidente</th>
+                        <th className="px-4 py-3 whitespace-nowrap">Gap Seguridad</th>
+                        <th className="px-4 py-3 min-w-[200px] max-w-xs">Qué ha ocurrido</th>
+                        <th className="px-4 py-3 min-w-[200px] max-w-xs">Acción correctora</th>
+                        <th className="px-4 py-3 whitespace-nowrap">Responsable</th>
+                        <th className="px-4 py-3 whitespace-nowrap">F. Prevista</th>
+                        <th className="px-4 py-3 whitespace-nowrap">F. Real</th>
+                        <th className="px-4 py-3 whitespace-nowrap">Estado</th>
+                        <th className="px-4 py-3 text-right whitespace-nowrap">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium text-slate-600">
@@ -1489,21 +1530,24 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
                             <td className="px-4 py-3 font-mono font-semibold whitespace-nowrap">
                               {formatDateDMY(action.fecha)}
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-4 py-3 whitespace-nowrap">
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border uppercase tracking-wider ${tipoBadge}`}>
                                 {action.tipo}
                               </span>
                             </td>
-                            <td className="px-4 py-3 font-bold text-slate-700">
-                              {action.gap}
+                            <td className="px-4 py-3 font-bold text-slate-800 whitespace-nowrap">
+                              {action.localAccidente || action.gap || '-'}
                             </td>
-                            <td className="px-4 py-3 max-w-xs truncate" title={action.queHaOcurrido}>
+                            <td className="px-4 py-3 font-medium text-slate-600 whitespace-nowrap">
+                              {action.gap && action.gap !== action.localAccidente ? action.gap : '-'}
+                            </td>
+                            <td className="px-4 py-3 min-w-[200px] max-w-xs truncate" title={action.queHaOcurrido}>
                               {action.queHaOcurrido}
                             </td>
-                            <td className="px-4 py-3 max-w-xs truncate" title={action.accion}>
+                            <td className="px-4 py-3 min-w-[200px] max-w-xs truncate" title={action.accion}>
                               {action.accion}
                             </td>
-                            <td className="px-4 py-3 font-semibold text-slate-800">
+                            <td className="px-4 py-3 font-semibold text-slate-800 whitespace-nowrap">
                               {action.responsable}
                             </td>
                             <td className="px-4 py-3 font-mono whitespace-nowrap">
@@ -1512,7 +1556,7 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
                             <td className="px-4 py-3 font-mono whitespace-nowrap">
                               {action.fechaImplantacionReal ? formatDateDMY(action.fechaImplantacionReal) : '-'}
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-4 py-3 whitespace-nowrap">
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border uppercase tracking-wider ${statusBadge}`}>
                                 {status}
                               </span>
@@ -1537,15 +1581,7 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
                                 </button>
                                 <button
                                   onClick={() => {
-                                    if (!isEditingUnlocked) {
-                                      setPinInput('');
-                                      setPinError('');
-                                      setShowPinModal(true);
-                                      return;
-                                    }
-                                    if (window.confirm("¿Seguro que deseas eliminar esta acción de seguridad?")) {
-                                      handleDeleteAction(action.id);
-                                    }
+                                    handleDeleteAction(action.id);
                                   }}
                                   className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
                                   title="Eliminar acción"
@@ -1628,46 +1664,81 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
                     </div>
                   </div>
 
-                  {/* Gap de Seguridad */}
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">GAP DE SEGURIDAD:</label>
-                    <div className="flex gap-2">
-                      <select
-                        value={currentActionForm.gap}
-                        onChange={(e) => {
-                          if (e.target.value === '__add_new_gap__') {
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Local del Accidente */}
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">LOCAL DEL ACCIDENTE:</label>
+                      <div className="flex gap-2">
+                        <select
+                          value={LOCALES_ACCIDENTE_DEFAULT.includes(currentActionForm.localAccidente || '') ? currentActionForm.localAccidente : (currentActionForm.localAccidente ? '__custom__' : '')}
+                          onChange={(e) => {
+                            if (e.target.value === '__custom__') {
+                              setCurrentActionForm({ ...currentActionForm, localAccidente: '' });
+                            } else {
+                              setCurrentActionForm({ ...currentActionForm, localAccidente: e.target.value });
+                            }
+                          }}
+                          className="flex-1 px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-xs"
+                        >
+                          <option value="">Selecciona local...</option>
+                          {LOCALES_ACCIDENTE_DEFAULT.map((loc) => (
+                            <option key={loc} value={loc}>{loc}</option>
+                          ))}
+                          <option value="__custom__">+ Otro local / Especificar...</option>
+                        </select>
+                      </div>
+                      {(!LOCALES_ACCIDENTE_DEFAULT.includes(currentActionForm.localAccidente || '') || currentActionForm.localAccidente === '') && (
+                        <input
+                          type="text"
+                          placeholder="Escribe el nombre del local..."
+                          value={currentActionForm.localAccidente || ''}
+                          onChange={(e) => setCurrentActionForm({ ...currentActionForm, localAccidente: e.target.value })}
+                          className="w-full mt-1.5 px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-xs bg-slate-50/50"
+                        />
+                      )}
+                    </div>
+
+                    {/* Gap de Seguridad */}
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">GAP DE SEGURIDAD:</label>
+                      <div className="flex gap-2">
+                        <select
+                          value={currentActionForm.gap}
+                          onChange={(e) => {
+                            if (e.target.value === '__add_new_gap__') {
+                              setNewGapName('');
+                              setShowAddGapModal(true);
+                            } else {
+                              setCurrentActionForm({ ...currentActionForm, gap: e.target.value });
+                            }
+                          }}
+                          className="flex-1 px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-xs"
+                        >
+                          <option value="">Selecciona un gap...</option>
+                          {TALLERES_SEGURIDAD.map((taller) => (
+                            <option key={taller} value={taller}>{taller}</option>
+                          ))}
+                          {gapsList.map((g) => {
+                            if (TALLERES_SEGURIDAD.includes(g.nombre.toUpperCase())) return null;
+                            return (
+                              <option key={g.id} value={g.nombre}>{g.nombre}</option>
+                            );
+                          })}
+                          <option value="__add_new_gap__" className="text-indigo-600 font-bold">+ Crear nuevo Gap...</option>
+                        </select>
+                        
+                        <button
+                          type="button"
+                          onClick={() => {
                             setNewGapName('');
                             setShowAddGapModal(true);
-                          } else {
-                            setCurrentActionForm({ ...currentActionForm, gap: e.target.value });
-                          }
-                        }}
-                        className="flex-1 px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-xs"
-                      >
-                        <option value="">Selecciona un gap...</option>
-                        {TALLERES_SEGURIDAD.map((taller) => (
-                          <option key={taller} value={taller}>{taller}</option>
-                        ))}
-                        {gapsList.map((g) => {
-                          if (TALLERES_SEGURIDAD.includes(g.nombre.toUpperCase())) return null;
-                          return (
-                            <option key={g.id} value={g.nombre}>{g.nombre}</option>
-                          );
-                        })}
-                        <option value="__add_new_gap__" className="text-indigo-600 font-bold">+ Crear nuevo Gap...</option>
-                      </select>
-                      
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNewGapName('');
-                          setShowAddGapModal(true);
-                        }}
-                        className="px-3 py-2 border border-slate-200 hover:border-indigo-500 rounded-xl font-bold text-xs text-indigo-600 transition-all cursor-pointer"
-                        title="Añadir nuevo gap"
-                      >
-                        + Añadir Gap
-                      </button>
+                          }}
+                          className="px-3 py-2 border border-slate-200 hover:border-indigo-500 rounded-xl font-bold text-xs text-indigo-600 transition-all cursor-pointer whitespace-nowrap"
+                          title="Añadir nuevo gap"
+                        >
+                          + Añadir Gap
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -2176,18 +2247,18 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
                   )}
                 </div>
               ) : (
-                <div className="min-w-full overflow-hidden border border-slate-100 rounded-2xl bg-white shadow-sm">
-                  <table className="min-w-full divide-y divide-slate-100 text-left text-xs text-slate-700">
+                <div className="w-full overflow-x-auto border border-slate-100 rounded-2xl bg-white shadow-sm">
+                  <table className="w-full min-w-[1200px] divide-y divide-slate-100 text-left text-xs text-slate-700">
                     <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-wider">
                       <tr>
-                        <th className="px-4 py-3">Fecha</th>
-                        <th className="px-4 py-3">Tipo Reclamación</th>
-                        <th className="px-4 py-3">Área Causante</th>
-                        <th className="px-4 py-3 max-w-xs">¿Qué ha ocurrido?</th>
-                        <th className="px-4 py-3 max-w-xs">Contención (Acción / Resp. / F. Prev / F. Real)</th>
-                        <th className="px-4 py-3 max-w-xs">Corrección (Acción / Resp. / F. Prev / F. Real)</th>
-                        <th className="px-4 py-3">Estado Global</th>
-                        <th className="px-4 py-3 text-right">Acciones</th>
+                        <th className="px-4 py-3 whitespace-nowrap">Fecha</th>
+                        <th className="px-4 py-3 whitespace-nowrap">Tipo Reclamación</th>
+                        <th className="px-4 py-3 whitespace-nowrap">Área Causante</th>
+                        <th className="px-4 py-3 min-w-[200px] max-w-xs">¿Qué ha ocurrido?</th>
+                        <th className="px-4 py-3 min-w-[220px] max-w-xs">Contención (Acción / Resp. / F. Prev / F. Real)</th>
+                        <th className="px-4 py-3 min-w-[220px] max-w-xs">Corrección (Acción / Resp. / F. Prev / F. Real)</th>
+                        <th className="px-4 py-3 whitespace-nowrap">Estado Global</th>
+                        <th className="px-4 py-3 text-right whitespace-nowrap">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium text-slate-600">

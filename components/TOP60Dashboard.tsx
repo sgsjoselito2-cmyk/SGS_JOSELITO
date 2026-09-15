@@ -415,6 +415,8 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
         if (id === 'rendimiento') return master.rendimiento || 0;
         if (id === 'calidad') return master.calidad || 0;
       }
+      if (area === 'absentismo') return 2.0;
+      if (area === 'ausentismo') return 0.5;
       return 0;
     };
 
@@ -440,6 +442,8 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
       if (specProd && specProd.objetivo !== undefined && specProd.objetivo !== null) {
         return Number(specProd.objetivo);
       }
+      if (area === 'absentismo') return 2.0;
+      if (area === 'ausentismo') return 0.5;
       return 0;
     }
 
@@ -1436,12 +1440,28 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
                 formatter={(val: number) => val > 0 ? (isPercentage ? `${val.toFixed(1)}%` : `${val.toFixed(0)}`) : ''} 
                 style={{ fontSize: '7px', fontWeight: 'bold', fill: '#334155' }} 
               />
+              {(objectiveArea === 'absentismo' || objectiveArea === 'ausentismo') && chartData.map((entry, index) => {
+                const val = Number(entry[dataKey]) || 0;
+                const obj = Number(entry.Objective) || 0;
+                const barColor = val > obj ? '#ef4444' : '#10b981';
+                return <Cell key={`cell-${index}`} fill={barColor} />;
+              })}
             </Bar>
           ) : (
             <Area type="monotone" dataKey={dataKey} name={name} stroke={color} fill={color} fillOpacity={0.1} strokeWidth={3} isAnimationActive={false} />
           )}
           {hasObjective && (
-            <Line type="stepAfter" dataKey="Objective" name="OBJETIVO" stroke="#ef4444" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={false} />
+            <Line 
+              type="stepAfter" 
+              dataKey="Objective" 
+              name="OBJETIVO" 
+              stroke={objectiveArea === 'absentismo' || objectiveArea === 'ausentismo' ? '#475569' : '#ef4444'} 
+              strokeWidth={2} 
+              strokeDasharray="5 5" 
+              dot={false} 
+              activeDot={false} 
+              isAnimationActive={false} 
+            />
           )}
         </ComposedChart>
       </ResponsiveContainer>

@@ -356,46 +356,45 @@ export const calculateStats = (
     pph_sin_blister = pph_sin_blister_cuchillo;
     pph = pph_blister_emp;
   } else if (aid.includes('movimiento-jamones')) {
-    const actsJamones = data.filter(a =>
-      a.formato === 'COLGAR JAMONES'
-      && a.tipoTarea === TaskType.PRODUCCION
-    );
+    // PPH COLGAR JAMONES
+    const actsJamones = data.filter(a => {
+      const f = normalizeFormato(a.formato);
+      return (f.includes('COLGAR') && f.includes('JAMON') && !f.includes('MANTECA') && !f.includes('PALETA') && !f.includes('DESCOLGAR'))
+        && a.tipoTarea === TaskType.PRODUCCION;
+    });
     const cantJamones = actsJamones.reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
     const persJamones = new Set(actsJamones.flatMap(a => a.operarios || [])).size || 1;
     const horasJamones = calculateUniqueMinutesMultiDay(actsJamones) / 60;
     pph_jamones = horasJamones > 0 ? Math.round(cantJamones / persJamones / horasJamones) : 0;
 
-    const actsPaletas = data.filter(a =>
-      a.formato === 'COLGAR PALETAS'
-      && a.tipoTarea === TaskType.PRODUCCION
-    );
+    // PPH COLGAR PALETAS
+    const actsPaletas = data.filter(a => {
+      const f = normalizeFormato(a.formato);
+      return (f.includes('COLGAR') && f.includes('PALETA') && !f.includes('DESCOLGAR'))
+        && a.tipoTarea === TaskType.PRODUCCION;
+    });
     const cantPaletas = actsPaletas.reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
     const persPaletas = new Set(actsPaletas.flatMap(a => a.operarios || [])).size || 1;
     const horasPaletas = calculateUniqueMinutesMultiDay(actsPaletas) / 60;
     pph_paletas = horasPaletas > 0 ? Math.round(cantPaletas / persPaletas / horasPaletas) : 0;
 
-    const actsManteca = data.filter(a =>
-      a.formato === 'COLGAR JAMONES MANTECA'
-      && a.tipoTarea === TaskType.PRODUCCION
-    );
+    // PPH COLGAR JAMONES MANTECA
+    const actsManteca = data.filter(a => {
+      const f = normalizeFormato(a.formato);
+      return (f.includes('COLGAR') && f.includes('MANTECA') && !f.includes('DESCOLGAR'))
+        && a.tipoTarea === TaskType.PRODUCCION;
+    });
     const cantManteca = actsManteca.reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
     const persManteca = new Set(actsManteca.flatMap(a => a.operarios || [])).size || 1;
     const horasManteca = calculateUniqueMinutesMultiDay(actsManteca) / 60;
     pph_manteca = horasManteca > 0 ? Math.round(cantManteca / persManteca / horasManteca) : 0;
 
-    const targetFormats = [
-      normalizeFormato('COLGAR JAMONES'),
-      normalizeFormato('COLGAR PALETAS'),
-      normalizeFormato('COLGAR JAMONES MANTECA'),
-      normalizeFormato('DESCOLGAR - COLGAR (EN LINEA)')
-    ];
-
-    cantidad_colgada = data
-      .filter(a => {
-        const norm = normalizeFormato(a.formato);
-        return targetFormats.includes(norm) && a.tipoTarea === TaskType.PRODUCCION;
-      })
-      .reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
+    // CANTIDAD COLGADA — solo COLGAR, nunca DESCOLGAR
+    cantidad_colgada = data.filter(a => {
+      const f = normalizeFormato(a.formato);
+      return f.includes('COLGAR') && !f.includes('DESCOLGAR')
+        && a.tipoTarea === TaskType.PRODUCCION;
+    }).reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
   }
 
   const finalAvailability = Math.min(100, availability > 0 ? availability : 0);

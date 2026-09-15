@@ -142,6 +142,7 @@ export interface PlanAccionSeguridad {
   id: string;
   fecha: string;
   tipo: 'Accidente' | 'Incidente' | 'Near Miss';
+  localAccidente?: string;
   gap: string;
   queHaOcurrido: string;
   accion: string;
