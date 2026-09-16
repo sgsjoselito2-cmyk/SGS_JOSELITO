@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, Users, ClipboardCheck, ArrowRight, X, Check, Info, Lock, Unlock, Plus, Trash2, Pencil, AlertTriangle, Clock, ShieldAlert, Lightbulb } from 'lucide-react';
 import { User, PlanAccionSeguridad, GapSeguridad, RegistroPersonalTop60, PlanAccionCalidad, TipoReclamacion, IdeaDeMejora } from '../types';
-import { supabase } from '../lib/supabase';
+import { supabase, isConfigured } from '../lib/supabase';
 
 interface TOP60PreparacionProps {
   operarios?: User[];
@@ -212,6 +212,10 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
     jornadasPerdidasBaja: 0,
     jornadasPerdidasAusentismo: 0
   });
+  const [editingPersonalRecord, setEditingPersonalRecord] = useState<RegistroPersonalTop60 | null>(null);
+  const [deleteConfirmPersonal, setDeleteConfirmPersonal] = useState<RegistroPersonalTop60 | null>(null);
+  const [isSavingPersonal, setIsSavingPersonal] = useState(false);
+  const [personalSuccessMsg, setPersonalSuccessMsg] = useState('');
 
   // Quality Plan of Action records and lookups
   const [planCalidadRecords, setPlanCalidadRecords] = useState<PlanAccionCalidad[]>([]);
@@ -452,28 +456,30 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
   };
 
   const fetchSecurityPlan = async () => {
+    if (!isConfigured) return;
     try {
       const { data, error } = await supabase.from('plan_accion_seguridad').select('*');
       if (error) {
-        console.error("Error fetching plan_accion_seguridad:", error);
+        console.warn("Could not fetch plan_accion_seguridad:", error.message || error);
       } else if (data) {
         setPlanAccionRecords(data.map(mapDbToUi));
       }
-    } catch (e) {
-      console.warn("Exception fetching plan_accion_seguridad:", e);
+    } catch (e: any) {
+      console.warn("Exception fetching plan_accion_seguridad:", e?.message || e);
     }
   };
 
   const fetchGaps = async () => {
+    if (!isConfigured) return;
     try {
       const { data, error } = await supabase.from('gaps_seguridad').select('*').order('nombre');
       if (error) {
-        console.error("Error fetching gaps_seguridad:", error);
+        console.warn("Could not fetch gaps_seguridad:", error.message || error);
       } else if (data) {
         setGapsList(data);
       }
-    } catch (e) {
-      console.warn("Exception fetching gaps_seguridad:", e);
+    } catch (e: any) {
+      console.warn("Exception fetching gaps_seguridad:", e?.message || e);
     }
   };
 
@@ -508,41 +514,44 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
   }, [planAccionRecords, filterTipo, filterEstado, showOnlyThisWeek, selectedDate]);
 
   const fetchPlanCalidad = async () => {
+    if (!isConfigured) return;
     try {
       const { data, error } = await supabase.from('plan_accion_calidad').select('*');
       if (error) {
-        console.error("Error fetching plan_accion_calidad:", error);
+        console.warn("Could not fetch plan_accion_calidad:", error.message || error);
       } else if (data) {
         setPlanCalidadRecords(data.map(mapDbToCalidad));
       }
-    } catch (e) {
-      console.warn("Exception fetching plan_accion_calidad:", e);
+    } catch (e: any) {
+      console.warn("Exception fetching plan_accion_calidad:", e?.message || e);
     }
   };
 
   const fetchTiposReclamacion = async () => {
+    if (!isConfigured) return;
     try {
       const { data, error } = await supabase.from('tipos_reclamacion').select('*').order('nombre');
       if (error) {
-        console.error("Error fetching tipos_reclamacion:", error);
+        console.warn("Could not fetch tipos_reclamacion:", error.message || error);
       } else if (data) {
         setTiposReclamacion(data);
       }
-    } catch (e) {
-      console.warn("Exception fetching tipos_reclamacion:", e);
+    } catch (e: any) {
+      console.warn("Exception fetching tipos_reclamacion:", e?.message || e);
     }
   };
 
   const fetchAreasCausantesCalidad = async () => {
+    if (!isConfigured) return;
     try {
       const { data, error } = await supabase.from('areas_causantes_calidad').select('*').order('nombre');
       if (error) {
-        console.error("Error fetching areas_causantes_calidad:", error);
+        console.warn("Could not fetch areas_causantes_calidad:", error.message || error);
       } else if (data) {
         setAreasCausantesCalidad(data);
       }
-    } catch (e) {
-      console.warn("Exception fetching areas_causantes_calidad:", e);
+    } catch (e: any) {
+      console.warn("Exception fetching areas_causantes_calidad:", e?.message || e);
     }
   };
 
@@ -700,15 +709,16 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
   };
 
   const fetchSupabaseRrhh = async () => {
+    if (!isConfigured) return;
     try {
       const { data, error } = await supabase.from('top60_rrhh').select('*');
       if (error) {
-        console.error("Error fetching top60_rrhh:", error);
+        console.warn("Could not fetch top60_rrhh:", error.message || error);
       } else if (data) {
         setSupabaseRrhhRecords(data);
       }
-    } catch (e) {
-      console.error("Error in fetchSupabaseRrhh:", e);
+    } catch (e: any) {
+      console.warn("Exception in fetchSupabaseRrhh:", e?.message || e);
     }
   };
 
@@ -747,16 +757,18 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
     const dayRecords = records[selectedDate];
     
     if (activeModal === 'personal') {
-      const fridayDate = getFridayOfWeek(selectedDate);
-      const mondayDate = getMondayDateString(selectedDate);
-      const existing = registrosPersonal.find(r => getMondayDateString(r.fecha) === mondayDate);
-      
-      setPersonalForm({
-        fecha: existing?.fecha ?? fridayDate,
-        jornadasTeoricas: existing?.jornadasTeoricas ?? 0,
-        jornadasPerdidasBaja: existing?.jornadasPerdidasBaja ?? 0,
-        jornadasPerdidasAusentismo: existing?.jornadasPerdidasAusentismo ?? 0
-      });
+      if (!editingPersonalRecord) {
+        const fridayDate = getFridayOfWeek(selectedDate);
+        const mondayDate = getMondayDateString(selectedDate);
+        const existing = registrosPersonal.find(r => getMondayDateString(r.fecha) === mondayDate);
+        
+        setPersonalForm({
+          fecha: existing?.fecha ?? fridayDate,
+          jornadasTeoricas: existing?.jornadasTeoricas ?? 0,
+          jornadasPerdidasBaja: existing?.jornadasPerdidasBaja ?? 0,
+          jornadasPerdidasAusentismo: existing?.jornadasPerdidasAusentismo ?? 0
+        });
+      }
     } else if (activeModal === 'produccion') {
       const existing = dayRecords?.produccion?.data;
       setProduccionForm({
@@ -1036,6 +1048,91 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
     }
   };
 
+  const handleEditPersonal = (reg: RegistroPersonalTop60) => {
+    setEditingPersonalRecord(reg);
+    setPersonalForm({
+      fecha: reg.fecha,
+      jornadasTeoricas: reg.jornadasTeoricas,
+      jornadasPerdidasBaja: reg.jornadasPerdidasBaja,
+      jornadasPerdidasAusentismo: reg.jornadasPerdidasAusentismo
+    });
+    setPersonalSuccessMsg('');
+  };
+
+  const handleCancelEditPersonal = () => {
+    setEditingPersonalRecord(null);
+    setPersonalSuccessMsg('');
+    const fridayDate = getFridayOfWeek(selectedDate);
+    const mondayDate = getMondayDateString(selectedDate);
+    const existing = registrosPersonal.find(r => getMondayDateString(r.fecha) === mondayDate);
+    setPersonalForm({
+      fecha: existing?.fecha ?? fridayDate,
+      jornadasTeoricas: existing?.jornadasTeoricas ?? 0,
+      jornadasPerdidasBaja: existing?.jornadasPerdidasBaja ?? 0,
+      jornadasPerdidasAusentismo: existing?.jornadasPerdidasAusentismo ?? 0
+    });
+  };
+
+  const handleDeletePersonal = async (reg: RegistroPersonalTop60) => {
+    const mondayDate = getMondayDateString(reg.fecha);
+    const regDate = reg.fecha;
+
+    try {
+      if (isConfigured) {
+        const idsToDelete = [
+          `${mondayDate}_personal`,
+          `${mondayDate}_absentismo`,
+          `${mondayDate}_ausentismo`,
+          reg.id
+        ].filter(Boolean);
+
+        await supabase.from('top60_rrhh').delete().in('id', idsToDelete);
+        await supabase.from('top60_rrhh').delete().match({ fecha: regDate, area: 'PERSONAL_TOP60' });
+        await supabase.from('top60_rrhh').delete().match({ fecha: mondayDate, area: 'absentismo' });
+        await supabase.from('top60_rrhh').delete().match({ fecha: mondayDate, area: 'ausentismo' });
+      }
+
+      // Update local state and localStorage cache immediately
+      setSupabaseRrhhRecords(prev => {
+        const updated = prev.filter(r => {
+          const rMonday = getMondayDateString(r.fecha);
+          return r.id !== reg.id && rMonday !== mondayDate && r.fecha !== regDate;
+        });
+        try {
+          localStorage.setItem('zitron_top60_rrhh', JSON.stringify(updated));
+        } catch (e) {}
+        return updated;
+      });
+
+      const updatedRecords = { ...records };
+      let modified = false;
+      Object.keys(updatedRecords).forEach(d => {
+        if (getMondayDateString(d) === mondayDate || d === regDate) {
+          if (updatedRecords[d]?.personal) {
+            delete updatedRecords[d].personal;
+            modified = true;
+          }
+        }
+      });
+      if (modified) {
+        saveRecords(updatedRecords);
+      }
+
+      if (editingPersonalRecord?.id === reg.id || editingPersonalRecord?.fecha === reg.fecha) {
+        handleCancelEditPersonal();
+      }
+
+      setDeleteConfirmPersonal(null);
+      setPersonalSuccessMsg(`Registro del ${formatDateDMY(reg.fecha)} eliminado correctamente.`);
+      setTimeout(() => setPersonalSuccessMsg(''), 4000);
+
+      await fetchSupabaseRrhh();
+    } catch (e: any) {
+      console.error("Error deleting from top60_rrhh:", e);
+      alert("Error al eliminar el registro: " + (e?.message || e));
+    }
+  };
+
   const handleSavePersonal = async () => {
     if (personalForm.jornadasTeoricas <= 0) {
       alert("Las jornadas teóricas de la semana deben ser mayores que 0.");
@@ -1050,6 +1147,7 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
       return;
     }
 
+    setIsSavingPersonal(true);
     const regDate = personalForm.fecha || getFridayOfWeek(selectedDate);
     const mondayDate = getMondayDateString(regDate);
     const pctAbsentismo = (personalForm.jornadasPerdidasBaja / personalForm.jornadasTeoricas) * 100;
@@ -1061,61 +1159,85 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
       jornadasPerdidasAusentismo: personalForm.jornadasPerdidasAusentismo
     });
 
-    console.log('Guardando registro de personal en Supabase:', serialized);
     try {
-      // A. Main structured row
-      const primaryObj = {
-        id: `${mondayDate}_personal`,
-        fecha: regDate,
-        area: 'PERSONAL_TOP60',
-        jornadas_teoricas: personalForm.jornadasTeoricas,
-        jornadas_perdidas_baja: personalForm.jornadasPerdidasBaja,
-        jornadas_perdidas_ausentismo: personalForm.jornadasPerdidasAusentismo,
-        comentarios: serialized,
-        valor: personalForm.jornadasTeoricas
-      };
+      if (isConfigured) {
+        // If editing a record that changed week date, cleanup previous week rows
+        if (editingPersonalRecord) {
+          const oldMonday = getMondayDateString(editingPersonalRecord.fecha);
+          if (oldMonday !== mondayDate) {
+            await supabase.from('top60_rrhh').delete().in('id', [
+              `${oldMonday}_personal`,
+              `${oldMonday}_absentismo`,
+              `${oldMonday}_ausentismo`,
+              editingPersonalRecord.id
+            ]);
+            await supabase.from('top60_rrhh').delete().match({ fecha: editingPersonalRecord.fecha, area: 'PERSONAL_TOP60' });
+            await supabase.from('top60_rrhh').delete().match({ fecha: oldMonday, area: 'absentismo' });
+            await supabase.from('top60_rrhh').delete().match({ fecha: oldMonday, area: 'ausentismo' });
+          } else if (editingPersonalRecord.id && editingPersonalRecord.id !== `${mondayDate}_personal`) {
+            await supabase.from('top60_rrhh').delete().eq('id', editingPersonalRecord.id);
+          }
+        }
 
-      const { error: primaryErr } = await supabase.from('top60_rrhh').upsert(primaryObj);
-      
-      if (primaryErr && primaryErr.message.includes('column')) {
-        // Fallback for missing custom columns: save using standard columns only
-        const fallbackObj = {
+        // A. Main structured row
+        const primaryObj = {
           id: `${mondayDate}_personal`,
           fecha: regDate,
           area: 'PERSONAL_TOP60',
+          jornadas_teoricas: personalForm.jornadasTeoricas,
+          jornadas_perdidas_baja: personalForm.jornadasPerdidasBaja,
+          jornadas_perdidas_ausentismo: personalForm.jornadasPerdidasAusentismo,
           comentarios: serialized,
           valor: personalForm.jornadasTeoricas
         };
-        await supabase.from('top60_rrhh').upsert(fallbackObj);
+
+        const { error: primaryErr } = await supabase.from('top60_rrhh').upsert(primaryObj);
+        
+        if (primaryErr && primaryErr.message.includes('column')) {
+          // Fallback for missing custom columns: save using standard columns only
+          const fallbackObj = {
+            id: `${mondayDate}_personal`,
+            fecha: regDate,
+            area: 'PERSONAL_TOP60',
+            comentarios: serialized,
+            valor: personalForm.jornadasTeoricas
+          };
+          await supabase.from('top60_rrhh').upsert(fallbackObj);
+        }
+
+        // B. Legacy rows for backwards compatibility with the existing dashboard
+        await supabase.from('top60_rrhh').upsert({
+          id: `${mondayDate}_absentismo`,
+          fecha: mondayDate,
+          area: 'absentismo',
+          valor: pctAbsentismo,
+          comentarios: `Auto-generated. Baja: ${personalForm.jornadasPerdidasBaja}, Teoricas: ${personalForm.jornadasTeoricas}`
+        });
+
+        await supabase.from('top60_rrhh').upsert({
+          id: `${mondayDate}_ausentismo`,
+          fecha: mondayDate,
+          area: 'ausentismo',
+          valor: pctAusentismo,
+          comentarios: `Auto-generated. Ausentismo: ${personalForm.jornadasPerdidasAusentismo}, Teoricas: ${personalForm.jornadasTeoricas}`
+        });
+
+        await fetchSupabaseRrhh();
       }
-
-      // B. Legacy rows for backwards compatibility with the existing dashboard
-      await supabase.from('top60_rrhh').upsert({
-        id: `${mondayDate}_absentismo`,
-        fecha: mondayDate,
-        area: 'absentismo',
-        valor: pctAbsentismo,
-        comentarios: `Auto-generated. Baja: ${personalForm.jornadasPerdidasBaja}, Teoricas: ${personalForm.jornadasTeoricas}`
-      });
-
-      await supabase.from('top60_rrhh').upsert({
-        id: `${mondayDate}_ausentismo`,
-        fecha: mondayDate,
-        area: 'ausentismo',
-        valor: pctAusentismo,
-        comentarios: `Auto-generated. Ausentismo: ${personalForm.jornadasPerdidasAusentismo}, Teoricas: ${personalForm.jornadasTeoricas}`
-      });
-
-      await fetchSupabaseRrhh();
     } catch (e: any) {
       console.error("Exception upserting to top60_rrhh:", e);
-      alert("Error al guardar en Supabase: " + e.message);
+      alert("Error al guardar en Supabase: " + (e?.message || e));
+    } finally {
+      setIsSavingPersonal(false);
     }
 
+    const wasEditing = !!editingPersonalRecord;
+
+    const targetDateForRecords = regDate === selectedDate ? selectedDate : regDate;
     const updatedRecords = {
       ...records,
-      [selectedDate]: {
-        ...records[selectedDate],
+      [targetDateForRecords]: {
+        ...records[targetDateForRecords],
         personal: {
           completed: true,
           updatedAt: new Date().toISOString(),
@@ -1128,7 +1250,24 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
       }
     };
     saveRecords(updatedRecords);
-    setActiveModal(null);
+
+    if (wasEditing) {
+      setEditingPersonalRecord(null);
+      setPersonalSuccessMsg(`Registro del ${formatDateDMY(regDate)} actualizado correctamente.`);
+      setTimeout(() => setPersonalSuccessMsg(''), 4000);
+
+      const fridayDate = getFridayOfWeek(selectedDate);
+      const mondayDateSelected = getMondayDateString(selectedDate);
+      const existing = registrosPersonal.find(r => getMondayDateString(r.fecha) === mondayDateSelected);
+      setPersonalForm({
+        fecha: existing?.fecha ?? fridayDate,
+        jornadasTeoricas: existing?.jornadasTeoricas ?? 0,
+        jornadasPerdidasBaja: existing?.jornadasPerdidasBaja ?? 0,
+        jornadasPerdidasAusentismo: existing?.jornadasPerdidasAusentismo ?? 0
+      });
+    } else {
+      setActiveModal(null);
+    }
   };
 
   const handleCreateTipoReclamacion = async () => {
@@ -1932,7 +2071,10 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
                 </div>
               </div>
               <button 
-                onClick={() => setActiveModal(null)}
+                onClick={() => {
+                  setActiveModal(null);
+                  handleCancelEditPersonal();
+                }}
                 className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer border border-transparent hover:border-slate-200"
               >
                 <X className="w-5 h-5" />
@@ -1944,7 +2086,27 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
               {/* Left Side: Form */}
               <div className="w-full md:w-1/3 border-r border-slate-100 p-6 overflow-y-auto space-y-6 flex flex-col justify-between">
                 <div className="space-y-4">
-                  <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider border-b border-slate-100 pb-2">Registrar Semana</h4>
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">
+                        {editingPersonalRecord ? 'Editar Registro' : 'Registrar Semana'}
+                      </h4>
+                      {editingPersonalRecord && (
+                        <span className="text-[10px] bg-indigo-100 text-indigo-700 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          Modo Edición
+                        </span>
+                      )}
+                    </div>
+                    {editingPersonalRecord && (
+                      <button
+                        type="button"
+                        onClick={handleCancelEditPersonal}
+                        className="text-[11px] font-bold text-slate-400 hover:text-slate-700 transition-colors cursor-pointer underline"
+                      >
+                        Descartar
+                      </button>
+                    )}
+                  </div>
                   
                   {/* Fecha Input */}
                   <div className="space-y-1">
@@ -2020,24 +2182,70 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
 
                 <div className="flex gap-3 mt-4">
                   <button 
-                    onClick={() => setActiveModal(null)}
+                    type="button"
+                    onClick={() => {
+                      if (editingPersonalRecord) {
+                        handleCancelEditPersonal();
+                      } else {
+                        setActiveModal(null);
+                      }
+                    }}
                     className="flex-1 py-2 border border-slate-200 text-slate-500 font-bold rounded-xl hover:bg-slate-50 transition-all text-xs cursor-pointer text-center"
                   >
-                    Cancelar
+                    {editingPersonalRecord ? 'Cancelar Edición' : 'Cancelar'}
                   </button>
                   <button 
                     id="btn-save-personal"
+                    type="button"
                     onClick={handleSavePersonal}
-                    className="flex-1 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-md shadow-indigo-100 transition-all text-xs cursor-pointer text-center"
+                    disabled={isSavingPersonal}
+                    className={`flex-1 py-2 font-bold rounded-xl shadow-md transition-all text-xs cursor-pointer text-center flex items-center justify-center gap-1.5 ${
+                      editingPersonalRecord 
+                        ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-100'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-100'
+                    }`}
                   >
-                    Guardar
+                    {isSavingPersonal ? (
+                      <span>Guardando...</span>
+                    ) : editingPersonalRecord ? (
+                      <>
+                        <Pencil className="w-3.5 h-3.5" />
+                        <span>Actualizar Registro</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Guardar</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
 
               {/* Right Side: History Table */}
               <div className="flex-1 p-6 overflow-hidden flex flex-col">
-                <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider border-b border-slate-100 pb-2 mb-4 shrink-0">Historial de Registros</h4>
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-4 shrink-0">
+                  <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">Historial de Registros</h4>
+                  <span className="text-xs font-bold text-slate-400">
+                    {registrosPersonal.length} {registrosPersonal.length === 1 ? 'registro' : 'registros'}
+                  </span>
+                </div>
+
+                {personalSuccessMsg && (
+                  <div className="mb-3 px-4 py-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center justify-between animate-in fade-in shrink-0">
+                    <div className="flex items-center gap-2">
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{personalSuccessMsg}</span>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => setPersonalSuccessMsg('')}
+                      className="text-emerald-500 hover:text-emerald-700 cursor-pointer p-0.5"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
                 
                 <div className="flex-1 overflow-y-auto border border-slate-100 rounded-2xl">
                   {registrosPersonal.length === 0 ? (
@@ -2055,20 +2263,59 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
                           <th className="p-4 text-center">% Absentismo</th>
                           <th className="p-4 text-center">Jornadas Perdidas Ausen.</th>
                           <th className="p-4 text-center">% Ausentismo</th>
+                          <th className="p-4 text-center">Acciones</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50 text-xs font-bold text-slate-600">
                         {registrosPersonal.map((reg) => {
                           const pctAb = reg.jornadasTeoricas > 0 ? (reg.jornadasPerdidasBaja / reg.jornadasTeoricas) * 100 : 0;
                           const pctAu = reg.jornadasTeoricas > 0 ? (reg.jornadasPerdidasAusentismo / reg.jornadasTeoricas) * 100 : 0;
+                          const isBeingEdited = editingPersonalRecord?.id === reg.id || (editingPersonalRecord?.fecha === reg.fecha);
+
                           return (
-                            <tr key={reg.id} className="hover:bg-slate-50/40 transition-colors">
-                              <td className="p-4 text-slate-950">{formatDateDMY(reg.fecha)}</td>
+                            <tr 
+                              key={reg.id} 
+                              className={`transition-colors ${isBeingEdited ? 'bg-indigo-50/80' : 'hover:bg-slate-50/40'}`}
+                            >
+                              <td className="p-4 text-slate-950 font-bold">
+                                <div className="flex items-center gap-2">
+                                  <span>{formatDateDMY(reg.fecha)}</span>
+                                  {isBeingEdited && (
+                                    <span className="text-[9px] bg-indigo-600 text-white font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                      Editando
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
                               <td className="p-4 text-center text-slate-500">{reg.jornadasTeoricas}</td>
                               <td className="p-4 text-center text-red-500">{reg.jornadasPerdidasBaja}</td>
                               <td className="p-4 text-center text-indigo-600 font-extrabold">{pctAb.toFixed(1)}%</td>
                               <td className="p-4 text-center text-amber-500">{reg.jornadasPerdidasAusentismo}</td>
                               <td className="p-4 text-center text-indigo-600 font-extrabold">{pctAu.toFixed(1)}%</td>
+                              <td className="p-4 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditPersonal(reg)}
+                                    className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                                      isBeingEdited
+                                        ? 'bg-indigo-600 text-white shadow-sm'
+                                        : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
+                                    }`}
+                                    title="Editar registro"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeleteConfirmPersonal(reg)}
+                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
+                                    title="Eliminar registro"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
                             </tr>
                           );
                         })}
@@ -2079,6 +2326,57 @@ const TOP60Preparacion: React.FC<TOP60PreparacionProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Modal de confirmación para eliminar registro */}
+          {deleteConfirmPersonal && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-70 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95">
+                <div className="flex items-center gap-3 text-rose-600 mb-3">
+                  <div className="p-3 bg-rose-50 rounded-2xl border border-rose-100">
+                    <Trash2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-serif font-black text-slate-900 uppercase">¿Eliminar Registro?</h4>
+                    <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Acción irreversible</p>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-600 mb-3 leading-relaxed">
+                  ¿Estás seguro de que deseas eliminar permanentemente el registro de personal de esta semana?
+                </p>
+                <div className="p-3.5 bg-slate-50 border border-slate-100 rounded-2xl mb-5 space-y-2 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider">Fecha:</span>
+                    <span className="font-black text-slate-900">{formatDateDMY(deleteConfirmPersonal.fecha)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider">Jornadas Teóricas:</span>
+                    <span className="font-bold text-slate-700">{deleteConfirmPersonal.jornadasTeoricas}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider">Pérdidas Baja / Ausentismo:</span>
+                    <span className="font-bold text-slate-700">{deleteConfirmPersonal.jornadasPerdidasBaja} / {deleteConfirmPersonal.jornadasPerdidasAusentismo}</span>
+                  </div>
+                </div>
+                <div className="flex gap-3 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirmPersonal(null)}
+                    className="px-4 py-2 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all text-xs cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeletePersonal(deleteConfirmPersonal)}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-md shadow-rose-100 transition-all text-xs cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Confirmar y Eliminar</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

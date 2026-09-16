@@ -4,12 +4,12 @@ import {
 } from 'recharts';
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
-import { Activity as ActivityIcon, ShieldAlert, Clock, Users, Lock, Unlock, Save, Lightbulb } from 'lucide-react';
+import { Activity as ActivityIcon, ShieldAlert, Clock, Users, Lock, Unlock, Save, Lightbulb, Pencil, Trash2, X, Check } from 'lucide-react';
 import { Activity, OEEObjectives, TaskType, User, ActionPlanItem, PlanAccionCalidad } from '../types';
 import { calculateStats, getWeekNumber } from './Dashboard';
 import { AREA_NAMES, JOSELITO_LOGO } from '../constants';
 import HelpModal from './HelpModal';
-import { supabase } from '../lib/supabase';
+import { supabase, isConfigured } from '../lib/supabase';
 
 const parseLocalDate = (dateStr: string) => {
   if (!dateStr) return new Date();
@@ -18,6 +18,27 @@ const parseLocalDate = (dateStr: string) => {
     return new Date(year, month - 1, day);
   }
   return new Date(dateStr);
+};
+
+const getMondayDateString = (dateStr: string): string => {
+  try {
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    const year = Number(parts[0]);
+    const month = Number(parts[1]) - 1;
+    const day = Number(parts[2]);
+    const d = new Date(year, month, day);
+    const dayOfWeek = d.getDay();
+    const diff = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+    const monday = new Date(year, month, diff);
+    
+    const yyyy = monday.getFullYear();
+    const mm = String(monday.getMonth() + 1).padStart(2, '0');
+    const dd = String(monday.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  } catch (e) {
+    return dateStr;
+  }
 };
 
 interface TOP60DashboardProps {
@@ -234,6 +255,22 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
   }, [dbPlanAccionRecords]);
   const [dbPlanCalidadRecords, setDbPlanCalidadRecords] = useState<PlanAccionCalidad[]>([]);
   const [dbRrhhRecords, setDbRrhhRecords] = useState<any[]>([]);
+  const [editingPersonalRecord, setEditingPersonalRecord] = useState<{
+    id: string;
+    fecha: string;
+    jornadasTeoricas: number;
+    jornadasPerdidasBaja: number;
+    jornadasPerdidasAusentismo: number;
+  } | null>(null);
+  const [deleteConfirmPersonal, setDeleteConfirmPersonal] = useState<{
+    id: string;
+    fecha: string;
+    jornadasTeoricas: number;
+    jornadasPerdidasBaja: number;
+    jornadasPerdidasAusentismo: number;
+  } | null>(null);
+  const [isSavingPersonal, setIsSavingPersonal] = useState(false);
+  const [personalSuccessMsg, setPersonalSuccessMsg] = useState('');
   const [rrhhData, setRrhhData] = useState<any[]>([]);
   const [ausentismoData, setAusentismoData] = useState<any[]>([]);
   const [calidadData, setCalidadData] = useState<any[]>([]);
@@ -284,10 +321,11 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
 
     // Fetch plan_accion_seguridad from Supabase
     const fetchDbPlanAccion = async () => {
+      if (!isConfigured) return;
       try {
         const { data, error } = await supabase.from('plan_accion_seguridad').select('*');
         if (error) {
-          console.error("Error fetching plan_accion_seguridad:", error);
+          console.warn("Could not fetch plan_accion_seguridad from Supabase (using local data):", error.message || error);
         } else if (data) {
           setDbPlanAccionRecords(data);
           const mappedActions = data.map((r: any) => ({
@@ -304,33 +342,35 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
           }));
           setSeguridadData(mappedActions);
         }
-      } catch (e) {
-        console.error("Error in fetchDbPlanAccion:", e);
+      } catch (e: any) {
+        console.warn("Exception in fetchDbPlanAccion (using local data):", e?.message || e);
       }
     };
     fetchDbPlanAccion();
 
     // Fetch top60_rrhh from Supabase
     const fetchDbRrhh = async () => {
+      if (!isConfigured) return;
       try {
         const { data, error } = await supabase.from('top60_rrhh').select('*');
         if (error) {
-          console.error("Error fetching top60_rrhh:", error);
+          console.warn("Could not fetch top60_rrhh from Supabase (using local data):", error.message || error);
         } else if (data) {
           setDbRrhhRecords(data);
         }
-      } catch (e) {
-        console.error("Error in fetchDbRrhh:", e);
+      } catch (e: any) {
+        console.warn("Exception in fetchDbRrhh (using local data):", e?.message || e);
       }
     };
     fetchDbRrhh();
 
     // Fetch plan_accion_calidad from Supabase
     const fetchDbPlanCalidad = async () => {
+      if (!isConfigured) return;
       try {
         const { data, error } = await supabase.from('plan_accion_calidad').select('*');
         if (error) {
-          console.error("Error fetching plan_accion_calidad:", error);
+          console.warn("Could not fetch plan_accion_calidad from Supabase (using local data):", error.message || error);
         } else if (data) {
           const mapped = data.map((dbItem: any) => ({
             id: dbItem.id,
@@ -350,8 +390,8 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
           }));
           setDbPlanCalidadRecords(mapped);
         }
-      } catch (e) {
-        console.error("Error in fetchDbPlanCalidad:", e);
+      } catch (e: any) {
+        console.warn("Exception in fetchDbPlanCalidad (using local data):", e?.message || e);
       }
     };
     fetchDbPlanCalidad();
@@ -2223,15 +2263,36 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
         {/* Historial de Registros */}
         {!isReport && (
           <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col">
-            <div className="flex items-center gap-3 mb-6 border-b border-slate-50 pb-4">
-              <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
-                <Users size={20} />
+            <div className="flex items-center justify-between mb-6 border-b border-slate-50 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
+                  <Users size={20} />
+                </div>
+                <div>
+                  <h3 className="font-serif font-black text-slate-900 uppercase">Historial de Registros</h3>
+                  <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Registros históricos de personal y ausentismo sincronizados desde Supabase</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-serif font-black text-slate-900 uppercase">Historial de Registros</h3>
-                <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Registros históricos de personal y ausentismo sincronizados desde Supabase</p>
-              </div>
+              <span className="text-xs font-bold text-slate-400">
+                {dashboardRegistrosPersonal.length} {dashboardRegistrosPersonal.length === 1 ? 'registro' : 'registros'}
+              </span>
             </div>
+
+            {personalSuccessMsg && (
+              <div className="mb-4 px-4 py-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center justify-between animate-in fade-in">
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{personalSuccessMsg}</span>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setPersonalSuccessMsg('')}
+                  className="text-emerald-500 hover:text-emerald-700 cursor-pointer p-0.5"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
 
             <div className="overflow-x-auto max-h-[350px] overflow-y-auto border border-slate-100 rounded-2xl">
               {dashboardRegistrosPersonal.length === 0 ? (
@@ -2249,6 +2310,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
                       <th className="p-4 text-center">% Absentismo</th>
                       <th className="p-4 text-center">Jornadas Perdidas Ausen.</th>
                       <th className="p-4 text-center">% Ausentismo</th>
+                      <th className="p-4 text-center">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50 text-xs font-bold text-slate-600">
@@ -2257,12 +2319,32 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
                       const pctAu = reg.jornadasTeoricas > 0 ? (reg.jornadasPerdidasAusentismo / reg.jornadasTeoricas) * 100 : 0;
                       return (
                         <tr key={reg.id} className="hover:bg-slate-50/40 transition-colors">
-                          <td className="p-4 text-slate-950">{formatDateDMY(reg.fecha)}</td>
+                          <td className="p-4 text-slate-950 font-bold">{formatDateDMY(reg.fecha)}</td>
                           <td className="p-4 text-center text-slate-500">{reg.jornadasTeoricas}</td>
                           <td className="p-4 text-center text-red-500">{reg.jornadasPerdidasBaja}</td>
                           <td className="p-4 text-center text-indigo-600 font-extrabold">{pctAb.toFixed(1)}%</td>
                           <td className="p-4 text-center text-amber-500">{reg.jornadasPerdidasAusentismo}</td>
                           <td className="p-4 text-center text-indigo-600 font-extrabold">{pctAu.toFixed(1)}%</td>
+                          <td className="p-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setEditingPersonalRecord({ ...reg })}
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all cursor-pointer"
+                                title="Editar registro"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeleteConfirmPersonal({ ...reg })}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
+                                title="Eliminar registro"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       );
                     })}
@@ -2270,6 +2352,313 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
                 </table>
               )}
             </div>
+
+            {/* Modal para editar registro de personal */}
+            {editingPersonalRecord && (
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-70 flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600 border border-indigo-100">
+                        <Users className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-serif font-black text-slate-900 uppercase text-sm">Editar Registro</h4>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Modificar datos de personal</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditingPersonalRecord(null)}
+                      className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3.5 text-xs">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Fecha:</label>
+                      <input
+                        type="date"
+                        value={editingPersonalRecord.fecha}
+                        onChange={(e) => setEditingPersonalRecord({ ...editingPersonalRecord, fecha: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-xs"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Jornadas Teóricas:</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={editingPersonalRecord.jornadasTeoricas || ''}
+                        onChange={(e) => setEditingPersonalRecord({ ...editingPersonalRecord, jornadasTeoricas: Math.max(0, parseInt(e.target.value) || 0) })}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-xs"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Jornadas Perdidas por Baja:</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={editingPersonalRecord.jornadasPerdidasBaja}
+                        onChange={(e) => setEditingPersonalRecord({ ...editingPersonalRecord, jornadasPerdidasBaja: Math.max(0, parseInt(e.target.value) || 0) })}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-xs"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Jornadas Perdidas por Ausentismo:</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={editingPersonalRecord.jornadasPerdidasAusentismo}
+                        onChange={(e) => setEditingPersonalRecord({ ...editingPersonalRecord, jornadasPerdidasAusentismo: Math.max(0, parseInt(e.target.value) || 0) })}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-xs"
+                        required
+                      />
+                    </div>
+
+                    {/* Previsualización de Porcentajes */}
+                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">Cálculo de Indicadores</span>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <span className="text-[9px] text-slate-400 font-bold uppercase block">ABSENTISMO</span>
+                          <span className="text-sm font-extrabold text-indigo-600">
+                            {editingPersonalRecord.jornadasTeoricas > 0 ? ((editingPersonalRecord.jornadasPerdidasBaja / editingPersonalRecord.jornadasTeoricas) * 100).toFixed(1) : '0.0'}%
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-slate-400 font-bold uppercase block">AUSENTISMO</span>
+                          <span className="text-sm font-extrabold text-indigo-600">
+                            {editingPersonalRecord.jornadasTeoricas > 0 ? ((editingPersonalRecord.jornadasPerdidasAusentismo / editingPersonalRecord.jornadasTeoricas) * 100).toFixed(1) : '0.0'}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 justify-end mt-5">
+                    <button
+                      type="button"
+                      onClick={() => setEditingPersonalRecord(null)}
+                      className="px-4 py-2 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all text-xs cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSavingPersonal}
+                      onClick={async () => {
+                        if (!editingPersonalRecord) return;
+                        if (editingPersonalRecord.jornadasTeoricas <= 0) {
+                          alert("Las jornadas teóricas deben ser mayores a 0.");
+                          return;
+                        }
+                        if (editingPersonalRecord.jornadasPerdidasBaja > editingPersonalRecord.jornadasTeoricas) {
+                          alert("Las jornadas perdidas por baja no pueden superar a las teóricas.");
+                          return;
+                        }
+                        if (editingPersonalRecord.jornadasPerdidasAusentismo > editingPersonalRecord.jornadasTeoricas) {
+                          alert("Las jornadas perdidas por ausentismo no pueden superar a las teóricas.");
+                          return;
+                        }
+
+                        setIsSavingPersonal(true);
+                        const regDate = editingPersonalRecord.fecha;
+                        const mondayDate = getMondayDateString(regDate);
+                        const pctAbsentismo = (editingPersonalRecord.jornadasPerdidasBaja / editingPersonalRecord.jornadasTeoricas) * 100;
+                        const pctAusentismo = (editingPersonalRecord.jornadasPerdidasAusentismo / editingPersonalRecord.jornadasTeoricas) * 100;
+
+                        const serialized = JSON.stringify({
+                          jornadasTeoricas: editingPersonalRecord.jornadasTeoricas,
+                          jornadasPerdidasBaja: editingPersonalRecord.jornadasPerdidasBaja,
+                          jornadasPerdidasAusentismo: editingPersonalRecord.jornadasPerdidasAusentismo
+                        });
+
+                        try {
+                          if (isConfigured) {
+                            const primaryObj = {
+                              id: `${mondayDate}_personal`,
+                              fecha: regDate,
+                              area: 'PERSONAL_TOP60',
+                              jornadas_teoricas: editingPersonalRecord.jornadasTeoricas,
+                              jornadas_perdidas_baja: editingPersonalRecord.jornadasPerdidasBaja,
+                              jornadas_perdidas_ausentismo: editingPersonalRecord.jornadasPerdidasAusentismo,
+                              comentarios: serialized,
+                              valor: editingPersonalRecord.jornadasTeoricas
+                            };
+
+                            const { error: pErr } = await supabase.from('top60_rrhh').upsert(primaryObj);
+                            if (pErr && pErr.message.includes('column')) {
+                              await supabase.from('top60_rrhh').upsert({
+                                id: `${mondayDate}_personal`,
+                                fecha: regDate,
+                                area: 'PERSONAL_TOP60',
+                                comentarios: serialized,
+                                valor: editingPersonalRecord.jornadasTeoricas
+                              });
+                            }
+
+                            await supabase.from('top60_rrhh').upsert({
+                              id: `${mondayDate}_absentismo`,
+                              fecha: mondayDate,
+                              area: 'absentismo',
+                              valor: pctAbsentismo,
+                              comentarios: `Auto-generated. Baja: ${editingPersonalRecord.jornadasPerdidasBaja}, Teoricas: ${editingPersonalRecord.jornadasTeoricas}`
+                            });
+
+                            await supabase.from('top60_rrhh').upsert({
+                              id: `${mondayDate}_ausentismo`,
+                              fecha: mondayDate,
+                              area: 'ausentismo',
+                              valor: pctAusentismo,
+                              comentarios: `Auto-generated. Ausentismo: ${editingPersonalRecord.jornadasPerdidasAusentismo}, Teoricas: ${editingPersonalRecord.jornadasTeoricas}`
+                            });
+
+                            const { data } = await supabase.from('top60_rrhh').select('*');
+                            if (data) {
+                              setDbRrhhRecords(data);
+                              try {
+                                localStorage.setItem('zitron_top60_rrhh', JSON.stringify(data));
+                              } catch (e) {}
+                            }
+                          }
+
+                          setEditingPersonalRecord(null);
+                          setPersonalSuccessMsg(`Registro del ${formatDateDMY(regDate)} actualizado correctamente.`);
+                          setTimeout(() => setPersonalSuccessMsg(''), 4000);
+                        } catch (e: any) {
+                          console.error("Exception updating top60_rrhh:", e);
+                          alert("Error al actualizar: " + (e?.message || e));
+                        } finally {
+                          setIsSavingPersonal(false);
+                        }
+                      }}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md shadow-indigo-100 transition-all text-xs cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{isSavingPersonal ? 'Guardando...' : 'Guardar Cambios'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal para confirmación de eliminación */}
+            {deleteConfirmPersonal && (
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-70 flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95">
+                  <div className="flex items-center gap-3 text-rose-600 mb-3">
+                    <div className="p-3 bg-rose-50 rounded-2xl border border-rose-100">
+                      <Trash2 className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-serif font-black text-slate-900 uppercase">¿Eliminar Registro?</h4>
+                      <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Acción irreversible</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-600 mb-3 leading-relaxed">
+                    ¿Estás seguro de que deseas eliminar permanentemente el registro de personal de esta fecha?
+                  </p>
+                  <div className="p-3.5 bg-slate-50 border border-slate-100 rounded-2xl mb-5 space-y-2 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider">Fecha:</span>
+                      <span className="font-black text-slate-900">{formatDateDMY(deleteConfirmPersonal.fecha)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider">Jornadas Teóricas:</span>
+                      <span className="font-bold text-slate-700">{deleteConfirmPersonal.jornadasTeoricas}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider">Pérdidas Baja / Ausentismo:</span>
+                      <span className="font-bold text-slate-700">{deleteConfirmPersonal.jornadasPerdidasBaja} / {deleteConfirmPersonal.jornadasPerdidasAusentismo}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmPersonal(null)}
+                      className="px-4 py-2 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all text-xs cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const target = deleteConfirmPersonal;
+                        if (!target) return;
+                        const mondayDate = getMondayDateString(target.fecha);
+                        const regDate = target.fecha;
+
+                        try {
+                          if (isConfigured) {
+                            const idsToDelete = [
+                              `${mondayDate}_personal`,
+                              `${mondayDate}_absentismo`,
+                              `${mondayDate}_ausentismo`,
+                              target.id
+                            ].filter(Boolean);
+
+                            await supabase.from('top60_rrhh').delete().in('id', idsToDelete);
+                            await supabase.from('top60_rrhh').delete().match({ fecha: regDate, area: 'PERSONAL_TOP60' });
+                            await supabase.from('top60_rrhh').delete().match({ fecha: mondayDate, area: 'absentismo' });
+                            await supabase.from('top60_rrhh').delete().match({ fecha: mondayDate, area: 'ausentismo' });
+                          }
+
+                          setDbRrhhRecords(prev => {
+                            const updated = prev.filter(r => {
+                              const rMonday = getMondayDateString(r.fecha);
+                              return r.id !== target.id && rMonday !== mondayDate && r.fecha !== regDate;
+                            });
+                            try {
+                              localStorage.setItem('zitron_top60_rrhh', JSON.stringify(updated));
+                            } catch (e) {}
+                            return updated;
+                          });
+
+                          try {
+                            const localPrepRecordsStr = localStorage.getItem('zitron_top60_records');
+                            if (localPrepRecordsStr) {
+                              const parsed = JSON.parse(localPrepRecordsStr);
+                              let mod = false;
+                              Object.keys(parsed).forEach(d => {
+                                if (getMondayDateString(d) === mondayDate || d === regDate) {
+                                  if (parsed[d]?.personal) {
+                                    delete parsed[d].personal;
+                                    mod = true;
+                                  }
+                                }
+                              });
+                              if (mod) {
+                                localStorage.setItem('zitron_top60_records', JSON.stringify(parsed));
+                              }
+                            }
+                          } catch (e) {}
+
+                          setDeleteConfirmPersonal(null);
+                          setPersonalSuccessMsg(`Registro del ${formatDateDMY(target.fecha)} eliminado correctamente.`);
+                          setTimeout(() => setPersonalSuccessMsg(''), 4000);
+                        } catch (e: any) {
+                          console.error("Error deleting from top60_rrhh:", e);
+                          alert("Error al eliminar el registro: " + (e?.message || e));
+                        }
+                      }}
+                      className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-md shadow-rose-100 transition-all text-xs cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Confirmar y Eliminar</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
