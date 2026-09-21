@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ClipboardList, Plus, Trash2, Search, User, AlertTriangle } from 'lucide-react';
+import { ClipboardList, Plus, Trash2, Search, User, AlertTriangle, FileSpreadsheet } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { PlanAccionTop60 } from '../types';
 import { supabase, isConfigured } from '../lib/supabase';
 
@@ -89,6 +90,8 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
 
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [selectedEstado, setSelectedEstado] = useState<string>('TODOS');
+  const [selectedResponsable, setSelectedResponsable] = useState<string>('TODOS');
 
   // Inline editing state: { id, field }
   const [editingCell, setEditingCell] = useState<{ id: string | number; field: string } | null>(null);
@@ -115,25 +118,32 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
         if (error) {
           console.error('Error al cargar datos desde Supabase:', error.message || error);
         } else if (data) {
-          loadedData = data.map((d: any, idx: number) => ({
-            id: Number(d.id),
-            numero: idx + 1,
-            asunto: d.asunto || '',
-            accion: d.accion || '',
-            responsable: d.responsable || '',
-            soporte: d.soporte || '',
-            fechalanzamiento: d.fechalanzamiento || '',
-            fechaobjetivo: d.fechaobjetivo || '',
-            fechacierre: d.fechacierre || null,
-            observaciones: d.observaciones || '',
-            created_at: d.created_at || '',
-            // Aliases for compatibility
-            problema: d.asunto || '',
-            fecha_lanzamiento: d.fechalanzamiento || '',
-            fecha_objetivo: d.fechaobjetivo || '',
-            fecha_cierre: d.fechacierre || null,
-            comentarios: d.observaciones || ''
-          }));
+          loadedData = data.map((d: any, idx: number) => {
+            let sec = d.seccion || '';
+            if (!sec && d.asunto && d.asunto.includes(' - ')) {
+              sec = d.asunto.split(' - ')[0].trim();
+            }
+            return {
+              id: Number(d.id),
+              numero: idx + 1,
+              asunto: d.asunto || '',
+              accion: d.accion || '',
+              responsable: d.responsable || '',
+              soporte: d.soporte || '',
+              fechalanzamiento: d.fechalanzamiento || '',
+              fechaobjetivo: d.fechaobjetivo || '',
+              fechacierre: d.fechacierre || null,
+              observaciones: d.observaciones || '',
+              created_at: d.created_at || '',
+              seccion: sec,
+              // Aliases for compatibility
+              problema: d.asunto || '',
+              fecha_lanzamiento: d.fechalanzamiento || '',
+              fecha_objetivo: d.fechaobjetivo || '',
+              fecha_cierre: d.fechacierre || null,
+              comentarios: d.observaciones || ''
+            };
+          });
           localStorage.setItem(storageKey, JSON.stringify(loadedData));
         }
       } catch (e) {
@@ -236,6 +246,15 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
     });
   };
 
+  // Available responsibles list for cell editing
+  const availableResponsibles = Array.from(
+    new Set([
+      ...(responsibles || []),
+      ...DEFAULT_RESPONSABLES,
+      ...items.map(i => i.responsable).filter(Boolean)
+    ])
+  ).filter(Boolean);
+
   // Add new empty row inline without opening modal
   const handleAddNewRow = async () => {
     const nextNum = items.length + 1;
@@ -322,31 +341,141 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
     return dStr;
   };
 
-  // Available responsibles list
-  const availableResponsibles = Array.from(
-    new Set([
-      ...(responsibles || []),
-      ...DEFAULT_RESPONSABLES,
-      ...items.map(i => i.responsable).filter(Boolean)
-    ])
-  ).filter(Boolean);
+  // Available unique responsibles from plan_accion_top60
+  const uniqueResponsables = Array.from(
+    new Set(
+      items
+        .map(i => (i.responsable || '').trim())
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
 
+  // Helper date parsing and week calculations
+  const parseDate = (dStr?: string | null): Date | null => {
+    if (!dStr) return null;
+    const parts = String(dStr).split('-');
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      return new Date(year, month, day, 12, 0, 0);
+    }
+    return null;
+  };
+
+  const getWeekRange = () => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const day = now.getDay();
+    const diffToMonday = (day === 0 ? -6 : 1) - day;
+    const start = new Date(now);
+    start.setDate(now.getDate() + diffToMonday);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  };
+
+  // Combined filters: Estado + Responsable + Buscador
   const filteredItems = items.filter(item => {
-    const term = search.toLowerCase();
-    return (
-      (item.asunto || '').toLowerCase().includes(term) ||
-      (item.accion || '').toLowerCase().includes(term) ||
-      (item.responsable || '').toLowerCase().includes(term) ||
-      (item.soporte || '').toLowerCase().includes(term) ||
-      (item.observaciones || '').toLowerCase().includes(term) ||
-      String(item.numero || '').includes(term)
-    );
+    // 1. Buscador texto libre
+    const term = search.toLowerCase().trim();
+    if (term !== '') {
+      const matchesSearch =
+        (item.asunto || '').toLowerCase().includes(term) ||
+        (item.accion || '').toLowerCase().includes(term) ||
+        (item.responsable || '').toLowerCase().includes(term) ||
+        (item.soporte || '').toLowerCase().includes(term) ||
+        (item.observaciones || '').toLowerCase().includes(term) ||
+        String(item.numero || '').includes(term);
+      if (!matchesSearch) return false;
+    }
+
+    // 2. Filtro 1 — ESTADO
+    if (selectedEstado && selectedEstado !== 'TODOS') {
+      const isClosed = Boolean(item.fechacierre && String(item.fechacierre).trim() !== '');
+      if (selectedEstado === 'cerradas') {
+        if (!isClosed) return false;
+      } else if (selectedEstado === 'en_curso') {
+        if (isClosed) return false;
+      } else if (selectedEstado === 'retrasadas') {
+        const est = calcularEstadoTop60(item.fechaobjetivo, item.fechacierre);
+        if (est.type !== 'retrasado') return false;
+      } else if (selectedEstado === 'esta_semana') {
+        const targetDate = parseDate(item.fechaobjetivo);
+        if (!targetDate) return false;
+        const { start, end } = getWeekRange();
+        if (targetDate < start || targetDate > end) return false;
+      } else if (selectedEstado === 'este_mes') {
+        const targetDate = parseDate(item.fechaobjetivo);
+        if (!targetDate) return false;
+        const now = new Date();
+        if (targetDate.getFullYear() !== now.getFullYear() || targetDate.getMonth() !== now.getMonth()) {
+          return false;
+        }
+      }
+    }
+
+    // 3. Filtro 2 — RESPONSABLE
+    if (selectedResponsable && selectedResponsable !== 'TODOS') {
+      if ((item.responsable || '').trim().toLowerCase() !== selectedResponsable.trim().toLowerCase()) {
+        return false;
+      }
+    }
+
+    return true;
   });
+
+  const exportToExcel = () => {
+    // Exporta SIEMPRE todas las acciones de la tabla, independientemente de los filtros activos
+    const dataToExport = items.map((item, index) => {
+      const est = calcularEstadoTop60(item.fechaobjetivo, item.fechacierre);
+      return {
+        'Nº': item.numero || index + 1,
+        'PROBLEMA / ASUNTO': item.asunto || '',
+        'ACCIÓN ESTRATÉGICA': item.accion || '',
+        'RESPONSABLE': item.responsable || '',
+        'SOPORTE': item.soporte || '',
+        'F. LANZAMIENTO': item.fechalanzamiento || '',
+        'F. OBJETIVO': item.fechaobjetivo || '',
+        'F. CIERRE': item.fechacierre || '',
+        'ESTADO': est.label,
+        'COMENTARIOS': item.observaciones || ''
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+
+    worksheet['!cols'] = [
+      { wch: 6 },
+      { wch: 32 },
+      { wch: 42 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 36 }
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Plan de Acción TOP 60');
+
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const fileName = `PlanAccion_TOP60_${year}-${month}-${day}.xlsx`;
+
+    XLSX.writeFile(workbook, fileName);
+  };
 
   return (
     <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col min-h-[650px]">
       {/* Header */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-100">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-100">
         <div className="flex items-center gap-3">
           <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg shadow-indigo-100">
             <ClipboardList className="w-6 h-6 text-white" />
@@ -354,18 +483,48 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
           <div>
             <h2 className="text-xl font-serif font-black text-slate-900 uppercase tracking-tight">{title}</h2>
             <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
-              Seguimiento Estratégico de Desviaciones ({filteredItems.length} Acciones) • Edición directa tipo Excel
+              Seguimiento Estratégico de Desviaciones ({filteredItems.length} de {items.length} Acciones) • Edición directa tipo Excel
             </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+          {/* Filtro 1 — ESTADO */}
+          <select
+            value={selectedEstado}
+            onChange={e => setSelectedEstado(e.target.value)}
+            className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer transition-all"
+            title="Filtrar por estado"
+          >
+            <option value="TODOS">Todos (Estado)</option>
+            <option value="en_curso">En curso</option>
+            <option value="retrasadas">Retrasadas</option>
+            <option value="cerradas">Cerradas</option>
+            <option value="esta_semana">Esta semana</option>
+            <option value="este_mes">Este mes</option>
+          </select>
+
+          {/* Filtro 2 — RESPONSABLE */}
+          <select
+            value={selectedResponsable}
+            onChange={e => setSelectedResponsable(e.target.value)}
+            className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer transition-all"
+            title="Filtrar por responsable"
+          >
+            <option value="TODOS">Todos (Responsable)</option>
+            {uniqueResponsables.map(resp => (
+              <option key={resp} value={resp}>
+                {resp}
+              </option>
+            ))}
+          </select>
+
           {/* Search bar */}
-          <div className="relative flex-1 md:w-80">
+          <div className="relative flex-1 sm:w-56 md:w-64">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Buscar acción, asunto, responsable..."
+              placeholder="Buscar acción, asunto..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
@@ -373,8 +532,17 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
           </div>
 
           <button
+            onClick={exportToExcel}
+            className="flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-emerald-100 active:scale-95 whitespace-nowrap"
+            title="Exportar todas las acciones a Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            Exportar Excel
+          </button>
+
+          <button
             onClick={handleAddNewRow}
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-indigo-100 active:scale-95"
+            className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-indigo-100 active:scale-95 whitespace-nowrap"
             title="Añadir una nueva fila editable"
           >
             <Plus className="w-4 h-4" />
