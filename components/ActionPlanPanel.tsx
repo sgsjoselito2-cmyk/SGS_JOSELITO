@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ClipboardList, Plus, Trash2, Search, User, AlertTriangle, RefreshCw } from 'lucide-react';
+import { ClipboardList, Plus, Trash2, Search, User, AlertTriangle } from 'lucide-react';
 import { PlanAccionTop60 } from '../types';
 import { supabase, isConfigured } from '../lib/supabase';
 
@@ -13,127 +13,6 @@ interface ActionPlanPanelProps {
   requiredLevel?: number;
 }
 
-// Initial fallback rows corresponding to plan_accion_top60 in Supabase
-const INITIAL_SAMPLE_ROWS: PlanAccionTop60[] = [
-  {
-    id: 1,
-    numero: 1,
-    seccion: 'RRHH',
-    problema: 'Informar de los incidentes',
-    accion: 'Informar de los incidentes',
-    responsable: 'Alberto',
-    soporte: '',
-    fecha_lanzamiento: '2026-09-09',
-    fecha_objetivo: '2026-09-16',
-    fecha_cierre: null,
-    comentarios: ''
-  },
-  {
-    id: 2,
-    numero: 2,
-    seccion: 'RRHH',
-    problema: 'Buscar la causa raiz de los accidentes',
-    accion: 'Buscar la causa raiz de los accidentes',
-    responsable: 'Eva',
-    soporte: 'Ana',
-    fecha_lanzamiento: '2026-09-09',
-    fecha_objetivo: '2026-09-16',
-    fecha_cierre: null,
-    comentarios: ''
-  },
-  {
-    id: 3,
-    numero: 3,
-    seccion: 'RRHH',
-    problema: 'Formacion a los operarios',
-    accion: 'Formacion a los operarios - quiron (equipos pequeños y personalizada) + Incidencia al personal nuevo',
-    responsable: 'Eva',
-    soporte: 'Ana',
-    fecha_lanzamiento: '2026-09-09',
-    fecha_objetivo: '2026-09-16',
-    fecha_cierre: null,
-    comentarios: ''
-  },
-  {
-    id: 4,
-    numero: 4,
-    seccion: 'Absentismo',
-    problema: 'Formacion liderazgo',
-    accion: 'Formacion liderazgo',
-    responsable: 'Ana',
-    soporte: 'Eva',
-    fecha_lanzamiento: '2026-09-09',
-    fecha_objetivo: '2026-09-16',
-    fecha_cierre: null,
-    comentarios: ''
-  },
-  {
-    id: 5,
-    numero: 5,
-    seccion: 'Devoluciones',
-    problema: 'Revision del metodo',
-    accion: 'Revision del metodo // Verificar/Revisar el proceso actual de devoluciones',
-    responsable: 'Gemma',
-    soporte: 'Alberto',
-    fecha_lanzamiento: '2026-09-09',
-    fecha_objetivo: '2026-09-16',
-    fecha_cierre: null,
-    comentarios: ''
-  },
-  {
-    id: 6,
-    numero: 6,
-    seccion: 'Polivalencia',
-    problema: 'Suplente',
-    accion: 'Suplente de cada uno de los presentes en la reunion',
-    responsable: 'Todos',
-    soporte: 'Andreia',
-    fecha_lanzamiento: '2026-09-09',
-    fecha_objetivo: '2026-09-16',
-    fecha_cierre: null,
-    comentarios: ''
-  },
-  {
-    id: 7,
-    numero: 7,
-    seccion: 'APP',
-    problema: 'Indicador seguridad alimentaria',
-    accion: 'Incluir indicador seguridad alimentaria',
-    responsable: 'Laura',
-    soporte: 'Andreia',
-    fecha_lanzamiento: '2026-07-30',
-    fecha_objetivo: '2026-09-30',
-    fecha_cierre: null,
-    comentarios: ''
-  },
-  {
-    id: 8,
-    numero: 8,
-    seccion: 'Incidencias',
-    problema: 'Unificar y protocolarizar',
-    accion: 'Unificar y protocolarizar las incidencias',
-    responsable: 'Gemma',
-    soporte: '',
-    fecha_lanzamiento: '2026-09-09',
-    fecha_objetivo: '2026-09-30',
-    fecha_cierre: null,
-    comentarios: ''
-  },
-  {
-    id: 9,
-    numero: 9,
-    seccion: 'Producción',
-    problema: 'Formacion jefes de equipo',
-    accion: 'Formacion a los jefes de equipo app / Campillo en la metodologia de toma de datos',
-    responsable: 'Alberto',
-    soporte: 'Andreia',
-    fecha_lanzamiento: '2026-09-09',
-    fecha_objetivo: '2026-09-30',
-    fecha_cierre: null,
-    comentarios: ''
-  }
-];
-
 const DEFAULT_RESPONSABLES = [
   'Alberto',
   'Eva',
@@ -141,39 +20,11 @@ const DEFAULT_RESPONSABLES = [
   'Gemma',
   'Laura',
   'Andreia',
-  'Todos',
-  'Carlos Gómez',
-  'Javier López',
-  'Pedro Sánchez',
-  'Elena Fernández',
-  'María Rodríguez'
+  'Todos'
 ];
 
-const DEFAULT_SECCIONES = [
-  'RRHH',
-  'Absentismo',
-  'Producción',
-  'Calidad',
-  'Seguridad',
-  'Devoluciones',
-  'Polivalencia',
-  'APP',
-  'Incidencias',
-  'Deshuesado / Prensado',
-  'Loncheado',
-  'Emp. Loncheado',
-  'Emp. Deshuesado',
-  'Envasado',
-  'Empaquetado',
-  'Expediciones',
-  'Preparación',
-  'Movimiento Jamones',
-  'Sala Blanca',
-  'Mantenimiento'
-];
-
-export function calcularEstadoTop60(fechaObjetivo: string, fechaCierre?: string | null) {
-  if (fechaCierre && fechaCierre.trim() !== '') {
+export function calcularEstadoTop60(fechaObjetivo?: string | null, fechaCierre?: string | null) {
+  if (fechaCierre && String(fechaCierre).trim() !== '') {
     return {
       label: 'Cerrado',
       type: 'cerrado' as const,
@@ -188,7 +39,7 @@ export function calcularEstadoTop60(fechaObjetivo: string, fechaCierre?: string 
     };
   }
 
-  const parts = fechaObjetivo.split('-');
+  const parts = String(fechaObjetivo).split('-');
   if (parts.length !== 3) {
     return {
       label: fechaObjetivo,
@@ -230,7 +81,7 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
   storageKey,
   title,
   responsibles,
-  dbTable,
+  dbTable = 'plan_accion_top60'
 }) => {
   const [items, setItems] = useState<PlanAccionTop60[]>([]);
   const itemsRef = useRef<PlanAccionTop60[]>([]);
@@ -238,7 +89,6 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
 
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [selectedSeccionFilter, setSelectedSeccionFilter] = useState('TODAS');
 
   // Inline editing state: { id, field }
   const [editingCell, setEditingCell] = useState<{ id: string | number; field: string } | null>(null);
@@ -246,7 +96,7 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
   // Delete modal state
   const [deleteConfirmItem, setDeleteConfirmItem] = useState<PlanAccionTop60 | null>(null);
 
-  // Load items on mount
+  // Load items from Supabase on mount
   useEffect(() => {
     fetchData();
   }, [dbTable, storageKey]);
@@ -254,73 +104,45 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
   const fetchData = async () => {
     setLoading(true);
     let loadedData: PlanAccionTop60[] = [];
-    let fromDb = false;
 
     if (isConfigured) {
       try {
-        let res = await supabase
-          .from(dbTable)
+        const { data, error } = await supabase
+          .from(dbTable || 'plan_accion_top60')
           .select('*')
           .order('id', { ascending: true });
 
-        if (res.error) {
-          console.warn('Could not order by id, trying plain select:', res.error.message);
-          res = await supabase.from(dbTable).select('*');
-        }
-
-        const data = res.data;
-        const error = res.error;
-
-        if (!error && data && data.length > 0) {
-          loadedData = data.map((d: any, idx: number) => {
-            let num = d.numero || d.num || d.id || (idx + 1);
-            let sec = d.seccion || d.area || '';
-            let com = d.comentarios || '';
-
-            if (d.observaciones && typeof d.observaciones === 'string') {
-              if (d.observaciones.trim().startsWith('{')) {
-                try {
-                  const parsed = JSON.parse(d.observaciones);
-                  if (parsed.numero !== undefined) num = parsed.numero;
-                  if (parsed.seccion !== undefined) sec = parsed.seccion;
-                  if (parsed.comentarios !== undefined) com = parsed.comentarios;
-                } catch (err) {}
-              } else {
-                com = d.observaciones;
-              }
-            }
-
-            let prob = d.problema || d.asunto || '';
-            if (!sec && prob.includes(' - ')) {
-              const parts = prob.split(' - ');
-              sec = parts[0].trim();
-              prob = parts.slice(1).join(' - ').trim();
-            }
-
-            return {
-              id: d.id,
-              numero: num,
-              seccion: sec || 'General',
-              problema: prob,
-              accion: d.accion || '',
-              responsable: d.responsable || '',
-              soporte: d.soporte || '',
-              fecha_lanzamiento: d.fechalanzamiento || d.fecha_lanzamiento || d.fechaLanzamiento || '',
-              fecha_objetivo: d.fechaobjetivo || d.fecha_objetivo || d.fechaObjetivo || '',
-              fecha_cierre: d.fechacierre || d.fecha_cierre || d.fechaCierre || null,
-              comentarios: com
-            };
-          });
-          fromDb = true;
-          // Store directly in local storage to keep offline cache synchronized with DB
+        if (error) {
+          console.error('Error al cargar datos desde Supabase:', error.message || error);
+        } else if (data) {
+          loadedData = data.map((d: any, idx: number) => ({
+            id: Number(d.id),
+            numero: idx + 1,
+            asunto: d.asunto || '',
+            accion: d.accion || '',
+            responsable: d.responsable || '',
+            soporte: d.soporte || '',
+            fechalanzamiento: d.fechalanzamiento || '',
+            fechaobjetivo: d.fechaobjetivo || '',
+            fechacierre: d.fechacierre || null,
+            observaciones: d.observaciones || '',
+            created_at: d.created_at || '',
+            // Aliases for compatibility
+            problema: d.asunto || '',
+            fecha_lanzamiento: d.fechalanzamiento || '',
+            fecha_objetivo: d.fechaobjetivo || '',
+            fecha_cierre: d.fechacierre || null,
+            comentarios: d.observaciones || ''
+          }));
           localStorage.setItem(storageKey, JSON.stringify(loadedData));
         }
       } catch (e) {
-        console.warn('Error fetching from Supabase:', e);
+        console.error('Excepción al cargar datos desde Supabase:', e);
       }
     }
 
-    if (!fromDb) {
+    // Fallback to local cache if network is offline or unconfigured
+    if (loadedData.length === 0) {
       const local = localStorage.getItem(storageKey);
       if (local) {
         try {
@@ -329,65 +151,52 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
             loadedData = parsed;
           }
         } catch (e) {
-          console.error('Failed parsing localStorage:', e);
+          console.error('Error parseando localStorage:', e);
         }
       }
-    }
-
-    // If still empty, use sample initial data
-    if (loadedData.length === 0) {
-      loadedData = INITIAL_SAMPLE_ROWS;
-      localStorage.setItem(storageKey, JSON.stringify(loadedData));
     }
 
     setItems(loadedData);
     setLoading(false);
   };
 
-  // Persist single item to Supabase
+  // Persist single item to Supabase table
   const persistItem = async (targetItem: PlanAccionTop60) => {
     if (!isConfigured) return;
     try {
-      let fullAsunto = targetItem.problema || '';
-      if (targetItem.seccion && targetItem.seccion !== 'General') {
-        if (!fullAsunto.toLowerCase().startsWith(targetItem.seccion.toLowerCase())) {
-          fullAsunto = `${targetItem.seccion} - ${fullAsunto}`;
-        }
-      }
-
-      const obsObj = {
-        numero: targetItem.numero,
-        seccion: targetItem.seccion || '',
-        comentarios: targetItem.comentarios || ''
-      };
-
-      const dbItem: any = {
+      const payload = {
         id: targetItem.id,
-        asunto: fullAsunto,
+        asunto: targetItem.asunto || '',
         accion: targetItem.accion || '',
         responsable: targetItem.responsable || '',
-        soporte: targetItem.soporte || null,
-        fechalanzamiento: targetItem.fecha_lanzamiento || null,
-        fechaobjetivo: targetItem.fecha_objetivo || null,
-        fechacierre: targetItem.fecha_cierre || null,
-        observaciones: JSON.stringify(obsObj)
+        soporte: targetItem.soporte ? targetItem.soporte : null,
+        fechalanzamiento: targetItem.fechalanzamiento ? targetItem.fechalanzamiento : null,
+        fechaobjetivo: targetItem.fechaobjetivo ? targetItem.fechaobjetivo : null,
+        fechacierre: targetItem.fechacierre ? targetItem.fechacierre : null,
+        observaciones: targetItem.observaciones ? targetItem.observaciones : null
       };
 
-      const { error } = await supabase.from(dbTable).upsert(dbItem);
+      const { error } = await supabase
+        .from(dbTable || 'plan_accion_top60')
+        .upsert(payload);
+
       if (error) {
-        console.warn('Error syncing item to Supabase:', error.message || error);
+        console.error('Error al guardar en Supabase:', error.message || error);
       }
     } catch (err) {
-      console.warn('Error syncing item to Supabase:', err);
+      console.error('Excepción al guardar en Supabase:', err);
     }
   };
 
-  // Field change for text inputs (problema, accion, comentarios)
+  // Field change for text inputs (asunto, accion, observaciones)
   const handleUpdateField = (id: string | number, field: keyof PlanAccionTop60, value: any) => {
     setItems(prev => {
       const next = prev.map(item => {
         if (item.id === id) {
-          return { ...item, [field]: value };
+          const updated = { ...item, [field]: value };
+          if (field === 'asunto') updated.problema = value;
+          if (field === 'observaciones') updated.comentarios = value;
+          return updated;
         }
         return item;
       });
@@ -412,6 +221,9 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
       const next = prev.map(item => {
         if (item.id === id) {
           changedItem = { ...item, [field]: value };
+          if (field === 'fechalanzamiento') changedItem.fecha_lanzamiento = value;
+          if (field === 'fechaobjetivo') changedItem.fecha_objetivo = value;
+          if (field === 'fechacierre') changedItem.fecha_cierre = value;
           return changedItem;
         }
         return item;
@@ -425,20 +237,26 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
   };
 
   // Add new empty row inline without opening modal
-  const handleAddNewRow = () => {
-    const nextNum = items.length > 0 ? Math.max(...items.map(i => Number(i.numero) || 0)) + 1 : 1;
-    const nextId = items.length > 0 ? Math.max(...items.map(i => Number(i.id) || 0)) + 1 : 1;
+  const handleAddNewRow = async () => {
+    const nextNum = items.length + 1;
+    const currentMaxId = items.length > 0 ? Math.max(...items.map(i => Number(i.id) || 0)) : 0;
+    const nextId = currentMaxId + 1;
     const defaultResp = availableResponsibles.length > 0 ? availableResponsibles[0] : '';
     const todayStr = new Date().toISOString().split('T')[0];
 
     const newItem: PlanAccionTop60 = {
       id: nextId,
       numero: nextNum,
-      seccion: availableSections[0] || 'RRHH',
-      problema: '',
+      asunto: '',
       accion: '',
       responsable: defaultResp,
       soporte: '',
+      fechalanzamiento: todayStr,
+      fechaobjetivo: todayStr,
+      fechacierre: null,
+      observaciones: '',
+      created_at: new Date().toISOString(),
+      problema: '',
       fecha_lanzamiento: todayStr,
       fecha_objetivo: todayStr,
       fecha_cierre: null,
@@ -449,19 +267,15 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
     setItems(nextItems);
     localStorage.setItem(storageKey, JSON.stringify(nextItems));
 
-    // Reset filters if they would hide this new row
-    if (selectedSeccionFilter !== 'TODAS') {
-      setSelectedSeccionFilter('TODAS');
-    }
     if (search.trim() !== '') {
       setSearch('');
     }
 
-    // Set first cell (problema) in edit mode directly
-    setEditingCell({ id: nextId, field: 'problema' });
+    // Set first cell (asunto) in edit mode directly
+    setEditingCell({ id: nextId, field: 'asunto' });
 
     // Persist to Supabase
-    persistItem(newItem);
+    await persistItem(newItem);
   };
 
   // Open delete confirm modal
@@ -473,19 +287,22 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
     if (!deleteConfirmItem) return;
     const targetId = deleteConfirmItem.id;
 
-    const filtered = items.filter(i => i.id !== targetId && i.numero !== deleteConfirmItem.numero);
-    setItems(filtered);
-    localStorage.setItem(storageKey, JSON.stringify(filtered));
+    const filtered = items.filter(i => i.id !== targetId);
+    const renumbered = filtered.map((item, idx) => ({ ...item, numero: idx + 1 }));
+    setItems(renumbered);
+    localStorage.setItem(storageKey, JSON.stringify(renumbered));
 
-    if (isConfigured) {
+    if (isConfigured && targetId) {
       try {
-        if (targetId) {
-          await supabase.from(dbTable).delete().eq('id', targetId);
-        } else {
-          await supabase.from(dbTable).delete().eq('asunto', deleteConfirmItem.problema);
+        const { error } = await supabase
+          .from(dbTable || 'plan_accion_top60')
+          .delete()
+          .eq('id', targetId);
+        if (error) {
+          console.error('Error al eliminar en Supabase:', error.message || error);
         }
       } catch (err) {
-        console.warn('Error deleting from Supabase:', err);
+        console.error('Excepción al eliminar en Supabase:', err);
       }
     }
 
@@ -498,44 +315,32 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
   // Helper date renderer (YYYY-MM-DD -> DD/MM/YYYY)
   const formatFecha = (dStr?: string | null) => {
     if (!dStr) return '-';
-    const parts = dStr.split('-');
+    const parts = String(dStr).split('-');
     if (parts.length === 3) {
       return `${parts[2]}/${parts[1]}/${parts[0]}`;
     }
     return dStr;
   };
 
-  // Available sections list
-  const availableSections = Array.from(
-    new Set([
-      ...DEFAULT_SECCIONES,
-      ...items.map(i => i.seccion).filter(Boolean)
-    ])
-  );
-
   // Available responsibles list
   const availableResponsibles = Array.from(
     new Set([
       ...(responsibles || []),
+      ...DEFAULT_RESPONSABLES,
       ...items.map(i => i.responsable).filter(Boolean)
     ])
   ).filter(Boolean);
 
-  // Unique sections for filter
-  const seccionesDisponibles = Array.from(new Set(items.map(i => i.seccion).filter(Boolean)));
-
   const filteredItems = items.filter(item => {
-    const matchesSearch =
-      (item.problema || '').toLowerCase().includes(search.toLowerCase()) ||
-      (item.accion || '').toLowerCase().includes(search.toLowerCase()) ||
-      (item.responsable || '').toLowerCase().includes(search.toLowerCase()) ||
-      (item.seccion || '').toLowerCase().includes(search.toLowerCase()) ||
-      (item.comentarios || '').toLowerCase().includes(search.toLowerCase()) ||
-      String(item.numero).includes(search);
-
-    const matchesSeccion = selectedSeccionFilter === 'TODAS' || item.seccion === selectedSeccionFilter;
-
-    return matchesSearch && matchesSeccion;
+    const term = search.toLowerCase();
+    return (
+      (item.asunto || '').toLowerCase().includes(term) ||
+      (item.accion || '').toLowerCase().includes(term) ||
+      (item.responsable || '').toLowerCase().includes(term) ||
+      (item.soporte || '').toLowerCase().includes(term) ||
+      (item.observaciones || '').toLowerCase().includes(term) ||
+      String(item.numero || '').includes(term)
+    );
   });
 
   return (
@@ -555,42 +360,17 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          {/* Section filter */}
-          <select
-            value={selectedSeccionFilter}
-            onChange={e => setSelectedSeccionFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="TODAS">Todas las Secciones</option>
-            {seccionesDisponibles.map(sec => (
-              <option key={sec} value={sec}>
-                {sec}
-              </option>
-            ))}
-          </select>
-
           {/* Search bar */}
-          <div className="relative flex-1 md:w-64">
+          <div className="relative flex-1 md:w-80">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Buscar acción, problema, responsable..."
+              placeholder="Buscar acción, asunto, responsable..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
-
-          {/* Sync / Refresh with Supabase button */}
-          <button
-            onClick={() => fetchData()}
-            disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all active:scale-95 disabled:opacity-50"
-            title="Recargar datos directamente desde Supabase"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 ${loading ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Sincronizar BD</span>
-          </button>
 
           <button
             onClick={handleAddNewRow}
@@ -605,40 +385,39 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
 
       {/* Main Table with Inline Excel Editing */}
       <div className="flex-1 overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[1250px]">
+        <table className="w-full text-left border-collapse min-w-[1100px]">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-black uppercase tracking-wider text-slate-500">
               <th className="py-3 px-3 w-12 text-center">Nº</th>
-              <th className="py-3 px-3 w-36">Sección</th>
-              <th className="py-3 px-3 min-w-[220px]">Problema / Asunto</th>
-              <th className="py-3 px-3 min-w-[240px]">Acción Estratégica</th>
+              <th className="py-3 px-3 min-w-[240px]">Problema / Asunto</th>
+              <th className="py-3 px-3 min-w-[260px]">Acción Estratégica</th>
               <th className="py-3 px-3 w-40">Responsable</th>
               <th className="py-3 px-3 w-40">Soporte</th>
               <th className="py-3 px-3 w-32 text-center">F. Lanzam.</th>
               <th className="py-3 px-3 w-32 text-center">F. Objetivo</th>
               <th className="py-3 px-3 w-32 text-center">F. Cierre</th>
               <th className="py-3 px-3 w-32 text-center">Estado</th>
-              <th className="py-3 px-3 min-w-[180px]">Comentarios</th>
+              <th className="py-3 px-3 min-w-[200px]">Comentarios</th>
               <th className="py-3 px-3 w-14 text-center">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-medium">
             {loading ? (
               <tr>
-                <td colSpan={12} className="py-12 text-center text-slate-400 font-bold">
-                  Cargando Plan de Acción...
+                <td colSpan={11} className="py-12 text-center text-slate-400 font-bold">
+                  Cargando Plan de Acción desde la base de datos...
                 </td>
               </tr>
             ) : filteredItems.length === 0 ? (
               <tr>
-                <td colSpan={12} className="py-12 text-center text-slate-400 font-bold">
+                <td colSpan={11} className="py-12 text-center text-slate-400 font-bold">
                   No se encontraron acciones registradas. Pulsa "+ Nueva Acción" para comenzar.
                 </td>
               </tr>
             ) : (
               filteredItems.map(item => {
-                const itemId = item.id !== undefined ? item.id : item.numero;
-                const est = calcularEstadoTop60(item.fecha_objetivo, item.fecha_cierre);
+                const itemId = item.id;
+                const est = calcularEstadoTop60(item.fechaobjetivo, item.fechacierre);
 
                 const isEditing = (field: string) =>
                   editingCell?.id === itemId && editingCell?.field === field;
@@ -650,49 +429,20 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
                       {item.numero}
                     </td>
 
-                    {/* SECCIÓN (Dropdown inline) */}
-                    <td
-                      className="py-2.5 px-3 font-bold text-slate-800 cursor-pointer hover:bg-indigo-50/30 transition-colors relative"
-                      onClick={() => {
-                        if (!isEditing('seccion')) setEditingCell({ id: itemId, field: 'seccion' });
-                      }}
-                      title="Clic para seleccionar sección"
-                    >
-                      {isEditing('seccion') ? (
-                        <select
-                          autoFocus
-                          value={item.seccion}
-                          onChange={e => handleSelectOrDateChange(itemId, 'seccion', e.target.value)}
-                          onBlur={() => handleBlur(itemId)}
-                          className="w-full px-2 py-1.5 bg-white border-2 border-indigo-500 rounded-lg text-xs font-bold text-slate-800 outline-none shadow-sm"
-                        >
-                          {availableSections.map(sec => (
-                            <option key={sec} value={sec}>
-                              {sec}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="inline-block px-2 py-1 bg-slate-100 text-slate-700 rounded-lg text-[10px] uppercase font-black tracking-wide border border-slate-200 group-hover:border-indigo-200 transition-colors">
-                          {item.seccion || 'Seleccionar'}
-                        </span>
-                      )}
-                    </td>
-
                     {/* PROBLEMA / ASUNTO (Textarea inline) */}
                     <td
                       className="py-2.5 px-3 font-semibold text-slate-900 leading-snug cursor-pointer hover:bg-indigo-50/30 transition-colors"
                       onClick={() => {
-                        if (!isEditing('problema')) setEditingCell({ id: itemId, field: 'problema' });
+                        if (!isEditing('asunto')) setEditingCell({ id: itemId, field: 'asunto' });
                       }}
                       title="Clic para editar problema / asunto"
                     >
-                      {isEditing('problema') ? (
+                      {isEditing('asunto') ? (
                         <textarea
                           autoFocus
                           rows={2}
-                          value={item.problema}
-                          onChange={e => handleUpdateField(itemId, 'problema', e.target.value)}
+                          value={item.asunto || ''}
+                          onChange={e => handleUpdateField(itemId, 'asunto', e.target.value)}
                           onBlur={() => handleBlur(itemId)}
                           onKeyDown={e => {
                             if (e.key === 'Enter' && !e.shiftKey) {
@@ -706,10 +456,10 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
                         />
                       ) : (
                         <div className="min-h-[28px] flex items-center">
-                          {item.problema ? (
-                            <span>{item.problema}</span>
+                          {item.asunto ? (
+                            <span>{item.asunto}</span>
                           ) : (
-                            <span className="text-slate-400 italic text-[11px] font-normal">+ Escribir problema...</span>
+                            <span className="text-slate-400 italic text-[11px] font-normal">+ Escribir problema / asunto...</span>
                           )}
                         </div>
                       )}
@@ -727,7 +477,7 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
                         <textarea
                           autoFocus
                           rows={2}
-                          value={item.accion}
+                          value={item.accion || ''}
                           onChange={e => handleUpdateField(itemId, 'accion', e.target.value)}
                           onBlur={() => handleBlur(itemId)}
                           onKeyDown={e => {
@@ -762,7 +512,7 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
                       {isEditing('responsable') ? (
                         <select
                           autoFocus
-                          value={item.responsable}
+                          value={item.responsable || ''}
                           onChange={e => handleSelectOrDateChange(itemId, 'responsable', e.target.value)}
                           onBlur={() => handleBlur(itemId)}
                           className="w-full px-2 py-1.5 bg-white border-2 border-indigo-500 rounded-lg text-xs font-bold text-slate-800 outline-none shadow-sm"
@@ -821,21 +571,21 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
                     <td
                       className="py-2.5 px-3 text-center text-slate-600 font-mono text-[11px] cursor-pointer hover:bg-indigo-50/30 transition-colors"
                       onClick={() => {
-                        if (!isEditing('fecha_lanzamiento')) setEditingCell({ id: itemId, field: 'fecha_lanzamiento' });
+                        if (!isEditing('fechalanzamiento')) setEditingCell({ id: itemId, field: 'fechalanzamiento' });
                       }}
                       title="Clic para modificar F. Lanzamiento"
                     >
-                      {isEditing('fecha_lanzamiento') ? (
+                      {isEditing('fechalanzamiento') ? (
                         <input
                           type="date"
                           autoFocus
-                          value={item.fecha_lanzamiento || ''}
-                          onChange={e => handleSelectOrDateChange(itemId, 'fecha_lanzamiento', e.target.value)}
+                          value={item.fechalanzamiento || ''}
+                          onChange={e => handleSelectOrDateChange(itemId, 'fechalanzamiento', e.target.value)}
                           onBlur={() => handleBlur(itemId)}
                           className="w-full px-1.5 py-1 bg-white border-2 border-indigo-500 rounded-lg text-[11px] font-mono font-bold text-slate-800 outline-none shadow-sm text-center"
                         />
                       ) : (
-                        <span>{formatFecha(item.fecha_lanzamiento)}</span>
+                        <span>{formatFecha(item.fechalanzamiento)}</span>
                       )}
                     </td>
 
@@ -843,21 +593,21 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
                     <td
                       className="py-2.5 px-3 text-center font-bold text-slate-800 font-mono text-[11px] cursor-pointer hover:bg-indigo-50/30 transition-colors"
                       onClick={() => {
-                        if (!isEditing('fecha_objetivo')) setEditingCell({ id: itemId, field: 'fecha_objetivo' });
+                        if (!isEditing('fechaobjetivo')) setEditingCell({ id: itemId, field: 'fechaobjetivo' });
                       }}
                       title="Clic para modificar F. Objetivo"
                     >
-                      {isEditing('fecha_objetivo') ? (
+                      {isEditing('fechaobjetivo') ? (
                         <input
                           type="date"
                           autoFocus
-                          value={item.fecha_objetivo || ''}
-                          onChange={e => handleSelectOrDateChange(itemId, 'fecha_objetivo', e.target.value)}
+                          value={item.fechaobjetivo || ''}
+                          onChange={e => handleSelectOrDateChange(itemId, 'fechaobjetivo', e.target.value)}
                           onBlur={() => handleBlur(itemId)}
                           className="w-full px-1.5 py-1 bg-white border-2 border-indigo-500 rounded-lg text-[11px] font-mono font-bold text-slate-800 outline-none shadow-sm text-center"
                         />
                       ) : (
-                        <span>{formatFecha(item.fecha_objetivo)}</span>
+                        <span>{formatFecha(item.fechaobjetivo)}</span>
                       )}
                     </td>
 
@@ -865,21 +615,21 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
                     <td
                       className="py-2.5 px-3 text-center text-slate-600 font-mono text-[11px] cursor-pointer hover:bg-indigo-50/30 transition-colors"
                       onClick={() => {
-                        if (!isEditing('fecha_cierre')) setEditingCell({ id: itemId, field: 'fecha_cierre' });
+                        if (!isEditing('fechacierre')) setEditingCell({ id: itemId, field: 'fechacierre' });
                       }}
                       title="Clic para modificar F. Cierre"
                     >
-                      {isEditing('fecha_cierre') ? (
+                      {isEditing('fechacierre') ? (
                         <input
                           type="date"
                           autoFocus
-                          value={item.fecha_cierre || ''}
-                          onChange={e => handleSelectOrDateChange(itemId, 'fecha_cierre', e.target.value || null)}
+                          value={item.fechacierre || ''}
+                          onChange={e => handleSelectOrDateChange(itemId, 'fechacierre', e.target.value || null)}
                           onBlur={() => handleBlur(itemId)}
                           className="w-full px-1.5 py-1 bg-white border-2 border-indigo-500 rounded-lg text-[11px] font-mono font-bold text-slate-800 outline-none shadow-sm text-center"
                         />
-                      ) : item.fecha_cierre ? (
-                        <span className="text-emerald-700 font-bold">{formatFecha(item.fecha_cierre)}</span>
+                      ) : item.fechacierre ? (
+                        <span className="text-emerald-700 font-bold">{formatFecha(item.fechacierre)}</span>
                       ) : (
                         <span className="text-slate-300">-</span>
                       )}
@@ -896,16 +646,16 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
                     <td
                       className="py-2.5 px-3 text-slate-600 text-[11px] cursor-pointer hover:bg-indigo-50/30 transition-colors"
                       onClick={() => {
-                        if (!isEditing('comentarios')) setEditingCell({ id: itemId, field: 'comentarios' });
+                        if (!isEditing('observaciones')) setEditingCell({ id: itemId, field: 'observaciones' });
                       }}
                       title="Clic para editar comentarios"
                     >
-                      {isEditing('comentarios') ? (
+                      {isEditing('observaciones') ? (
                         <input
                           type="text"
                           autoFocus
-                          value={item.comentarios || ''}
-                          onChange={e => handleUpdateField(itemId, 'comentarios', e.target.value)}
+                          value={item.observaciones || ''}
+                          onChange={e => handleUpdateField(itemId, 'observaciones', e.target.value)}
                           onBlur={() => handleBlur(itemId)}
                           onKeyDown={e => {
                             if (e.key === 'Enter') (e.target as HTMLElement).blur();
@@ -916,8 +666,8 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
                         />
                       ) : (
                         <div className="min-h-[28px] flex items-center">
-                          {item.comentarios ? (
-                            <span>{item.comentarios}</span>
+                          {item.observaciones ? (
+                            <span>{item.observaciones}</span>
                           ) : (
                             <span className="text-slate-300 italic">-</span>
                           )}
@@ -960,8 +710,8 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
 
             <p className="text-xs text-slate-600 mb-6 leading-relaxed">
               Esta acción eliminará de forma permanente el registro{' '}
-              <span className="font-bold text-slate-900">"{deleteConfirmItem.problema || `Acción Nº ${deleteConfirmItem.numero}`}"</span>{' '}
-              de la base de datos. Esta operación no se puede deshacer.
+              <span className="font-bold text-slate-900">"{deleteConfirmItem.asunto || `Acción Nº ${deleteConfirmItem.numero}`}"</span>{' '}
+              de la base de datos de Supabase. Esta operación no se puede deshacer.
             </p>
 
             <div className="flex items-center justify-center gap-3 w-full">

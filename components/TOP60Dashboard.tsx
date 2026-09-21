@@ -400,50 +400,30 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
     const fetchDbPlanAccionTop60 = async () => {
       if (!isConfigured) return;
       try {
-        let res = await supabase.from('plan_accion_top60').select('*').order('id', { ascending: true });
-        if (res.error) {
-          res = await supabase.from('plan_accion_top60').select('*');
-        }
-        if (res.data && res.data.length > 0) {
-          const mapped = res.data.map((d: any, idx: number) => {
-            let num = d.numero || d.num || d.id || (idx + 1);
-            let sec = d.seccion || d.area || '';
-            let com = d.comentarios || '';
+        const { data, error } = await supabase
+          .from('plan_accion_top60')
+          .select('*')
+          .order('id', { ascending: true });
 
-            if (d.observaciones && typeof d.observaciones === 'string') {
-              if (d.observaciones.trim().startsWith('{')) {
-                try {
-                  const parsed = JSON.parse(d.observaciones);
-                  if (parsed.numero !== undefined) num = parsed.numero;
-                  if (parsed.seccion !== undefined) sec = parsed.seccion;
-                  if (parsed.comentarios !== undefined) com = parsed.comentarios;
-                } catch (err) {}
-              } else {
-                com = d.observaciones;
-              }
-            }
-
-            let prob = d.problema || d.asunto || '';
-            if (!sec && prob.includes(' - ')) {
-              const parts = prob.split(' - ');
-              sec = parts[0].trim();
-              prob = parts.slice(1).join(' - ').trim();
-            }
-
-            return {
-              id: d.id,
-              numero: num,
-              seccion: sec || 'General',
-              problema: prob,
-              accion: d.accion || '',
-              responsable: d.responsable || '',
-              soporte: d.soporte || '',
-              fecha_lanzamiento: d.fechalanzamiento || d.fecha_lanzamiento || d.fechaLanzamiento || '',
-              fecha_objetivo: d.fechaobjetivo || d.fecha_objetivo || d.fechaObjetivo || '',
-              fecha_cierre: d.fechacierre || d.fecha_cierre || d.fechaCierre || null,
-              comentarios: com
-            };
-          });
+        if (!error && data && data.length > 0) {
+          const mapped = data.map((d: any, idx: number) => ({
+            id: Number(d.id),
+            numero: idx + 1,
+            asunto: d.asunto || '',
+            accion: d.accion || '',
+            responsable: d.responsable || '',
+            soporte: d.soporte || '',
+            fechalanzamiento: d.fechalanzamiento || '',
+            fechaobjetivo: d.fechaobjetivo || '',
+            fechacierre: d.fechacierre || null,
+            observaciones: d.observaciones || '',
+            // Aliases for dashboard and PDF report
+            problema: d.asunto || '',
+            fechaObjetivo: d.fechaobjetivo || '',
+            fechaCierre: d.fechacierre || null,
+            comentarios: d.observaciones || '',
+            avance: d.fechacierre ? 100 : 0
+          }));
           setActionPlanData(mapped);
           localStorage.setItem('zitron_top60_actionplan', JSON.stringify(mapped));
         }

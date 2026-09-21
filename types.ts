@@ -38,18 +38,25 @@ export interface ActionPlanItem {
 }
 
 export interface PlanAccionTop60 {
-  id?: number | string;
-  numero: number;
-  seccion: string;
-  problema: string;
+  id: number;
+  asunto: string;
   accion: string;
   responsable: string;
-  soporte: string;
-  fecha_lanzamiento: string;
-  fecha_objetivo: string;
-  fecha_cierre?: string | null;
-  comentarios?: string;
+  soporte?: string | null;
+  fechalanzamiento?: string | null;
+  fechaobjetivo?: string | null;
+  fechacierre?: string | null;
+  observaciones?: string | null;
   created_at?: string;
+  // Visual / legacy helper fields
+  numero?: number;
+  problema?: string;
+  seccion?: string;
+  fecha_lanzamiento?: string | null;
+  fecha_objetivo?: string | null;
+  fecha_cierre?: string | null;
+  comentarios?: string | null;
+  avance?: number;
 }
 
 export interface OEEObjectives {
