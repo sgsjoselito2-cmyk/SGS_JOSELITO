@@ -274,7 +274,7 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
   const [rrhhData, setRrhhData] = useState<any[]>([]);
   const [ausentismoData, setAusentismoData] = useState<any[]>([]);
   const [calidadData, setCalidadData] = useState<any[]>([]);
-  const [actionPlanData, setActionPlanData] = useState<ActionPlanItem[]>([]);
+  const [actionPlanData, setActionPlanData] = useState<any[]>([]);
   const [fullscreenChart, setFullscreenChart] = useState<any>(null);
 
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
@@ -395,6 +395,63 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
       }
     };
     fetchDbPlanCalidad();
+
+    // Fetch plan_accion_top60 from Supabase
+    const fetchDbPlanAccionTop60 = async () => {
+      if (!isConfigured) return;
+      try {
+        let res = await supabase.from('plan_accion_top60').select('*').order('id', { ascending: true });
+        if (res.error) {
+          res = await supabase.from('plan_accion_top60').select('*');
+        }
+        if (res.data && res.data.length > 0) {
+          const mapped = res.data.map((d: any, idx: number) => {
+            let num = d.numero || d.num || d.id || (idx + 1);
+            let sec = d.seccion || d.area || '';
+            let com = d.comentarios || '';
+
+            if (d.observaciones && typeof d.observaciones === 'string') {
+              if (d.observaciones.trim().startsWith('{')) {
+                try {
+                  const parsed = JSON.parse(d.observaciones);
+                  if (parsed.numero !== undefined) num = parsed.numero;
+                  if (parsed.seccion !== undefined) sec = parsed.seccion;
+                  if (parsed.comentarios !== undefined) com = parsed.comentarios;
+                } catch (err) {}
+              } else {
+                com = d.observaciones;
+              }
+            }
+
+            let prob = d.problema || d.asunto || '';
+            if (!sec && prob.includes(' - ')) {
+              const parts = prob.split(' - ');
+              sec = parts[0].trim();
+              prob = parts.slice(1).join(' - ').trim();
+            }
+
+            return {
+              id: d.id,
+              numero: num,
+              seccion: sec || 'General',
+              problema: prob,
+              accion: d.accion || '',
+              responsable: d.responsable || '',
+              soporte: d.soporte || '',
+              fecha_lanzamiento: d.fechalanzamiento || d.fecha_lanzamiento || d.fechaLanzamiento || '',
+              fecha_objetivo: d.fechaobjetivo || d.fecha_objetivo || d.fechaObjetivo || '',
+              fecha_cierre: d.fechacierre || d.fecha_cierre || d.fechaCierre || null,
+              comentarios: com
+            };
+          });
+          setActionPlanData(mapped);
+          localStorage.setItem('zitron_top60_actionplan', JSON.stringify(mapped));
+        }
+      } catch (e: any) {
+        console.warn("Exception in fetchDbPlanAccionTop60:", e?.message || e);
+      }
+    };
+    fetchDbPlanAccionTop60();
   }, []);
 
   const getObjectiveForDate = (area: string, date: Date, indicatorId: string = 'productividad') => {
@@ -4038,15 +4095,20 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {chunk.map(item => {
-                        const isClosed = !!(item.fechaCierre && item.fechaCierre.trim() !== '');
+                        const fechaCierre = item.fechaCierre || (item as any).fecha_cierre || (item as any).fechacierre;
+                        const fechaObjetivo = item.fechaObjetivo || (item as any).fecha_objetivo || (item as any).fechaobjetivo || '';
+                        const asunto = item.asunto || (item as any).problema || '';
+                        const observaciones = item.observaciones || (item as any).comentarios || '';
+                        const isClosed = !!(fechaCierre && String(fechaCierre).trim() !== '');
                         const today = new Date().toISOString().split('T')[0];
-                        const isDelayed = !isClosed && today > item.fechaObjetivo;
+                        const isDelayed = !isClosed && Boolean(fechaObjetivo && today > fechaObjetivo);
                         const status = isClosed ? 'CERRADO' : (isDelayed ? 'RETRASADA' : 'EN MARCHA');
+                        const avance = item.avance !== undefined ? item.avance : (isClosed ? 100 : 0);
                         
                         return (
                           <tr key={item.id} className="text-[9px] font-bold text-slate-700 hover:bg-slate-50 transition-colors border-b border-slate-50 align-top">
                             <td className="px-3 py-2 font-black text-slate-400">#{item.id}</td>
-                            <td className="px-3 py-2 uppercase truncate">{item.asunto}</td>
+                            <td className="px-3 py-2 uppercase truncate">{asunto}</td>
                             <td className="px-3 py-2 leading-tight">{item.accion}</td>
                             <td className="px-3 py-2 uppercase truncate">{item.responsable}</td>
                             <td className="px-3 py-2 text-center">
@@ -4058,16 +4120,16 @@ const TOP60Dashboard: React.FC<TOP60DashboardProps> = ({
                                 {status}
                               </span>
                             </td>
-                            <td className="px-3 py-2 whitespace-nowrap">{item.fechaObjetivo}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">{fechaObjetivo}</td>
                             <td className="px-3 py-2">
                               <div className="flex items-center gap-2">
                                 <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                  <div className="h-full bg-indigo-600" style={{ width: `${item.avance}%` }}></div>
+                                  <div className="h-full bg-indigo-600" style={{ width: `${avance}%` }}></div>
                                 </div>
-                                <span className="min-w-[30px] text-right text-[9px]">{item.avance}%</span>
+                                <span className="min-w-[30px] text-right text-[9px]">{avance}%</span>
                               </div>
                             </td>
-                            <td className="px-3 py-2 leading-tight text-slate-500 italic">{item.observaciones}</td>
+                            <td className="px-3 py-2 leading-tight text-slate-500 italic">{observaciones}</td>
                           </tr>
                         );
                       })}

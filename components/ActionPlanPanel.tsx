@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ClipboardList, Plus, Trash2, Search, User, AlertTriangle } from 'lucide-react';
+import { ClipboardList, Plus, Trash2, Search, User, AlertTriangle, RefreshCw } from 'lucide-react';
 import { PlanAccionTop60 } from '../types';
 import { supabase, isConfigured } from '../lib/supabase';
 
@@ -13,50 +13,152 @@ interface ActionPlanPanelProps {
   requiredLevel?: number;
 }
 
-// Initial 3 sample rows
+// Initial fallback rows corresponding to plan_accion_top60 in Supabase
 const INITIAL_SAMPLE_ROWS: PlanAccionTop60[] = [
   {
     id: 1,
     numero: 1,
-    seccion: 'Deshuesado / Prensado',
-    problema: 'Desviación de OEE por paradas no planificadas en deshuesado de paleta',
-    accion: 'Reorganización de puestos de trabajo y ajuste de velocidad de cadena',
-    responsable: 'Carlos Gómez',
-    soporte: 'Ana Martínez',
-    fecha_lanzamiento: '2026-07-01',
-    fecha_objetivo: '2026-07-25',
+    seccion: 'RRHH',
+    problema: 'Informar de los incidentes',
+    accion: 'Informar de los incidentes',
+    responsable: 'Alberto',
+    soporte: '',
+    fecha_lanzamiento: '2026-09-09',
+    fecha_objetivo: '2026-09-16',
     fecha_cierre: null,
-    comentarios: 'Pendiente de reajuste de plantilla de turno de tarde'
+    comentarios: ''
   },
   {
     id: 2,
     numero: 2,
-    seccion: 'Loncheado',
-    problema: 'Elevada tasa de merma en loncheado de piezas de bellota',
-    accion: 'Control de atemperado de pieza previo al corte y calibración de cuchilla',
-    responsable: 'Javier López',
-    soporte: 'María Rodríguez',
-    fecha_lanzamiento: '2026-07-15',
-    fecha_objetivo: '2026-08-04',
+    seccion: 'RRHH',
+    problema: 'Buscar la causa raiz de los accidentes',
+    accion: 'Buscar la causa raiz de los accidentes',
+    responsable: 'Eva',
+    soporte: 'Ana',
+    fecha_lanzamiento: '2026-09-09',
+    fecha_objetivo: '2026-09-16',
     fecha_cierre: null,
-    comentarios: 'En proceso de prueba con nuevos parámetros de corte'
+    comentarios: ''
   },
   {
     id: 3,
     numero: 3,
-    seccion: 'Empaquetado',
-    problema: 'Falta de material de empaquetado termoformado por cuello de botella',
-    accion: 'Estandarización de matriz de sellado y homologación de nuevo film',
-    responsable: 'Pedro Sánchez',
-    soporte: 'Elena Fernández',
-    fecha_lanzamiento: '2026-06-10',
-    fecha_objetivo: '2026-07-20',
-    fecha_cierre: '2026-07-18',
-    comentarios: 'Proveedor homologado con éxito y proceso finalizado'
+    seccion: 'RRHH',
+    problema: 'Formacion a los operarios',
+    accion: 'Formacion a los operarios - quiron (equipos pequeños y personalizada) + Incidencia al personal nuevo',
+    responsable: 'Eva',
+    soporte: 'Ana',
+    fecha_lanzamiento: '2026-09-09',
+    fecha_objetivo: '2026-09-16',
+    fecha_cierre: null,
+    comentarios: ''
+  },
+  {
+    id: 4,
+    numero: 4,
+    seccion: 'Absentismo',
+    problema: 'Formacion liderazgo',
+    accion: 'Formacion liderazgo',
+    responsable: 'Ana',
+    soporte: 'Eva',
+    fecha_lanzamiento: '2026-09-09',
+    fecha_objetivo: '2026-09-16',
+    fecha_cierre: null,
+    comentarios: ''
+  },
+  {
+    id: 5,
+    numero: 5,
+    seccion: 'Devoluciones',
+    problema: 'Revision del metodo',
+    accion: 'Revision del metodo // Verificar/Revisar el proceso actual de devoluciones',
+    responsable: 'Gemma',
+    soporte: 'Alberto',
+    fecha_lanzamiento: '2026-09-09',
+    fecha_objetivo: '2026-09-16',
+    fecha_cierre: null,
+    comentarios: ''
+  },
+  {
+    id: 6,
+    numero: 6,
+    seccion: 'Polivalencia',
+    problema: 'Suplente',
+    accion: 'Suplente de cada uno de los presentes en la reunion',
+    responsable: 'Todos',
+    soporte: 'Andreia',
+    fecha_lanzamiento: '2026-09-09',
+    fecha_objetivo: '2026-09-16',
+    fecha_cierre: null,
+    comentarios: ''
+  },
+  {
+    id: 7,
+    numero: 7,
+    seccion: 'APP',
+    problema: 'Indicador seguridad alimentaria',
+    accion: 'Incluir indicador seguridad alimentaria',
+    responsable: 'Laura',
+    soporte: 'Andreia',
+    fecha_lanzamiento: '2026-07-30',
+    fecha_objetivo: '2026-09-30',
+    fecha_cierre: null,
+    comentarios: ''
+  },
+  {
+    id: 8,
+    numero: 8,
+    seccion: 'Incidencias',
+    problema: 'Unificar y protocolarizar',
+    accion: 'Unificar y protocolarizar las incidencias',
+    responsable: 'Gemma',
+    soporte: '',
+    fecha_lanzamiento: '2026-09-09',
+    fecha_objetivo: '2026-09-30',
+    fecha_cierre: null,
+    comentarios: ''
+  },
+  {
+    id: 9,
+    numero: 9,
+    seccion: 'Producción',
+    problema: 'Formacion jefes de equipo',
+    accion: 'Formacion a los jefes de equipo app / Campillo en la metodologia de toma de datos',
+    responsable: 'Alberto',
+    soporte: 'Andreia',
+    fecha_lanzamiento: '2026-09-09',
+    fecha_objetivo: '2026-09-30',
+    fecha_cierre: null,
+    comentarios: ''
   }
 ];
 
+const DEFAULT_RESPONSABLES = [
+  'Alberto',
+  'Eva',
+  'Ana',
+  'Gemma',
+  'Laura',
+  'Andreia',
+  'Todos',
+  'Carlos Gómez',
+  'Javier López',
+  'Pedro Sánchez',
+  'Elena Fernández',
+  'María Rodríguez'
+];
+
 const DEFAULT_SECCIONES = [
+  'RRHH',
+  'Absentismo',
+  'Producción',
+  'Calidad',
+  'Seguridad',
+  'Devoluciones',
+  'Polivalencia',
+  'APP',
+  'Incidencias',
   'Deshuesado / Prensado',
   'Loncheado',
   'Emp. Loncheado',
@@ -67,8 +169,6 @@ const DEFAULT_SECCIONES = [
   'Preparación',
   'Movimiento Jamones',
   'Sala Blanca',
-  'Calidad',
-  'Seguridad',
   'Mantenimiento'
 ];
 
@@ -158,41 +258,62 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
 
     if (isConfigured) {
       try {
-        const { data, error } = await supabase
+        let res = await supabase
           .from(dbTable)
           .select('*')
-          .order('numero', { ascending: true });
+          .order('id', { ascending: true });
+
+        if (res.error) {
+          console.warn('Could not order by id, trying plain select:', res.error.message);
+          res = await supabase.from(dbTable).select('*');
+        }
+
+        const data = res.data;
+        const error = res.error;
 
         if (!error && data && data.length > 0) {
-          loadedData = data.map((d: any) => {
-            let num = d.numero || d.num || 0;
+          loadedData = data.map((d: any, idx: number) => {
+            let num = d.numero || d.num || d.id || (idx + 1);
             let sec = d.seccion || d.area || '';
-            let com = d.comentarios || d.observaciones || '';
+            let com = d.comentarios || '';
 
-            if (d.observaciones && typeof d.observaciones === 'string' && d.observaciones.trim().startsWith('{')) {
-              try {
-                const parsed = JSON.parse(d.observaciones);
-                if (parsed.numero !== undefined) num = parsed.numero;
-                if (parsed.seccion !== undefined) sec = parsed.seccion;
-                if (parsed.comentarios !== undefined) com = parsed.comentarios;
-              } catch (err) {}
+            if (d.observaciones && typeof d.observaciones === 'string') {
+              if (d.observaciones.trim().startsWith('{')) {
+                try {
+                  const parsed = JSON.parse(d.observaciones);
+                  if (parsed.numero !== undefined) num = parsed.numero;
+                  if (parsed.seccion !== undefined) sec = parsed.seccion;
+                  if (parsed.comentarios !== undefined) com = parsed.comentarios;
+                } catch (err) {}
+              } else {
+                com = d.observaciones;
+              }
+            }
+
+            let prob = d.problema || d.asunto || '';
+            if (!sec && prob.includes(' - ')) {
+              const parts = prob.split(' - ');
+              sec = parts[0].trim();
+              prob = parts.slice(1).join(' - ').trim();
             }
 
             return {
               id: d.id,
               numero: num,
-              seccion: sec,
-              problema: d.problema || d.asunto || '',
+              seccion: sec || 'General',
+              problema: prob,
               accion: d.accion || '',
               responsable: d.responsable || '',
               soporte: d.soporte || '',
-              fecha_lanzamiento: d.fecha_lanzamiento || d.fechaLanzamiento || '',
-              fecha_objetivo: d.fecha_objetivo || d.fechaObjetivo || '',
-              fecha_cierre: d.fecha_cierre || d.fechaCierre || null,
+              fecha_lanzamiento: d.fechalanzamiento || d.fecha_lanzamiento || d.fechaLanzamiento || '',
+              fecha_objetivo: d.fechaobjetivo || d.fecha_objetivo || d.fechaObjetivo || '',
+              fecha_cierre: d.fechacierre || d.fecha_cierre || d.fechaCierre || null,
               comentarios: com
             };
           });
           fromDb = true;
+          // Store directly in local storage to keep offline cache synchronized with DB
+          localStorage.setItem(storageKey, JSON.stringify(loadedData));
         }
       } catch (e) {
         console.warn('Error fetching from Supabase:', e);
@@ -203,7 +324,10 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
       const local = localStorage.getItem(storageKey);
       if (local) {
         try {
-          loadedData = JSON.parse(local);
+          const parsed = JSON.parse(local);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            loadedData = parsed;
+          }
         } catch (e) {
           console.error('Failed parsing localStorage:', e);
         }
@@ -224,22 +348,35 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
   const persistItem = async (targetItem: PlanAccionTop60) => {
     if (!isConfigured) return;
     try {
+      let fullAsunto = targetItem.problema || '';
+      if (targetItem.seccion && targetItem.seccion !== 'General') {
+        if (!fullAsunto.toLowerCase().startsWith(targetItem.seccion.toLowerCase())) {
+          fullAsunto = `${targetItem.seccion} - ${fullAsunto}`;
+        }
+      }
+
+      const obsObj = {
+        numero: targetItem.numero,
+        seccion: targetItem.seccion || '',
+        comentarios: targetItem.comentarios || ''
+      };
+
       const dbItem: any = {
         id: targetItem.id,
-        asunto: targetItem.problema || '',
+        asunto: fullAsunto,
         accion: targetItem.accion || '',
         responsable: targetItem.responsable || '',
-        soporte: targetItem.soporte || '',
-        fechaLanzamiento: targetItem.fecha_lanzamiento || '',
-        fechaObjetivo: targetItem.fecha_objetivo || '',
-        fechaCierre: targetItem.fecha_cierre || null,
-        observaciones: JSON.stringify({
-          numero: targetItem.numero,
-          seccion: targetItem.seccion || '',
-          comentarios: targetItem.comentarios || ''
-        })
+        soporte: targetItem.soporte || null,
+        fechalanzamiento: targetItem.fecha_lanzamiento || null,
+        fechaobjetivo: targetItem.fecha_objetivo || null,
+        fechacierre: targetItem.fecha_cierre || null,
+        observaciones: JSON.stringify(obsObj)
       };
-      await supabase.from(dbTable).upsert(dbItem);
+
+      const { error } = await supabase.from(dbTable).upsert(dbItem);
+      if (error) {
+        console.warn('Error syncing item to Supabase:', error.message || error);
+      }
     } catch (err) {
       console.warn('Error syncing item to Supabase:', err);
     }
@@ -290,14 +427,14 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
   // Add new empty row inline without opening modal
   const handleAddNewRow = () => {
     const nextNum = items.length > 0 ? Math.max(...items.map(i => Number(i.numero) || 0)) + 1 : 1;
+    const nextId = items.length > 0 ? Math.max(...items.map(i => Number(i.id) || 0)) + 1 : 1;
     const defaultResp = availableResponsibles.length > 0 ? availableResponsibles[0] : '';
-    const newId = Date.now();
     const todayStr = new Date().toISOString().split('T')[0];
 
     const newItem: PlanAccionTop60 = {
-      id: newId,
+      id: nextId,
       numero: nextNum,
-      seccion: availableSections[0] || 'Deshuesado / Prensado',
+      seccion: availableSections[0] || 'RRHH',
       problema: '',
       accion: '',
       responsable: defaultResp,
@@ -321,7 +458,7 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
     }
 
     // Set first cell (problema) in edit mode directly
-    setEditingCell({ id: newId, field: 'problema' });
+    setEditingCell({ id: nextId, field: 'problema' });
 
     // Persist to Supabase
     persistItem(newItem);
@@ -443,6 +580,17 @@ const ActionPlanPanel: React.FC<ActionPlanPanelProps> = ({
               className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
+
+          {/* Sync / Refresh with Supabase button */}
+          <button
+            onClick={() => fetchData()}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all active:scale-95 disabled:opacity-50"
+            title="Recargar datos directamente desde Supabase"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 ${loading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Sincronizar BD</span>
+          </button>
 
           <button
             onClick={handleAddNewRow}
