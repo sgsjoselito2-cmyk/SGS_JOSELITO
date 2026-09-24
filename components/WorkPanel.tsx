@@ -71,6 +71,11 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
   });
   const [flowStep, setFlowStep] = useState<number>(() => {
     const saved = localStorage.getItem(`zitron_${selectedArea || 'default'}_flow_step`);
+    const savedJefe = localStorage.getItem(`zitron_${selectedArea || 'default'}_jefe_turno`);
+    // Se é movimentos e não há jefe gravado, sempre começa no passo 1
+    if (selectedArea === 'movimiento-jamones' && !savedJefe) {
+      return 1;
+    }
     return saved ? parseInt(saved, 10) : 1;
   });
 

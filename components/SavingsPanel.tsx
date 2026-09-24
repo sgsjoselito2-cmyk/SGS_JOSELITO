@@ -225,7 +225,9 @@ const SavingsPanel: React.FC<SavingsPanelProps> = ({ onBack, activities: propAct
       'preparacion-exp': [{ id: 'productividad', name: 'OEE PREPARACIÓN' }],
       'movimiento-jamones': [
           { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },
-          { id: 'pph_paletas', name: 'PPH COLGAR PALETAS' }
+          { id: 'pph_paletas', name: 'PPH COLGAR PALETAS' },
+          { id: 'pph_manteca', name: 'PPH COLGAR JAMONES MANTECA' },
+          { id: 'pph_descolgar_colgar', name: 'PPH DESCOLGAR - COLGAR (EN LINEA)' }
       ]
     };
     

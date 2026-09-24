@@ -192,6 +192,28 @@ const App: React.FC = () => {
         changed = true;
       }
     }
+
+    // Ensure movimiento-jamones indicators do NOT include pph or pph pesar, and include pph_descolgar_colgar
+    if (parsed && parsed['movimiento-jamones']) {
+      let list = parsed['movimiento-jamones'].filter((ind: any) => {
+        const idLower = (ind.id || '').toLowerCase();
+        const nameLower = (ind.name || '').toLowerCase();
+        return idLower !== 'pph' && idLower !== 'pph_pesar' && !nameLower.includes('pesar');
+      });
+      if (!list.some((ind: any) => ind.id === 'pph_descolgar_colgar')) {
+        const idx = list.findIndex((ind: any) => ind.id === 'cantidad_colgada');
+        const item = { id: 'pph_descolgar_colgar', name: 'PPH DESCOLGAR - COLGAR (EN LINEA)' };
+        if (idx >= 0) {
+          list.splice(idx, 0, item);
+        } else {
+          list.push(item);
+        }
+      }
+      if (JSON.stringify(list) !== JSON.stringify(parsed['movimiento-jamones'])) {
+        parsed['movimiento-jamones'] = list;
+        changed = true;
+      }
+    }
     
     // Ensure preparacion-exp indicators exist
     if (parsed && !parsed['preparacion-exp']) {
@@ -935,11 +957,15 @@ const App: React.FC = () => {
             const grouped: Record<string, OEEObjectives[]> = {};
             objsRes.value.data.forEach((o: any) => {
               if (o.area) {
+                const indId = o.indicator_id || o.indicatorId;
+                if (o.area === 'movimiento-jamones' && (indId === 'pph' || indId === 'pph_pesar' || (indId && indId.toLowerCase().includes('pesar')))) {
+                  return;
+                }
                 if (!grouped[o.area]) grouped[o.area] = [];
                 // Map snake_case to CamelCase if they come from old DB or new standardized
                 grouped[o.area].push({
                   ...o,
-                  indicator_id: o.indicator_id || o.indicatorId,
+                  indicator_id: indId,
                   valid_from: o.valid_from || o.validFrom,
                   showInTop5: o.show_in_top5 || false,
                   showInTop15: o.show_in_top15 || false,
@@ -1117,6 +1143,12 @@ const App: React.FC = () => {
         if (localTop60Users.length > 0) currentTop60Users = localTop60Users;
         
         const localGlobalObjectives = safeParse('zitron_global_objectives', {});
+        if (localGlobalObjectives && localGlobalObjectives['movimiento-jamones']) {
+          localGlobalObjectives['movimiento-jamones'] = localGlobalObjectives['movimiento-jamones'].filter((o: any) => {
+            const id = (o.indicator_id || o.indicatorId || '').toLowerCase();
+            return id !== 'pph' && id !== 'pph_pesar' && !id.includes('pesar');
+          });
+        }
         if (Object.keys(localGlobalObjectives).length > 0) {
           aggregatedObjectives = localGlobalObjectives;
           globalObjectivesRef.current = localGlobalObjectives;
@@ -3845,6 +3877,7 @@ const App: React.FC = () => {
                 ) : (
                   activeTab === 'work' && (
                     <WorkPanel 
+                      key={selectedArea}
                       selectedUsers={selectedUsers} setSelectedUsers={setSelectedUsers}
                       activities={activities} incidenceMaster={incidenceMaster} masterSpeeds={masterSpeeds}
                       oeeObjectives={oeeObjectives} operarios={filteredOperarios}

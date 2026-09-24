@@ -156,6 +156,13 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
       if (area.id === 'sb-loncheado') {
         configuredIndicators = configuredIndicators.filter(ind => ind.id !== 'merma1');
       }
+      if (area.id === 'movimiento-jamones') {
+        configuredIndicators = configuredIndicators.filter(ind => {
+          const name = (ind.name || '').toLowerCase();
+          const id = (ind.id || '').toLowerCase();
+          return !name.includes('pesar') && id !== 'pph' && id !== 'pph_pesar';
+        });
+      }
       
       areaIndicators = configuredIndicators.map(ind => ({
         id: ind.id,
@@ -485,12 +492,19 @@ export const ExpedicionesDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'su
 export const MovimientosDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'subtitle'>> = (props) => {
 
   // 1. Extraer jefes únicos de las actividades recibidas
-  const allData = [...props.history, ...props.activities];
-  const jefesEquipo = [...new Set(
-    allData
-      .filter(a => a.area === 'movimiento-jamones' && a.jefeEquipo)
-      .map(a => a.jefeEquipo!)
-  )].sort();
+  const allData = useMemo(() => [...props.history, ...props.activities], [props.history, props.activities]);
+  const jefesEquipo = useMemo(() => {
+    const set = new Set<string>();
+    allData.forEach(a => {
+      if (a.area === 'movimiento-jamones') {
+        const j = a.jefeEquipo || (a as any).jefe_equipo;
+        if (j && typeof j === 'string' && j.trim() !== '') {
+          set.add(j.trim());
+        }
+      }
+    });
+    return Array.from(set).sort();
+  }, [allData]);
 
   // 2. Estado del filtro
   const [selectedJefe, setSelectedJefe] = useState('');
@@ -503,48 +517,39 @@ export const MovimientosDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'sub
   }, [jefesEquipo, selectedJefe]);
 
   // 4. Filtrar datos según jefe seleccionado
-  const filteredActivities = selectedJefe
-    ? props.activities.filter(a => a.jefeEquipo === selectedJefe)
-    : props.activities;
-  const filteredHistory = selectedJefe
-    ? props.history.filter(a => a.jefeEquipo === selectedJefe)
-    : props.history;
+  const filteredActivities = useMemo(() => {
+    if (!selectedJefe) return props.activities;
+    return props.activities.filter(a => (a.jefeEquipo || (a as any).jefe_equipo) === selectedJefe);
+  }, [props.activities, selectedJefe]);
+
+  const filteredHistory = useMemo(() => {
+    if (!selectedJefe) return props.history;
+    return props.history.filter(a => (a.jefeEquipo || (a as any).jefe_equipo) === selectedJefe);
+  }, [props.history, selectedJefe]);
 
   return (
     <div>
-      {/* Selector de equipo — solo mostrar si hay más de un jefe */}
-      {jefesEquipo.length > 0 && (
-        <div className="px-4 pt-4 flex items-center gap-3">
-          <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
-            Equipo:
+      {/* Selector de jefe de equipo */}
+      <div className="px-4 pt-4 flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5 bg-white border border-slate-200/80 rounded-lg px-2.5 py-1.5 shadow-sm">
+          <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">
+            Jefe de Equipo:
           </span>
-          <div className="flex rounded-xl border-2 border-slate-100 overflow-hidden">
-            <button
-              onClick={() => setSelectedJefe('')}
-              className={`px-3 py-2 text-[11px] font-black uppercase tracking-widest transition-all ${
-                selectedJefe === ''
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-white text-slate-400 hover:text-slate-700'
-              }`}
-            >
-              Todos
-            </button>
+          <select
+            value={selectedJefe}
+            onChange={(e) => setSelectedJefe(e.target.value)}
+            className="bg-transparent font-black text-[11px] sm:text-xs text-blue-700 outline-none cursor-pointer"
+            title="Filtrar por Jefe de Equipo"
+          >
+            <option value="">Todos</option>
             {jefesEquipo.map(jefe => (
-              <button
-                key={jefe}
-                onClick={() => setSelectedJefe(jefe)}
-                className={`px-3 py-2 text-[11px] font-black uppercase tracking-widest transition-all ${
-                  selectedJefe === jefe
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-white text-slate-400 hover:text-slate-700'
-                }`}
-              >
+              <option key={jefe} value={jefe}>
                 {jefe}
-              </button>
+              </option>
             ))}
-          </div>
+          </select>
         </div>
-      )}
+      </div>
 
       <GroupDashboard
         {...props}

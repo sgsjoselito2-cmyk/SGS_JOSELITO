@@ -319,6 +319,7 @@ export const calculateStats = (
   let pph_jamones = 0;
   let pph_paletas = 0;
   let pph_manteca = 0;
+  let pph_descolgar_colgar = 0;
   let cantidad_colgada = 0;
   const calcPPHFromMinutes = (m: number, qty: number) => m > 0 ? qty / (m / 60) : 0;
 
@@ -389,6 +390,17 @@ export const calculateStats = (
     const horasManteca = calculateUniqueMinutesMultiDay(actsManteca) / 60;
     pph_manteca = horasManteca > 0 ? Math.round(cantManteca / persManteca / horasManteca) : 0;
 
+    // PPH DESCOLGAR - COLGAR (EN LINEA)
+    const actsDescolgarColgar = data.filter(a => {
+      const f = normalizeFormato(a.formato);
+      return (f.includes('DESCOLGAR') && f.includes('COLGAR'))
+        && a.tipoTarea === TaskType.PRODUCCION;
+    });
+    const cantDescolgarColgar = actsDescolgarColgar.reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
+    const persDescolgarColgar = new Set(actsDescolgarColgar.flatMap(a => a.operarios || [])).size || 1;
+    const horasDescolgarColgar = calculateUniqueMinutesMultiDay(actsDescolgarColgar) / 60;
+    pph_descolgar_colgar = horasDescolgarColgar > 0 ? Math.round(cantDescolgarColgar / persDescolgarColgar / horasDescolgarColgar) : 0;
+
     // CANTIDAD COLGADA — solo COLGAR, nunca DESCOLGAR
     cantidad_colgada = data.filter(a => {
       const f = normalizeFormato(a.formato);
@@ -425,6 +437,7 @@ export const calculateStats = (
     pph_jamones: hasData ? pph_jamones.toFixed(0) : '',
     pph_paletas: hasData ? pph_paletas.toFixed(0) : '',
     pph_manteca: hasData ? pph_manteca.toFixed(0) : '',
+    pph_descolgar_colgar: hasData ? pph_descolgar_colgar.toFixed(0) : '',
     cantidad_colgada: hasData ? cantidad_colgada.toFixed(0) : '',
     tiempo_produccion_real: uniqueTimeP,
     tiempo_esperas: uniqueTimeE,
@@ -482,7 +495,7 @@ export const calculateStats = (
   }
 
   const rawIndicators = (resolvedIndicators && targetArea) ? (resolvedIndicators[targetArea] || resolvedIndicators.default || []) : [];
-  const standardKpiIds = ['productividad', 'oee', 'disponibilidad', 'rendimiento', 'calidad', 'pph', 'merma1', 'merma2', 'pph_blister_emp', 'pph_sin_blister_cuchillo', 'pph_sin_marcar', 'pph_empaquetado_jabu', 'subproducto'];
+  const standardKpiIds = ['productividad', 'oee', 'disponibilidad', 'rendimiento', 'calidad', 'pph', 'merma1', 'merma2', 'pph_blister_emp', 'pph_sin_blister_cuchillo', 'pph_sin_marcar', 'pph_empaquetado_jabu', 'pph_jamones', 'pph_paletas', 'pph_manteca', 'pph_descolgar_colgar', 'cantidad_colgada', 'subproducto'];
   rawIndicators.forEach((ind: any) => {
     if (ind.formula && !standardKpiIds.includes(ind.id)) {
       const val = evaluateFormula(ind.formula, baseVars, ind.escala);
@@ -596,7 +609,64 @@ const Dashboard: React.FC<DashboardProps> = ({
   // Drill-down state
   const [drillDownRecords, setDrillDownRecords] = useState<{ type: 'disponibilidad' | 'rendimiento' | 'calidad', category: string } | null>(null);
 
-  const allData = useMemo(() => [...history, ...activities], [history, activities]);
+  // Jefe de Equipo state for movimiento-jamones
+  const [selectedJefeEquipo, setSelectedJefeEquipo] = useState<string>('');
+  const isMovimientos = (selectedArea || '').includes('movimiento-jamones');
+
+  // Extraer valores únicos de jefeEquipo encontrados en los datos
+  const jefesEquipoDisponibles = useMemo(() => {
+    if (!isMovimientos) return [];
+    const rawAll = [...history, ...activities];
+    const unique = new Set<string>();
+    rawAll.forEach(a => {
+      if (a.area === 'movimiento-jamones') {
+        const jefe = a.jefeEquipo || (a as any).jefe_equipo;
+        if (jefe && typeof jefe === 'string' && jefe.trim() !== '') {
+          unique.add(jefe.trim());
+        }
+      }
+    });
+    return Array.from(unique).sort();
+  }, [history, activities, isMovimientos]);
+
+  // Si el jefe seleccionado no existe en los datos, resetear
+  useEffect(() => {
+    if (selectedJefeEquipo && !jefesEquipoDisponibles.includes(selectedJefeEquipo)) {
+      setSelectedJefeEquipo('');
+    }
+  }, [jefesEquipoDisponibles, selectedJefeEquipo]);
+
+  // Filtrar allData si hay un jefe seleccionado
+  const allData = useMemo(() => {
+    const rawCombined = [...history, ...activities];
+    if (isMovimientos && selectedJefeEquipo) {
+      return rawCombined.filter(act => {
+        const j = act.jefeEquipo || (act as any).jefe_equipo;
+        return j === selectedJefeEquipo;
+      });
+    }
+    return rawCombined;
+  }, [history, activities, isMovimientos, selectedJefeEquipo]);
+
+  const filteredActivities = useMemo(() => {
+    if (isMovimientos && selectedJefeEquipo) {
+      return activities.filter(act => {
+        const j = act.jefeEquipo || (act as any).jefe_equipo;
+        return j === selectedJefeEquipo;
+      });
+    }
+    return activities;
+  }, [activities, isMovimientos, selectedJefeEquipo]);
+
+  const filteredHistory = useMemo(() => {
+    if (isMovimientos && selectedJefeEquipo) {
+      return history.filter(act => {
+        const j = act.jefeEquipo || (act as any).jefe_equipo;
+        return j === selectedJefeEquipo;
+      });
+    }
+    return history;
+  }, [history, isMovimientos, selectedJefeEquipo]);
 
   // Handle ESC key
   useEffect(() => {
@@ -617,7 +687,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // Filtered data for selected date
   const dayData = useMemo(() => allData.filter(a => a.fecha === selectedDate), [allData, selectedDate]);
-  const stats = useMemo(() => calculateStats(dayData, selectedArea, mermas.filter(m => m.fecha === selectedDate), workshopIndicators, activities, history), [dayData, selectedArea, selectedDate, mermas, workshopIndicators, activities, history]);
+  const stats = useMemo(() => calculateStats(dayData, selectedArea, mermas.filter(m => m.fecha === selectedDate), workshopIndicators, filteredActivities, filteredHistory), [dayData, selectedArea, selectedDate, mermas, workshopIndicators, filteredActivities, filteredHistory]);
 
   // Scorecard Data
   const scorecardData = useMemo(() => {
@@ -631,7 +701,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       const data = allData.filter(a => a.fecha === dateStr);
       return { 
         label: dateStr, 
-        total: calculateStats(data, selectedArea, mermas.filter(m => m.fecha === dateStr), workshopIndicators, activities, history),
+        total: calculateStats(data, selectedArea, mermas.filter(m => m.fecha === dateStr), workshopIndicators, filteredActivities, filteredHistory),
       };
     });
 
@@ -653,7 +723,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       });
       return { 
         label: `S${weekNum}`, 
-        total: calculateStats(data, selectedArea, weekMermas, workshopIndicators, activities, history),
+        total: calculateStats(data, selectedArea, weekMermas, workshopIndicators, filteredActivities, filteredHistory),
       };
     });
 
@@ -671,15 +741,15 @@ const Dashboard: React.FC<DashboardProps> = ({
       annual: [
         { 
           label: prevYear.toString(), 
-          total: calculateStats(prevYearData, selectedArea, prevYearMermas, workshopIndicators, activities, history),
+          total: calculateStats(prevYearData, selectedArea, prevYearMermas, workshopIndicators, filteredActivities, filteredHistory),
         },
         { 
           label: currentYear.toString(), 
-          total: calculateStats(currentYearData, selectedArea, currentYearMermas, workshopIndicators, activities, history),
+          total: calculateStats(currentYearData, selectedArea, currentYearMermas, workshopIndicators, filteredActivities, filteredHistory),
         }
       ]
     };
-  }, [allData, selectedDate, selectedArea, mermas, workshopIndicators, activities, history]);
+  }, [allData, selectedDate, selectedArea, mermas, workshopIndicators, filteredActivities, filteredHistory]);
 
   const isTimeBased = false;
 
@@ -856,6 +926,9 @@ const Dashboard: React.FC<DashboardProps> = ({
       if (selectedArea === 'sb-empaquetado-loncheado' && (ind.id === 'rendimiento' || ind.id === 'productividad' || ind.id === 'disponibilidad' || ind.id === 'calidad' || ind.id === 'oee')) {
         return false;
       }
+      if (selectedArea === 'movimiento-jamones' && (ind.id === 'pph' || ind.id === 'pph_pesar' || ind.label.includes('PESAR'))) {
+        return false;
+      }
       return ind.showInTop5 === true;
     });
     console.log('Indicadores TOP 5:', indicadoresFiltrados);
@@ -931,6 +1004,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       kpis.push({ label: 'PPH COLGAR JAMONES', val: stats.pph_jamones, obj: getObjectiveForDate('pph_jamones', selectedDate), color: 'indigo', key: 'pph_jamones' });
       kpis.push({ label: 'PPH COLGAR PALETAS', val: stats.pph_paletas, obj: getObjectiveForDate('pph_paletas', selectedDate), color: 'indigo', key: 'pph_paletas' });
       kpis.push({ label: 'PPH COLGAR JAMONES MANTECA', val: stats.pph_manteca, obj: getObjectiveForDate('pph_manteca', selectedDate), color: 'indigo', key: 'pph_manteca' });
+      kpis.push({ label: 'PPH DESCOLGAR - COLGAR (EN LINEA)', val: stats.pph_descolgar_colgar, obj: getObjectiveForDate('pph_descolgar_colgar', selectedDate), color: 'indigo', key: 'pph_descolgar_colgar' });
       kpis.push({ label: 'CANTIDAD COLGADA', val: stats.cantidad_colgada, obj: getObjectiveForDate('cantidad_colgada', selectedDate) || 2000, color: 'indigo', key: 'cantidad_colgada' });
     }
     return kpis.filter(kpi => {
@@ -978,18 +1052,41 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="flex flex-col gap-1 animate-in fade-in duration-500 h-full">
-      {/* Date Selector */}
-      <div className="flex flex-row items-center justify-between gap-1 bg-white p-2 rounded-xl border border-slate-100 shadow-sm shrink-0">
+      {/* Date Selector & Jefe de Equipo Selector */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white p-2 sm:px-3 rounded-xl border border-slate-100 shadow-sm shrink-0">
         <div>
           <h2 className="text-[12px] sm:text-sm font-black text-slate-900 tracking-tight uppercase leading-tight">CMI {workshopName && `- ${workshopName}`}</h2>
         </div>
-        <div className="flex items-center gap-1">
-          <input 
-            type="date" 
-            value={selectedDate} 
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="p-1 bg-slate-50 border border-slate-100 rounded-md font-black text-[12px] sm:text-sm text-blue-600 outline-none"
-          />
+        <div className="flex flex-wrap items-center gap-2">
+          {isMovimientos && (
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/80 rounded-lg px-2.5 py-1 shadow-sm">
+              <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">
+                Jefe de Equipo:
+              </span>
+              <select
+                value={selectedJefeEquipo}
+                onChange={(e) => setSelectedJefeEquipo(e.target.value)}
+                className="bg-transparent font-black text-[11px] sm:text-xs text-blue-700 outline-none cursor-pointer"
+                title="Filtrar por Jefe de Equipo"
+              >
+                <option value="">Todos</option>
+                {jefesEquipoDisponibles.map(jefe => (
+                  <option key={jefe} value={jefe}>
+                    {jefe}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="flex items-center gap-1">
+            <input 
+              type="date" 
+              value={selectedDate} 
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="p-1 bg-slate-50 border border-slate-100 rounded-md font-black text-[12px] sm:text-sm text-blue-600 outline-none"
+            />
+          </div>
         </div>
       </div>
 
