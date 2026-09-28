@@ -156,7 +156,7 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
       if (area.id === 'sb-loncheado') {
         configuredIndicators = configuredIndicators.filter(ind => ind.id !== 'merma1');
       }
-      if (area.id === 'movimiento-jamones') {
+      if (area.id.includes('movimiento-jamones')) {
         configuredIndicators = configuredIndicators.filter(ind => {
           const name = (ind.name || '').toLowerCase();
           const id = (ind.id || '').toLowerCase();
@@ -490,74 +490,81 @@ export const ExpedicionesDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'su
 );
 
 export const MovimientosDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'subtitle'>> = (props) => {
+  const [activeTab, setActiveTab] = useState<'both' | 'paco' | 'perales'>('both');
 
-  // 1. Extraer jefes únicos de las actividades recibidas
-  const allData = useMemo(() => [...props.history, ...props.activities], [props.history, props.activities]);
-  const jefesEquipo = useMemo(() => {
-    const set = new Set<string>();
-    allData.forEach(a => {
-      if (a.area === 'movimiento-jamones') {
-        const j = a.jefeEquipo || (a as any).jefe_equipo;
-        if (j && typeof j === 'string' && j.trim() !== '') {
-          set.add(j.trim());
-        }
+  // Normalizar registros: si un registro histórico tiene area === 'movimiento-jamones',
+  // asociarlo al equipo correspondiente según el jefe de equipo registrado (Paco Moreno vs Perales)
+  const mapAreaForMovement = (a: Activity) => {
+    if (a.area === 'movimiento-jamones') {
+      const jefe = ((a.jefeEquipo || (a as any).jefe_equipo || '') as string).toUpperCase();
+      if (jefe.includes('PACO')) {
+        return { ...a, area: 'movimiento-jamones-paco' };
       }
-    });
-    return Array.from(set).sort();
-  }, [allData]);
-
-  // 2. Estado del filtro
-  const [selectedJefe, setSelectedJefe] = useState('');
-
-  // 3. Resetear si el jefe seleccionado no tiene datos
-  React.useEffect(() => {
-    if (selectedJefe && !jefesEquipo.includes(selectedJefe)) {
-      setSelectedJefe('');
+      if (jefe.includes('PERALES')) {
+        return { ...a, area: 'movimiento-jamones-perales' };
+      }
     }
-  }, [jefesEquipo, selectedJefe]);
+    return a;
+  };
 
-  // 4. Filtrar datos según jefe seleccionado
-  const filteredActivities = useMemo(() => {
-    if (!selectedJefe) return props.activities;
-    return props.activities.filter(a => (a.jefeEquipo || (a as any).jefe_equipo) === selectedJefe);
-  }, [props.activities, selectedJefe]);
+  const adaptedActivities = useMemo(() => props.activities.map(mapAreaForMovement), [props.activities]);
+  const adaptedHistory = useMemo(() => props.history.map(mapAreaForMovement), [props.history]);
 
-  const filteredHistory = useMemo(() => {
-    if (!selectedJefe) return props.history;
-    return props.history.filter(a => (a.jefeEquipo || (a as any).jefe_equipo) === selectedJefe);
-  }, [props.history, selectedJefe]);
+  const areasToShow = useMemo(() => {
+    if (activeTab === 'paco') {
+      return [{ id: 'movimiento-jamones-paco', name: 'MOVIMIENTOS - EQUIPO PACO' }];
+    }
+    if (activeTab === 'perales') {
+      return [{ id: 'movimiento-jamones-perales', name: 'MOVIMIENTOS - EQUIPO PERALES' }];
+    }
+    return [
+      { id: 'movimiento-jamones-paco', name: 'EQUIPO PACO' },
+      { id: 'movimiento-jamones-perales', name: 'EQUIPO PERALES' },
+    ];
+  }, [activeTab]);
 
   return (
     <div>
-      {/* Selector de jefe de equipo */}
+      {/* Separadores / Pestañas de Vista para las dos áreas */}
       <div className="px-4 pt-4 flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1.5 bg-white border border-slate-200/80 rounded-lg px-2.5 py-1.5 shadow-sm">
-          <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">
-            Jefe de Equipo:
-          </span>
-          <select
-            value={selectedJefe}
-            onChange={(e) => setSelectedJefe(e.target.value)}
-            className="bg-transparent font-black text-[11px] sm:text-xs text-blue-700 outline-none cursor-pointer"
-            title="Filtrar por Jefe de Equipo"
+        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/80 shadow-inner">
+          <button
+            type="button"
+            onClick={() => setActiveTab('both')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+              activeTab === 'both' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+            }`}
           >
-            <option value="">Todos</option>
-            {jefesEquipo.map(jefe => (
-              <option key={jefe} value={jefe}>
-                {jefe}
-              </option>
-            ))}
-          </select>
+            Ambos Equipos (Lado a Lado)
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('paco')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+              activeTab === 'paco' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Equipo Paco
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('perales')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+              activeTab === 'perales' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Equipo Perales
+          </button>
         </div>
       </div>
 
       <GroupDashboard
         {...props}
-        activities={filteredActivities}
-        history={filteredHistory}
+        activities={adaptedActivities}
+        history={adaptedHistory}
         title="Movimientos"
-        subtitle="Logística Interna"
-        areas={[{ id: 'movimiento-jamones', name: 'MOVIMIENTOS' }]}
+        subtitle="Logística Interna · Equipo Paco & Equipo Perales"
+        areas={areasToShow}
         workshopIndicators={props.workshopIndicators}
       />
     </div>

@@ -390,23 +390,24 @@ export const calculateStats = (
     const horasManteca = calculateUniqueMinutesMultiDay(actsManteca) / 60;
     pph_manteca = horasManteca > 0 ? Math.round(cantManteca / persManteca / horasManteca) : 0;
 
-    // PPH DESCOLGAR - COLGAR (EN LINEA)
-    const actsDescolgarColgar = data.filter(a => {
-      const f = normalizeFormato(a.formato);
-      return (f.includes('DESCOLGAR') && f.includes('COLGAR'))
-        && a.tipoTarea === TaskType.PRODUCCION;
-    });
-    const cantDescolgarColgar = actsDescolgarColgar.reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
-    const persDescolgarColgar = new Set(actsDescolgarColgar.flatMap(a => a.operarios || [])).size || 1;
-    const horasDescolgarColgar = calculateUniqueMinutesMultiDay(actsDescolgarColgar) / 60;
-    pph_descolgar_colgar = horasDescolgarColgar > 0 ? Math.round(cantDescolgarColgar / persDescolgarColgar / horasDescolgarColgar) : 0;
-
     // CANTIDAD COLGADA — solo COLGAR, nunca DESCOLGAR
     cantidad_colgada = data.filter(a => {
       const f = normalizeFormato(a.formato);
       return f.includes('COLGAR') && !f.includes('DESCOLGAR')
         && a.tipoTarea === TaskType.PRODUCCION;
     }).reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
+
+    const actsDescolgarColgar = data.filter(a => {
+      const f = normalizeFormato(a.formato);
+      return f.includes('DESCOLGAR') && f.includes('COLGAR')
+        && a.tipoTarea === TaskType.PRODUCCION;
+    });
+    const cantDescolgarColgar = actsDescolgarColgar.reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
+    const persDescolgarColgar = new Set(actsDescolgarColgar.flatMap(a => a.operarios || [])).size || 1;
+    const horasDescolgarColgar = calculateUniqueMinutesMultiDay(actsDescolgarColgar) / 60;
+    pph_descolgar_colgar = actsDescolgarColgar.length > 0 && horasDescolgarColgar > 0
+      ? Math.round(cantDescolgarColgar / persDescolgarColgar / horasDescolgarColgar)
+      : 0;
   }
 
   const finalAvailability = Math.min(100, availability > 0 ? availability : 0);
@@ -437,7 +438,7 @@ export const calculateStats = (
     pph_jamones: hasData ? pph_jamones.toFixed(0) : '',
     pph_paletas: hasData ? pph_paletas.toFixed(0) : '',
     pph_manteca: hasData ? pph_manteca.toFixed(0) : '',
-    pph_descolgar_colgar: hasData ? pph_descolgar_colgar.toFixed(0) : '',
+    pph_descolgar_colgar: pph_descolgar_colgar > 0 ? pph_descolgar_colgar.toFixed(0) : '',
     cantidad_colgada: hasData ? cantidad_colgada.toFixed(0) : '',
     tiempo_produccion_real: uniqueTimeP,
     tiempo_esperas: uniqueTimeE,
@@ -926,7 +927,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       if (selectedArea === 'sb-empaquetado-loncheado' && (ind.id === 'rendimiento' || ind.id === 'productividad' || ind.id === 'disponibilidad' || ind.id === 'calidad' || ind.id === 'oee')) {
         return false;
       }
-      if (selectedArea === 'movimiento-jamones' && (ind.id === 'pph' || ind.id === 'pph_pesar' || ind.label.includes('PESAR'))) {
+      if ((selectedArea || '').includes('movimiento-jamones') && (ind.id === 'pph' || ind.id === 'pph_pesar' || ind.label.includes('PESAR'))) {
         return false;
       }
       return ind.showInTop5 === true;
@@ -1091,14 +1092,14 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* KPI Cards */}
-      <div className={`grid gap-1 sm:gap-2 shrink-0 ${selectedArea === 'movimiento-jamones' ? 'grid-cols-1 max-w-xs' : selectedArea === 'sb-empaquetado-loncheado' ? 'grid-cols-2 max-w-md' : 'grid-cols-2 md:grid-cols-4'}`}>
+      <div className={`grid gap-1 sm:gap-2 shrink-0 ${(selectedArea || '').includes('movimiento-jamones') ? 'grid-cols-1 max-w-xs' : selectedArea === 'sb-empaquetado-loncheado' ? 'grid-cols-2 max-w-md' : 'grid-cols-2 md:grid-cols-4'}`}>
         {[
           { label: 'Dispon.', val: `${stats.disponibilidad}${stats.disponibilidad !== '' ? '%' : ''}`, key: 'disponibilidad' },
           { label: 'Rendim.', val: `${stats.rendimiento}${stats.rendimiento !== '' ? '%' : ''}`, key: 'rendimiento' },
           { label: 'Calidad', val: `${stats.calidad}${stats.calidad !== '' ? '%' : ''}`, key: 'calidad' },
           { label: 'OEE', val: `${stats.productividad}${stats.productividad !== '' ? '%' : ''}`, key: 'productividad', isDark: true }
         ].filter(kpi => {
-          if (selectedArea === 'movimiento-jamones' && kpi.key !== 'disponibilidad') {
+          if ((selectedArea || '').includes('movimiento-jamones') && kpi.key !== 'disponibilidad') {
             return false;
           }
           if (selectedArea === 'sb-empaquetado-loncheado') {
@@ -1120,14 +1121,14 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto pr-1 space-y-2 no-scrollbar pb-24">
-        <div className={`grid gap-2 ${selectedArea === 'movimiento-jamones' ? 'grid-cols-1 max-w-xs' : selectedArea === 'sb-empaquetado-loncheado' ? 'grid-cols-2 max-w-md' : 'grid-cols-2 lg:grid-cols-4'}`}>
+        <div className={`grid gap-2 ${(selectedArea || '').includes('movimiento-jamones') ? 'grid-cols-1 max-w-xs' : selectedArea === 'sb-empaquetado-loncheado' ? 'grid-cols-2 max-w-md' : 'grid-cols-2 lg:grid-cols-4'}`}>
           {[
             { label: 'Disponibilidad', val: stats.disponibilidad, obj: getObjectiveForDate('disponibilidad', selectedDate), color: 'blue', key: 'disponibilidad' },
             { label: 'Rendimiento', val: stats.rendimiento, obj: getObjectiveForDate('rendimiento', selectedDate), color: 'emerald', key: 'rendimiento' },
             { label: 'Calidad', val: stats.calidad, obj: getObjectiveForDate('calidad', selectedDate), color: 'amber', key: 'calidad' },
             { label: 'OEE Global', val: stats.productividad, obj: getObjectiveForDate('productividad', selectedDate), color: 'slate', isGlobal: true, key: 'productividad' }
           ].filter(kpi => {
-            if (selectedArea === 'movimiento-jamones' && kpi.key !== 'disponibilidad') {
+            if ((selectedArea || '').includes('movimiento-jamones') && kpi.key !== 'disponibilidad') {
               return false;
             }
             if (selectedArea === 'sb-empaquetado-loncheado') {
@@ -1219,13 +1220,13 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* Pareto Section */}
-      <div className={`grid gap-4 sm:gap-6 ${selectedArea === 'movimiento-jamones' ? 'grid-cols-1 max-w-xl' : selectedArea === 'sb-empaquetado-loncheado' ? 'grid-cols-1 lg:grid-cols-2 max-w-4xl' : 'grid-cols-1 lg:grid-cols-3'}`}>
+      <div className={`grid gap-4 sm:gap-6 ${(selectedArea || '').includes('movimiento-jamones') ? 'grid-cols-1 max-w-xl' : selectedArea === 'sb-empaquetado-loncheado' ? 'grid-cols-1 lg:grid-cols-2 max-w-4xl' : 'grid-cols-1 lg:grid-cols-3'}`}>
         {[
           { title: 'Pareto de Esperas', data: paretos.esperas, type: 'disponibilidad' as const, unit: 'min' },
           { title: 'Pérdida Rendimiento', data: paretos.performance, type: 'rendimiento' as const, unit: 'min' },
           { title: 'Pérdida Calidad', data: paretos.quality, type: 'calidad' as const, unit: isTimeBased ? 'min' : 'uds' }
         ].filter(pareto => {
-          if (selectedArea === 'movimiento-jamones' && pareto.type !== 'disponibilidad') {
+          if ((selectedArea || '').includes('movimiento-jamones') && pareto.type !== 'disponibilidad') {
             return false;
           }
           if (selectedArea === 'sb-empaquetado-loncheado') {

@@ -194,26 +194,34 @@ const App: React.FC = () => {
     }
 
     // Ensure movimiento-jamones indicators do NOT include pph or pph pesar, and include pph_descolgar_colgar
-    if (parsed && parsed['movimiento-jamones']) {
-      let list = parsed['movimiento-jamones'].filter((ind: any) => {
-        const idLower = (ind.id || '').toLowerCase();
-        const nameLower = (ind.name || '').toLowerCase();
-        return idLower !== 'pph' && idLower !== 'pph_pesar' && !nameLower.includes('pesar');
-      });
-      if (!list.some((ind: any) => ind.id === 'pph_descolgar_colgar')) {
-        const idx = list.findIndex((ind: any) => ind.id === 'cantidad_colgada');
-        const item = { id: 'pph_descolgar_colgar', name: 'PPH DESCOLGAR - COLGAR (EN LINEA)' };
-        if (idx >= 0) {
-          list.splice(idx, 0, item);
-        } else {
-          list.push(item);
+    ['movimiento-jamones', 'movimiento-jamones-paco', 'movimiento-jamones-perales'].forEach(mArea => {
+      if (parsed) {
+        if (!parsed[mArea] && (INITIAL_WORKSHOP_INDICATORS as any)[mArea]) {
+          parsed[mArea] = (INITIAL_WORKSHOP_INDICATORS as any)[mArea];
+          changed = true;
+        }
+        if (parsed[mArea]) {
+          let list = parsed[mArea].filter((ind: any) => {
+            const idLower = (ind.id || '').toLowerCase();
+            const nameLower = (ind.name || '').toLowerCase();
+            return idLower !== 'pph' && idLower !== 'pph_pesar' && !nameLower.includes('pesar');
+          });
+          if (!list.some((ind: any) => ind.id === 'pph_descolgar_colgar')) {
+            const idx = list.findIndex((ind: any) => ind.id === 'cantidad_colgada');
+            const item = { id: 'pph_descolgar_colgar', name: 'PPH DESCOLGAR - COLGAR (EN LINEA)' };
+            if (idx >= 0) {
+              list.splice(idx, 0, item);
+            } else {
+              list.push(item);
+            }
+          }
+          if (JSON.stringify(list) !== JSON.stringify(parsed[mArea])) {
+            parsed[mArea] = list;
+            changed = true;
+          }
         }
       }
-      if (JSON.stringify(list) !== JSON.stringify(parsed['movimiento-jamones'])) {
-        parsed['movimiento-jamones'] = list;
-        changed = true;
-      }
-    }
+    });
     
     // Ensure preparacion-exp indicators exist
     if (parsed && !parsed['preparacion-exp']) {
@@ -2888,7 +2896,7 @@ const App: React.FC = () => {
       if (area === 'sala-blanca-dashboard') return ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
       if (area === 'envasado-dashboard') return ['env-envasado', 'env-empaquetado'];
       if (area === 'expediciones-dashboard') return ['expedicion', 'preparacion-exp'];
-      if (area === 'movimientos-dashboard') return ['movimiento-jamones'];
+      if (area === 'movimientos-dashboard') return ['movimiento-jamones', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
       return [area];
     };
 
@@ -3008,7 +3016,7 @@ const App: React.FC = () => {
           if (selectedArea === 'sala-blanca-dashboard') return ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'].includes(item.area);
           if (selectedArea === 'envasado-dashboard') return ['env-envasado', 'env-empaquetado'].includes(item.area);
           if (selectedArea === 'expediciones-dashboard') return ['expedicion', 'preparacion-exp'].includes(item.area);
-          if (selectedArea === 'movimientos-dashboard') return ['movimiento-jamones'].includes(item.area);
+          if (selectedArea === 'movimientos-dashboard') return ['movimiento-jamones', 'movimiento-jamones-paco', 'movimiento-jamones-perales'].includes(item.area);
           return item.area === selectedArea;
         });
         safeLocalStorageSetItem(`zitron_${selectedArea}_history`, JSON.stringify(currentAreaNext));
@@ -3044,7 +3052,7 @@ const App: React.FC = () => {
           if (selectedArea === 'sala-blanca-dashboard') return ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'].includes(item.area);
           if (selectedArea === 'envasado-dashboard') return ['env-envasado', 'env-empaquetado'].includes(item.area);
           if (selectedArea === 'expediciones-dashboard') return ['expedicion', 'preparacion-exp'].includes(item.area);
-          if (selectedArea === 'movimientos-dashboard') return ['movimiento-jamones'].includes(item.area);
+          if (selectedArea === 'movimientos-dashboard') return ['movimiento-jamones', 'movimiento-jamones-paco', 'movimiento-jamones-perales'].includes(item.area);
           return item.area === selectedArea;
         });
         safeLocalStorageSetItem(`zitron_${selectedArea}_activities`, JSON.stringify(currentAreaNext));
@@ -3497,7 +3505,10 @@ const App: React.FC = () => {
     if (!selectedArea) return [];
     
     // Combine global users assigned to this area with area-specific users
-    const globalAssigned = globalUsers.filter(u => u.areas?.includes(selectedArea));
+    const globalAssigned = globalUsers.filter(u => 
+      u.areas?.includes(selectedArea) || 
+      (selectedArea.startsWith('movimiento-jamones') && u.areas?.some(a => a.includes('movimiento-jamones')))
+    );
     
     let source: User[] = [];
     if (selectedArea === 'TOP 15') source = [...top15Users, ...globalAssigned];

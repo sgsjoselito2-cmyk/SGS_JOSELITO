@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { TaskType, Activity, IncidenceMaster, MasterSpeed, OEEObjectives, User } from '../types';
-import { AREA_COLUMNS } from '../constants';
+import { AREA_COLUMNS, MASTER_PEOPLE_LIST } from '../constants';
 import { calcDuration, calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals, normalizeFormato } from '../src/utils/index';
 import HelpModal from './HelpModal';
-import { Check, X, Edit2, Trash2, Calendar, Star, Shield } from 'lucide-react';
+import { Check, X, Edit2, Trash2, Calendar, Star, Shield, Users } from 'lucide-react';
 
 interface WorkPanelProps {
   selectedUsers: string[];
@@ -66,6 +66,101 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
   const selectedDate = propDate || localDate;
   const setSelectedDate = propSetDate || setLocalDate;
 
+  const isMovementTeamArea = selectedArea === 'movimiento-jamones-paco' || selectedArea === 'movimiento-jamones-perales';
+
+  const [todayTeam, setTodayTeam] = useState<string[]>(() => {
+    if (selectedArea !== 'movimiento-jamones-paco' && selectedArea !== 'movimiento-jamones-perales') return [];
+    try {
+      const saved = localStorage.getItem(`zitron_${selectedArea}_equipa_hoje`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [tempSelectedTeam, setTempSelectedTeam] = useState<string[]>(() => {
+    if (selectedArea !== 'movimiento-jamones-paco' && selectedArea !== 'movimiento-jamones-perales') return [];
+    try {
+      const saved = localStorage.getItem(`zitron_${selectedArea}_equipa_hoje`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [isTeamConfirmed, setIsTeamConfirmed] = useState<boolean>(() => {
+    if (selectedArea !== 'movimiento-jamones-paco' && selectedArea !== 'movimiento-jamones-perales') return true;
+    try {
+      const saved = localStorage.getItem(`zitron_${selectedArea}_equipa_hoje`);
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) && parsed.length > 0;
+    } catch {
+      return false;
+    }
+  });
+
+  const [teamSearchQuery, setTeamSearchQuery] = useState('');
+
+  // Sincronizar estado cuando cambia selectedArea
+  useEffect(() => {
+    if (isMovementTeamArea) {
+      try {
+        const saved = localStorage.getItem(`zitron_${selectedArea}_equipa_hoje`);
+        const parsed = saved ? JSON.parse(saved) : [];
+        const hasTeam = Array.isArray(parsed) && parsed.length > 0;
+        setTodayTeam(hasTeam ? parsed : []);
+        setTempSelectedTeam(hasTeam ? parsed : []);
+        setIsTeamConfirmed(hasTeam);
+        if (hasTeam && selectedUsers.length === 0) {
+          setSelectedUsers([...parsed]);
+        }
+      } catch {
+        setTodayTeam([]);
+        setTempSelectedTeam([]);
+        setIsTeamConfirmed(false);
+      }
+    } else {
+      setIsTeamConfirmed(true);
+    }
+  }, [selectedArea, isMovementTeamArea]);
+
+  const movementOperators = useMemo(() => {
+    const set = new Set<string>(MASTER_PEOPLE_LIST.map(n => n.toUpperCase().trim()));
+    operarios.forEach(op => {
+      if (op && op.nombre) {
+        const name = op.nombre.toUpperCase().trim();
+        if (!op.areas || op.areas.length === 0 || op.areas.some((a: string) => a.toLowerCase().includes('movimiento'))) {
+          set.add(name);
+        }
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [operarios]);
+
+  const filteredMovementOperators = useMemo(() => {
+    if (!teamSearchQuery.trim()) return movementOperators;
+    const q = teamSearchQuery.trim().toUpperCase();
+    return movementOperators.filter(op => op.includes(q));
+  }, [movementOperators, teamSearchQuery]);
+
+  const handleConfirmTeam = () => {
+    if (tempSelectedTeam.length === 0) return;
+    localStorage.setItem(`zitron_${selectedArea}_equipa_hoje`, JSON.stringify(tempSelectedTeam));
+    setTodayTeam(tempSelectedTeam);
+    setSelectedUsers([...tempSelectedTeam]);
+    setIsTeamConfirmed(true);
+  };
+
+  const activeOperariosList = useMemo(() => {
+    if (isMovementTeamArea && todayTeam.length > 0) {
+      return todayTeam.map(name => {
+        const found = operarios.find(u => u.nombre.toUpperCase() === name.toUpperCase());
+        return found || { id: `op-mov-${name}`, nombre: name };
+      });
+    }
+    return operarios;
+  }, [isMovementTeamArea, todayTeam, operarios]);
+
   const [jefeEquipoTurno, setJefeEquipoTurno] = useState<string | null>(() => {
     return localStorage.getItem(`zitron_${selectedArea || 'default'}_jefe_turno`) || null;
   });
@@ -93,7 +188,11 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
 
   const safeAddActivity = (activity: any, closureData?: any) => {
     const enhanced = { ...activity };
-    if (selectedArea === 'movimiento-jamones' && jefeEquipoTurno) {
+    if (selectedArea === 'movimiento-jamones-paco') {
+      enhanced.jefeEquipo = 'PACO MORENO';
+    } else if (selectedArea === 'movimiento-jamones-perales') {
+      enhanced.jefeEquipo = 'PERALES';
+    } else if (selectedArea === 'movimiento-jamones' && jefeEquipoTurno) {
       enhanced.jefeEquipo = jefeEquipoTurno;
     }
     onAddActivity(enhanced, closureData);
@@ -102,7 +201,11 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
   const safeAddMultipleActivities = (newActivities: any[], closedActivitiesData: any[]) => {
     const enhancedNew = newActivities.map(a => {
       const copy = { ...a };
-      if (selectedArea === 'movimiento-jamones' && jefeEquipoTurno) {
+      if (selectedArea === 'movimiento-jamones-paco') {
+        copy.jefeEquipo = 'PACO MORENO';
+      } else if (selectedArea === 'movimiento-jamones-perales') {
+        copy.jefeEquipo = 'PERALES';
+      } else if (selectedArea === 'movimiento-jamones' && jefeEquipoTurno) {
         copy.jefeEquipo = jefeEquipoTurno;
       }
       return copy;
@@ -437,12 +540,16 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
             pendingShiftFinalization.force,
             pendingShiftFinalization.aggregatedQuantities,
             pendingShiftFinalization.mermasToSave,
-            selectedArea === 'movimiento-jamones' ? jefeEquipoTurno : null,
+            selectedArea === 'movimiento-jamones' ? jefeEquipoTurno : 
+            selectedArea === 'movimiento-jamones-paco' ? 'PACO MORENO' : 
+            selectedArea === 'movimiento-jamones-perales' ? 'PERALES' : null,
             pendingShiftFinalization.turnoIdFilter
           );
           if (selectedArea === 'movimiento-jamones') {
             setJefeEquipoTurno(null);
             setFlowStep(1);
+            setSelectedUsers([]);
+          } else if (isMovementTeamArea) {
             setSelectedUsers([]);
           }
           setPendingShiftFinalization(null);
@@ -901,6 +1008,34 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
         </div>
       )}
 
+      {isMovementTeamArea && isTeamConfirmed && (
+        <div className="bg-gradient-to-r from-blue-900 to-indigo-955 p-3 sm:p-4 rounded-2xl shadow-md border border-slate-800 flex items-center justify-between gap-3 shrink-0 text-white select-none">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center border border-white/20">
+              <Users className="w-5 h-5 text-amber-400" />
+            </div>
+            <div>
+              <p className="text-[9px] font-black tracking-widest text-blue-300 uppercase leading-none">
+                {selectedArea === 'movimiento-jamones-paco' ? 'MOVIMIENTOS EQUIPO PACO' : 'MOVIMIENTOS EQUIPO PERALES'} · EQUIPO DE HOY
+              </p>
+              <h3 className="text-sm font-black tracking-tight leading-normal uppercase mt-0.5">
+                {todayTeam.length} Operarios: <span className="font-normal text-blue-100 text-xs">{todayTeam.join(', ')}</span>
+              </h3>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setTempSelectedTeam(todayTeam);
+              setIsTeamConfirmed(false);
+            }}
+            className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 active:scale-95 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all border border-white/10 flex items-center gap-1.5 shadow-sm cursor-pointer shrink-0"
+          >
+            <Users className="w-3.5 h-3.5 text-amber-300" />
+            Mudar Equipa
+          </button>
+        </div>
+      )}
+
       {/* KPI SUMMARY */}
       <div className="grid grid-cols-4 gap-0.5 sm:gap-1 mb-0.5 relative shrink-0">
         <button 
@@ -1143,16 +1278,121 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
         </div>
       )}
 
-      {!(selectedArea === 'movimiento-jamones' && flowStep < 3) ? (
+      {isMovementTeamArea && !isTeamConfirmed ? (
+        <div className="flex-1 bg-slate-50 rounded-[2rem] border-2 border-slate-100 p-4 sm:p-8 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in-95 duration-200">
+          <div className="max-w-2xl w-full p-6 sm:p-8 bg-white rounded-3xl shadow-xl border border-slate-100 flex flex-col max-h-[85vh]">
+            <div className="flex flex-col items-center mb-4 shrink-0">
+              <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-3 border border-blue-100 shadow-md">
+                <Users className="w-7 h-7 text-blue-600" />
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tight">
+                SELECCIÓN DE EQUIPO DE HOY
+              </h2>
+              <p className="text-xs font-black text-blue-600 uppercase tracking-widest mt-1">
+                {selectedArea === 'movimiento-jamones-paco' ? 'MOVIMIENTOS EQUIPO PACO' : 'MOVIMIENTOS EQUIPO PERALES'}
+              </p>
+              <p className="text-[12px] font-bold text-slate-500 mt-1 uppercase">
+                Marca los operarios presentes hoy para este equipo
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2 items-center justify-between mb-3 shrink-0">
+              <input
+                type="text"
+                placeholder="Buscar operario..."
+                value={teamSearchQuery}
+                onChange={(e) => setTeamSearchQuery(e.target.value)}
+                className="w-full sm:w-60 px-3 py-2 border-2 border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+              />
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <span className="text-xs font-black text-blue-700 uppercase bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
+                  {tempSelectedTeam.length} Seleccionados
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setTempSelectedTeam([...movementOperators])}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  Todos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTempSelectedTeam([])}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  Limpiar
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-1 p-2 bg-slate-50 rounded-2xl border border-slate-200/70 min-h-[180px] max-h-96">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                {filteredMovementOperators.map(name => {
+                  const isChecked = tempSelectedTeam.includes(name);
+                  return (
+                    <label
+                      key={name}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setTempSelectedTeam(prev => 
+                          prev.includes(name) ? prev.filter(w => w !== name) : [...prev, name]
+                        );
+                      }}
+                      className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border-2 text-[12px] font-black uppercase select-none ${
+                        isChecked
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-100 scale-[1.01]'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <div className={`w-4 h-4 rounded flex items-center justify-center border ${isChecked ? 'bg-white text-blue-600 border-white' : 'border-slate-300 bg-white'}`}>
+                          {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                        </div>
+                        <span className="truncate">{name}</span>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-4 shrink-0">
+              <button
+                disabled={tempSelectedTeam.length === 0}
+                onClick={handleConfirmTeam}
+                className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:hover:bg-emerald-600 text-white font-black uppercase text-[13px] tracking-widest shadow-xl shadow-emerald-100 rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Check className="w-5 h-5" />
+                Confirmar Equipa ({tempSelectedTeam.length} Operarios)
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : !(selectedArea === 'movimiento-jamones' && flowStep < 3) ? (
         <>
           {/* PANEL DE CONTROL SUPERIOR */}
           <div className="flex-1 overflow-y-auto pr-1 space-y-1 no-scrollbar">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-1 sm:gap-1.5">
           <div className="flex flex-col gap-1 sm:gap-1.5">
             <section className={`p-1 sm:p-1.5 rounded-lg border bg-white shadow-sm ${selectedUsers.length === 0 ? 'border-blue-400 ring-2 ring-blue-50' : 'border-slate-200'}`}>
-              <h2 className="text-[14px] font-black mb-0.5 text-blue-600 uppercase">1. OPERARIOS</h2>
+              <div className="flex items-center justify-between mb-0.5">
+                <h2 className="text-[14px] font-black text-blue-600 uppercase">1. OPERARIOS</h2>
+                {isMovementTeamArea && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTempSelectedTeam(todayTeam);
+                      setIsTeamConfirmed(false);
+                    }}
+                    className="text-[10px] text-blue-600 hover:text-blue-800 font-black uppercase tracking-wider underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Users className="w-3 h-3" />
+                    Mudar Equipa
+                  </button>
+                )}
+              </div>
             <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto p-1 bg-slate-50 rounded-md border border-slate-100">
-              {operarios.map(u => {
+              {activeOperariosList.map(u => {
                 const isJefe = selectedArea === 'movimiento-jamones' && u.nombre === jefeEquipoTurno;
                 return (
                   <label key={u.id} className={`flex items-center gap-1.5 px-2 py-1 rounded-md cursor-pointer transition-all ${selectedUsers.includes(u.nombre) ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
@@ -1177,12 +1417,12 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
             </div>
             {selectedUsers.length > 0 && (
               <div className="flex gap-2 mt-3">
-                <button onClick={() => setSelectedUsers(operarios.map(u => u.nombre))} className="flex-1 py-3 bg-blue-100 text-blue-600 rounded-xl text-sm font-black uppercase tracking-widest hover:bg-blue-200 transition-all">Seleccionar Todos</button>
+                <button onClick={() => setSelectedUsers(activeOperariosList.map(u => u.nombre))} className="flex-1 py-3 bg-blue-100 text-blue-600 rounded-xl text-sm font-black uppercase tracking-widest hover:bg-blue-200 transition-all">Seleccionar Todos</button>
                 <button onClick={() => setSelectedUsers([])} className="flex-1 py-3 bg-slate-200 text-slate-600 rounded-xl text-sm font-black uppercase tracking-widest hover:bg-red-100 hover:text-red-500 transition-all">Limpiar Selección</button>
               </div>
             )}
             {selectedUsers.length === 0 && (
-              <button onClick={() => setSelectedUsers(operarios.map(u => u.nombre))} className="w-full mt-3 py-3 bg-blue-100 text-blue-600 rounded-xl text-sm font-black uppercase tracking-widest hover:bg-blue-200 transition-all">Seleccionar Todos</button>
+              <button onClick={() => setSelectedUsers(activeOperariosList.map(u => u.nombre))} className="w-full mt-3 py-3 bg-blue-100 text-blue-600 rounded-xl text-sm font-black uppercase tracking-widest hover:bg-blue-200 transition-all">Seleccionar Todos</button>
             )}
             {currentActivities.length > 0 && (
               <div className="mt-0.5 p-0.5 bg-blue-50 border border-blue-100 rounded-md">

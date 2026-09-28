@@ -152,6 +152,8 @@ const GlobalUserConfig: React.FC<GlobalUserConfigProps> = ({ users, onUpdateUser
     { id: 'env-empaquetado', label: 'EMPAQUETADO (ENVASADO)' },
     { id: 'expedicion', label: 'EXPEDICIONES' },
     { id: 'preparacion-exp', label: 'PREPARACIÓN EXPEDICIONES' },
+    { id: 'movimiento-jamones-paco', label: 'MOVIMIENTOS EQUIPO PACO' },
+    { id: 'movimiento-jamones-perales', label: 'MOVIMIENTOS EQUIPO PERALES' },
     { id: 'movimiento-jamones', label: 'MOVIMIENTOS' }
   ];
 

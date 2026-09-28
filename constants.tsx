@@ -6,7 +6,31 @@ export const INITIAL_ACTION_PLAN_TOP60: ActionPlanItem[] = [];
 export const INITIAL_ACTION_PLAN_TOP15: ActionPlanItem[] = [];
 export const TOP15_RESPONSABLES: string[] = [];
 export const TOP60_RESPONSABLES: string[] = [];
-const MASTER_PEOPLE_LIST: string[] = [];
+export const MASTER_PEOPLE_LIST: string[] = [
+  'AIRES',
+  'ALEJANDRO JIMENEZ',
+  'ANTONIO MARTIN',
+  'CARLOS TEJEDOR',
+  'CLEMENTE HERNANDEZ',
+  'DAVID',
+  'DAVID TABERNERO',
+  'FRANSCISCO LUIS CAMPILLO',
+  'JAVI BARCALA',
+  'JOSE JAVIER SANCHEZ',
+  'LUIS RODRIGUEZ',
+  'MARIO EMILIO GARCIA',
+  'MARIO HERNANDEZ',
+  'MAXIMO GUTIERREZ',
+  'MIGUEL ANGEL',
+  'MUÑOZ',
+  'ORLANDO LOPEZ',
+  'PABLO PEREZ',
+  'PACO MORENO',
+  'PEPE',
+  'ROBERTO GARCIA',
+  'TIAGO GONZALEZ',
+  'VICENTE ROMERO'
+];
 
 export const getInitialOperarios = (areaId: string): User[] => {
   if (areaId === 'TOP 15') {
@@ -21,7 +45,7 @@ export const getInitialOperarios = (areaId: string): User[] => {
       nombre: nombre.toUpperCase()
     }));
   }
-  if (['sb-preparacion','sb-loncheado','sb-empaquetado-loncheado','sb-empaquetado-deshuesado','env-envasado','env-empaquetado','expedicion','preparacion-exp','movimiento-jamones'].includes(areaId)) {
+  if (['sb-preparacion','sb-loncheado','sb-empaquetado-loncheado','sb-empaquetado-deshuesado','env-envasado','env-empaquetado','expedicion','preparacion-exp','movimiento-jamones','movimiento-jamones-paco','movimiento-jamones-perales'].includes(areaId)) {
     return MASTER_PEOPLE_LIST.map((nombre, i) => ({
       id: `op-jos-${areaId}-${i}-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       nombre: nombre.toUpperCase()
@@ -47,6 +71,8 @@ export const AREA_NAMES: Record<string, string> = {
   'env-empaquetado': 'EMPAQUETADO',
   'expedicion': 'EXPEDICIONES',
   'preparacion-exp': 'PREPARACIÓN',
+  'movimiento-jamones-paco': 'MOVIMIENTOS EQUIPO PACO',
+  'movimiento-jamones-perales': 'MOVIMIENTOS EQUIPO PERALES',
   'movimiento-jamones': 'MOVIMIENTOS'
 };
 
@@ -59,6 +85,8 @@ export const AREA_COLUMNS: Record<string, string[]> = {
   'env-empaquetado': ['Unidades Hora'],
   'expedicion': ['Unidades Hora'],
   'preparacion-exp': ['Unidades Hora'],
+  'movimiento-jamones-paco': ['Unidades Hora'],
+  'movimiento-jamones-perales': ['Unidades Hora'],
   'movimiento-jamones': ['Unidades Hora']
 };
 
@@ -93,6 +121,8 @@ export const WORKSHOP_HELP_CONTENT: Record<string, { usage: string; indicators: 
   'env-empaquetado': { usage: "Selecciona tu nombre, elige el formato de empaquetado y pulsa 'INICIAR TAREA'. Al finalizar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
   'expedicion': { usage: "Selecciona tu nombre, elige el formato de expedición y pulsa 'INICIAR TAREA'. Al finalizar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
   'preparacion-exp': { usage: "Selecciona tu nombre, elige el formato de prep. expediciones y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
+  'movimiento-jamones-paco': { usage: "Selecciona tu nombre, elige el tipo de movimiento y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
+  'movimiento-jamones-perales': { usage: "Selecciona tu nombre, elige el tipo de movimiento y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
   'movimiento-jamones': { usage: "Selecciona tu nombre, elige el tipo de movimiento y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
   'TOP 15': { usage: "Indicadores Diarios: Datos del día anterior. Evolución Semanal: Gráficos de tendencia. Análisis IA: Resumen bajo demanda.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nOEE = Dispo x Ren x Cali (100%)" },
   'TOP 60': { usage: "Registro de datos de RRHH, Seguridad y Calidad. Histórico mensual. Objetivos y Plan de Acción.", indicators: "Evolución mensual de KPIs. Plan Estratégico y Análisis de Desviaciones." }
@@ -171,6 +201,22 @@ export const INITIAL_WORKSHOP_INDICATORS: Record<string, {id: string, name: stri
   ],
   'preparacion-exp': [
     { id: 'productividad', name: 'OEE PREPARACIÓN' }
+  ],
+  'movimiento-jamones-paco': [
+    { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },
+    { id: 'pph_paletas', name: 'PPH COLGAR PALETAS' },
+    { id: 'pph_manteca', name: 'PPH COLGAR JAMONES MANTECA' },
+    { id: 'pph_descolgar_colgar', name: 'PPH DESCOLGAR - COLGAR (EN LINEA)' },
+    { id: 'cantidad_colgada', name: 'CANTIDAD COLGADA' },
+    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' }
+  ],
+  'movimiento-jamones-perales': [
+    { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },
+    { id: 'pph_paletas', name: 'PPH COLGAR PALETAS' },
+    { id: 'pph_manteca', name: 'PPH COLGAR JAMONES MANTECA' },
+    { id: 'pph_descolgar_colgar', name: 'PPH DESCOLGAR - COLGAR (EN LINEA)' },
+    { id: 'cantidad_colgada', name: 'CANTIDAD COLGADA' },
+    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' }
   ],
   'movimiento-jamones': [
     { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },
