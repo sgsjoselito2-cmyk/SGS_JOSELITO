@@ -99,7 +99,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
   const [filterDate, setFilterDate] = useState('');
   const [filterTask, setFilterTask] = useState('');
   const [filterType, setFilterType] = useState('');
-  const [filterTeam, setFilterTeam] = useState<'ALL' | 'EQUIPO1' | 'EQUIPO2'>('ALL');
+  const [filterTeam, setFilterTeam] = useState<'ALL' | 'PACO' | 'PERALES'>('ALL');
 
   // Filtros Análisis PPH
   const [pphFilterType, setPphFilterType] = useState<'week' | 'range' | 'all'>('all');
@@ -272,10 +272,10 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
     }
 
     if (selectedArea === 'movimientos-dashboard' || (selectedArea && selectedArea.includes('movimiento-jamones'))) {
-      if (filterTeam === 'EQUIPO1') {
-        combined = combined.filter(r => r.area === 'movimiento-jamones-equipo1');
-      } else if (filterTeam === 'EQUIPO2') {
-        combined = combined.filter(r => r.area === 'movimiento-jamones-equipo2');
+      if (filterTeam === 'PACO') {
+        combined = combined.filter(r => r.area === 'movimiento-jamones-paco');
+      } else if (filterTeam === 'PERALES') {
+        combined = combined.filter(r => r.area === 'movimiento-jamones-perales');
       }
     }
 
@@ -1110,25 +1110,25 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFilterTeam('EQUIPO1')}
+                  onClick={() => setFilterTeam('PACO')}
                   className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-                    filterTeam === 'EQUIPO1'
+                    filterTeam === 'PACO'
                       ? 'bg-white text-indigo-700 shadow-sm'
                       : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
-                  EQUIPO 1
+                  EQUIPO PACO
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFilterTeam('EQUIPO2')}
+                  onClick={() => setFilterTeam('PERALES')}
                   className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-                    filterTeam === 'EQUIPO2'
+                    filterTeam === 'PERALES'
                       ? 'bg-white text-indigo-700 shadow-sm'
                       : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
-                  EQUIPO 2
+                  EQUIPO PERALES
                 </button>
               </div>
             </div>
