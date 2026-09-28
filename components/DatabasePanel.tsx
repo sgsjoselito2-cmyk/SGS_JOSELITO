@@ -99,6 +99,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
   const [filterDate, setFilterDate] = useState('');
   const [filterTask, setFilterTask] = useState('');
   const [filterType, setFilterType] = useState('');
+  const [filterTeam, setFilterTeam] = useState<'ALL' | 'EQUIPO1' | 'EQUIPO2'>('ALL');
 
   // Filtros Análisis PPH
   const [pphFilterType, setPphFilterType] = useState<'week' | 'range' | 'all'>('all');
@@ -270,13 +271,21 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
       combined = combined.filter(r => r.tipoTarea === filterType);
     }
 
+    if (selectedArea === 'movimientos-dashboard' || (selectedArea && selectedArea.includes('movimiento-jamones'))) {
+      if (filterTeam === 'EQUIPO1') {
+        combined = combined.filter(r => r.area === 'movimiento-jamones-equipo1');
+      } else if (filterTeam === 'EQUIPO2') {
+        combined = combined.filter(r => r.area === 'movimiento-jamones-equipo2');
+      }
+    }
+
     return combined.sort((a, b) => {
       const dateA = a.fecha || '';
       const dateB = b.fecha || '';
       if (dateA !== dateB) return dateB.localeCompare(dateA);
       return (b.horaInicio || '').localeCompare(a.horaInicio || '');
     });
-  }, [history, filterDate, filterTask, filterType, selectedArea]);
+  }, [history, filterDate, filterTask, filterType, filterTeam, selectedArea]);
 
   const areaTitleSuffix = useMemo(() => {
     if (selectedArea === 'sala-blanca-dashboard') return ' - SALA BLANCA';
@@ -1082,6 +1091,48 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
 
       {activeSubTab === 'registros' && (
         <>
+          {(selectedArea === 'movimientos-dashboard' || (selectedArea && selectedArea.includes('movimiento-jamones'))) && (
+            <div className="bg-white p-3 sm:p-4 rounded-[1.5rem] border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+              <span className="text-[11px] sm:text-xs font-black uppercase tracking-widest text-slate-500">
+                FILTRO POR EQUIPO:
+              </span>
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setFilterTeam('ALL')}
+                  className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    filterTeam === 'ALL'
+                      ? 'bg-white text-indigo-700 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  TODOS
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterTeam('EQUIPO1')}
+                  className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    filterTeam === 'EQUIPO1'
+                      ? 'bg-white text-indigo-700 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  EQUIPO 1
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterTeam('EQUIPO2')}
+                  className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    filterTeam === 'EQUIPO2'
+                      ? 'bg-white text-indigo-700 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  EQUIPO 2
+                </button>
+              </div>
+            </div>
+          )}
           {/* BARRA DE FILTROS */}
       <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         <div className="space-y-1">
@@ -1121,6 +1172,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
                 setFilterDate('');
                 setFilterTask('');
                 setFilterType('');
+                setFilterTeam('ALL');
               }}
               className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-sm"
               title="Limpiar filtros"

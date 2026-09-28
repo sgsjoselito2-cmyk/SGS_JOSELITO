@@ -213,17 +213,17 @@ const Header: React.FC<HeaderProps> = ({
       {/* Navegación de Área (Terminal/Dashboard/etc) */}
       {!isMainScreen && currentAreaId && (
         <div className="bg-slate-50/50 border-t border-slate-100">
-          <div className="container mx-auto px-4 flex justify-center gap-8">
+          <div className="container mx-auto px-2 sm:px-4 flex justify-center items-center gap-1 sm:gap-6 overflow-x-auto no-scrollbar">
             <button 
               onClick={() => setActiveTab('work')} 
-              className={`py-2 text-[12px] font-black uppercase tracking-[0.2em] border-b-2 transition-all ${activeTab === 'work' ? 'border-joselito-red text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+              className={`py-2 px-2 sm:px-3 text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-[0.2em] border-b-2 transition-all shrink-0 whitespace-nowrap ${activeTab === 'work' ? 'border-joselito-red text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
             >
               Terminal
             </button>
             {currentAreaId !== 'TOP 60' && currentAreaId !== 'TOP 15' && !currentAreaId.includes('dashboard') && (
               <button 
                 onClick={() => setActiveTab('dashboard')} 
-                className={`py-2 text-[12px] font-black uppercase tracking-[0.2em] border-b-2 transition-all ${activeTab === 'dashboard' ? 'border-joselito-red text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                className={`py-2 px-2 sm:px-3 text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-[0.2em] border-b-2 transition-all shrink-0 whitespace-nowrap ${activeTab === 'dashboard' ? 'border-joselito-red text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
               >
                 Dashboard
               </button>
@@ -232,7 +232,7 @@ const Header: React.FC<HeaderProps> = ({
               <>
                 <button 
                   onClick={() => setActiveTab('database')} 
-                  className={`py-2 text-[12px] font-black uppercase tracking-[0.2em] border-b-2 transition-all ${activeTab === 'database' ? 'border-joselito-red text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                  className={`py-2 px-2 sm:px-3 text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-[0.2em] border-b-2 transition-all shrink-0 whitespace-nowrap ${activeTab === 'database' ? 'border-joselito-red text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
                 >
                   Histórico
                 </button>
@@ -241,9 +241,9 @@ const Header: React.FC<HeaderProps> = ({
             {currentAreaId !== 'sala-blanca-dashboard' && (
               <button 
                 onClick={() => setActiveTab('config')} 
-                className={`py-2 text-[12px] font-black uppercase tracking-[0.2em] border-b-2 transition-all ${activeTab === 'config' ? 'border-joselito-red text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                className={`py-2 px-2 sm:px-3 text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-[0.2em] border-b-2 transition-all shrink-0 whitespace-nowrap ${activeTab === 'config' ? 'border-joselito-red text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
               >
-                Config
+                Configuración
               </button>
             )}
           </div>

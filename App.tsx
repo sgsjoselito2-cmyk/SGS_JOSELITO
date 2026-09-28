@@ -194,7 +194,7 @@ const App: React.FC = () => {
     }
 
     // Ensure movimiento-jamones indicators do NOT include pph or pph pesar, and include pph_descolgar_colgar
-    ['movimiento-jamones', 'movimiento-jamones-paco', 'movimiento-jamones-perales'].forEach(mArea => {
+    ['movimiento-jamones', 'movimiento-jamones-equipo1', 'movimiento-jamones-equipo2', 'movimiento-jamones-paco', 'movimiento-jamones-perales'].forEach(mArea => {
       if (parsed) {
         if (!parsed[mArea] && (INITIAL_WORKSHOP_INDICATORS as any)[mArea]) {
           parsed[mArea] = (INITIAL_WORKSHOP_INDICATORS as any)[mArea];
@@ -2905,7 +2905,7 @@ const App: React.FC = () => {
       if (area === 'sala-blanca-dashboard') return ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
       if (area === 'envasado-dashboard') return ['env-envasado', 'env-empaquetado'];
       if (area === 'expediciones-dashboard') return ['expedicion', 'preparacion-exp'];
-      if (area === 'movimientos-dashboard') return ['movimiento-jamones', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
+      if (area === 'movimientos-dashboard') return ['movimiento-jamones', 'movimiento-jamones-equipo1', 'movimiento-jamones-equipo2', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
       return [area];
     };
 
@@ -3025,7 +3025,7 @@ const App: React.FC = () => {
           if (selectedArea === 'sala-blanca-dashboard') return ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'].includes(item.area);
           if (selectedArea === 'envasado-dashboard') return ['env-envasado', 'env-empaquetado'].includes(item.area);
           if (selectedArea === 'expediciones-dashboard') return ['expedicion', 'preparacion-exp'].includes(item.area);
-          if (selectedArea === 'movimientos-dashboard') return ['movimiento-jamones', 'movimiento-jamones-paco', 'movimiento-jamones-perales'].includes(item.area);
+          if (selectedArea === 'movimientos-dashboard') return ['movimiento-jamones', 'movimiento-jamones-equipo1', 'movimiento-jamones-equipo2', 'movimiento-jamones-paco', 'movimiento-jamones-perales'].includes(item.area);
           return item.area === selectedArea;
         });
         safeLocalStorageSetItem(`zitron_${selectedArea}_history`, JSON.stringify(currentAreaNext));
@@ -3061,7 +3061,7 @@ const App: React.FC = () => {
           if (selectedArea === 'sala-blanca-dashboard') return ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'].includes(item.area);
           if (selectedArea === 'envasado-dashboard') return ['env-envasado', 'env-empaquetado'].includes(item.area);
           if (selectedArea === 'expediciones-dashboard') return ['expedicion', 'preparacion-exp'].includes(item.area);
-          if (selectedArea === 'movimientos-dashboard') return ['movimiento-jamones', 'movimiento-jamones-paco', 'movimiento-jamones-perales'].includes(item.area);
+          if (selectedArea === 'movimientos-dashboard') return ['movimiento-jamones', 'movimiento-jamones-equipo1', 'movimiento-jamones-equipo2', 'movimiento-jamones-paco', 'movimiento-jamones-perales'].includes(item.area);
           return item.area === selectedArea;
         });
         safeLocalStorageSetItem(`zitron_${selectedArea}_activities`, JSON.stringify(currentAreaNext));
