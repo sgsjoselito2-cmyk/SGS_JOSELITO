@@ -114,14 +114,7 @@ interface TOP15IndicatorsProps {
   workshopIndicators: Record<string, {id: string, name: string, formula?: string}[]>;
 }
 
-interface WorkshopConfig {
-  id: string;
-  name: string;
-  taller: string;
-  extraAreas?: string[];
-}
-
-const TALLERES: WorkshopConfig[] = [
+const TALLERES = [
   { id: 'sb-preparacion', name: 'DESHUESADO/PRENSADO', taller: 'SALA BLANCA' },
   { id: 'sb-loncheado', name: 'LONCHEADO', taller: 'SALA BLANCA' },
   { id: 'sb-empaquetado-loncheado', name: 'EMP. LONCHEADO', taller: 'SALA BLANCA' },
@@ -130,7 +123,8 @@ const TALLERES: WorkshopConfig[] = [
   { id: 'env-empaquetado', name: 'EMPAQUETADO', taller: 'ENVASADO' },
   { id: 'expedicion', name: 'EXPEDICIONES', taller: 'EXPEDICIONES' },
   { id: 'preparacion-exp', name: 'PREPARACIÓN', taller: 'EXPEDICIONES' },
-  { id: 'movimiento-jamones-paco', name: 'MOVIMIENTOS', taller: 'MOVIMIENTOS', extraAreas: ['movimiento-jamones-perales', 'movimiento-jamones'] }
+  { id: 'movimiento-jamones-paco', name: 'MOVIMIENTOS EQUIPO PACO', taller: 'MOVIMIENTOS' },
+  { id: 'movimiento-jamones-perales', name: 'MOVIMIENTOS EQUIPO PERALES', taller: 'MOVIMIENTOS' }
 ];
 
 const TALLER_BG_COLORS: Record<string, string> = {
@@ -259,8 +253,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
 
   // Helper to get objective for a workshop and indicator
   const getWorkshopObjective = (wsId: string, indicator_id: string, dateStr?: string) => {
-    const isMov = wsId.includes('movimiento-jamones');
-    const objs = [...(allObjectives[wsId] || []), ...(isMov ? (allObjectives['movimiento-jamones'] || []) : [])].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+    const objs = [...(allObjectives[wsId] || [])].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
     const targetDate = dateStr || selectedDate;
     
     // Helper function for prioritized lookup
@@ -343,8 +336,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
     const results: any[] = [];
 
     TALLERES.forEach(ws => {
-      const wsAreas = getWorkshopAreas(ws);
-      const wsData = dayData.filter(a => wsAreas.includes(a.area));
+      const wsData = dayData.filter(a => a.area === ws.id);
       if (wsData.length === 0) return;
 
       const formats = Array.from(new Set(wsData.map(a => a.formato || 'Desconocido')));
@@ -506,72 +498,13 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
     });
   }, [selectedDate]);
 
-// Helper to get all relevant areas for a workshop config
-const getWorkshopAreas = (ws: WorkshopConfig | string): string[] => {
-  if (typeof ws === 'string') {
-    const found = TALLERES.find(t => t.id === ws);
-    return found ? [found.id, ...(found.extraAreas || [])] : [ws];
-  }
-  return [ws.id, ...(ws.extraAreas || [])];
-};
-
-// Helper to calculate workshop stats with support for extraAreas (e.g. combined MOVIMIENTOS)
-const calculateStatsForWorkshop = (
-  ws: WorkshopConfig,
-  data: Activity[],
-  mermas: any[] = [],
-  indicatorsMap?: any
-) => {
-  if (data.length === 0 && mermas.length === 0) return null;
-  const baseStats = calculateStats(data, ws.id, mermas, indicatorsMap);
-
-  // If there are no extraAreas, return standard stats
-  if (!ws.extraAreas || ws.extraAreas.length === 0) {
-    return baseStats;
-  }
-
-  // Para MOVIMIENTOS con extraAreas:
-  // 1. CANTIDAD COLGADA: Ya calcula el total combinado de las áreas incluidas en data.
-  // 2. DISPONIBILIDAD: Media ponderada de los dos equipos (Paco y Perales)
-  const pacoActs = data.filter(a => a.area === 'movimiento-jamones-paco' || (a.area === 'movimiento-jamones' && ((a.jefeEquipo || (a as any).jefe_equipo || '') as string).toUpperCase().includes('PACO')));
-  const peralesActs = data.filter(a => a.area === 'movimiento-jamones-perales' || (a.area === 'movimiento-jamones' && ((a.jefeEquipo || (a as any).jefe_equipo || '') as string).toUpperCase().includes('PERALES')));
-
-  const pacoStats = pacoActs.length > 0 ? calculateStats(pacoActs, 'movimiento-jamones-paco') : null;
-  const peralesStats = peralesActs.length > 0 ? calculateStats(peralesActs, 'movimiento-jamones-perales') : null;
-
-  const pacoDisp = pacoStats && pacoStats.disponibilidad !== '' ? parseFloat(pacoStats.disponibilidad) : null;
-  const peralesDisp = peralesStats && peralesStats.disponibilidad !== '' ? parseFloat(peralesStats.disponibilidad) : null;
-
-  const pacoWeight = pacoStats ? ((pacoStats.tiempo_produccion_real || 0) + (pacoStats.tiempo_esperas || 0) + (pacoStats.tiempo_averias || 0)) : 0;
-  const peralesWeight = peralesStats ? ((peralesStats.tiempo_produccion_real || 0) + (peralesStats.tiempo_esperas || 0) + (peralesStats.tiempo_averias || 0)) : 0;
-
-  let weightedDisp = '';
-  if (pacoDisp !== null && peralesDisp !== null) {
-    if (pacoWeight + peralesWeight > 0) {
-      weightedDisp = (((pacoDisp * pacoWeight) + (peralesDisp * peralesWeight)) / (pacoWeight + peralesWeight)).toFixed(1);
-    } else {
-      weightedDisp = ((pacoDisp + peralesDisp) / 2).toFixed(1);
-    }
-  } else if (pacoDisp !== null) {
-    weightedDisp = pacoDisp.toFixed(1);
-  } else if (peralesDisp !== null) {
-    weightedDisp = peralesDisp.toFixed(1);
-  }
-
-  return {
-    ...baseStats,
-    ...(weightedDisp ? { disponibilidad: weightedDisp } : {})
-  };
-};
-
   // Calculate stats for each workshop and each day
   const dailyStats = useMemo(() => {
     const rows: any[] = [];
     TALLERES.forEach(ws => {
       const rawIndicators = workshopIndicators[ws.id] || workshopIndicators["movimiento-jamones"] || workshopIndicators.default;
-      const isMov = (ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales');
       const indicators = rawIndicators.filter(ind => {
-        if (isMov && ind.id !== 'cantidad_colgada' && ind.id !== 'disponibilidad') {
+        if ((ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales') && ind.id !== 'cantidad_colgada') {
           return false;
         }
         if (ws.id === 'sb-empaquetado-loncheado' && ind.id !== 'pph_blister_emp' && ind.id !== 'pph') {
@@ -585,12 +518,14 @@ const calculateStatsForWorkshop = (
         }
         return true;
       });
-      const wsAreas = getWorkshopAreas(ws);
+      const isMov = (ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales');
+      const movAreas = ['movimiento-jamones', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
       const dayDataMap = last7Days.map(date => {
-        const data = allData.filter(a => wsAreas.includes(a.area) && a.fecha && a.fecha === date);
-        const dayMermas = mermas.filter(m => m.fecha === date && wsAreas.includes(m.area));
-        return (data.length === 0 && dayMermas.length === 0) ? null : calculateStatsForWorkshop(ws, data, dayMermas, workshopIndicators);
+        const data = allData.filter(a => (isMov ? movAreas.includes(a.area) : a.area === ws.id) && a.fecha && a.fecha === date);
+        const dayMermas = mermas.filter(m => m.fecha === date && (isMov ? movAreas.includes(m.area) : m.area === ws.id));
+        return (data.length === 0 && dayMermas.length === 0) ? null : calculateStats(data, ws.id, dayMermas, workshopIndicators);
       });
+
       indicators.forEach(ind => {
         const values = dayDataMap.map(stats => {
           if (!stats) return null;
@@ -614,9 +549,8 @@ const calculateStatsForWorkshop = (
     const rows: any[] = [];
     TALLERES.forEach(ws => {
       const rawIndicators = workshopIndicators[ws.id] || workshopIndicators["movimiento-jamones"] || workshopIndicators.default;
-      const isMov = (ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales');
       const indicators = rawIndicators.filter(ind => {
-        if (isMov && ind.id !== 'cantidad_colgada' && ind.id !== 'disponibilidad') {
+        if ((ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales') && ind.id !== 'cantidad_colgada') {
           return false;
         }
         if (ws.id === 'sb-empaquetado-loncheado' && ind.id !== 'pph_blister_emp' && ind.id !== 'pph') {
@@ -631,18 +565,22 @@ const calculateStatsForWorkshop = (
         return true;
       });
       
-      const wsAreas = getWorkshopAreas(ws);
+      const isMov = (ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales');
+      const movAreas = ['movimiento-jamones', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
       const weekDataMap = last7Weeks.map(w => {
         const data = allData.filter(a => {
-          if (!wsAreas.includes(a.area) || !a.fecha) return false;
+          const matchArea = isMov ? movAreas.includes(a.area) : a.area === ws.id;
+          if (!matchArea || !a.fecha) return false;
           const ad = parseLocalDate(a.fecha);
           return getWeekNumber(ad) === w.week && ad.getFullYear() === w.year;
         });
         const weekMermas = mermas.filter(m => {
-          if (!m.fecha || !wsAreas.includes(m.area)) return false;
+          const matchArea = isMov ? movAreas.includes(m.area) : m.area === ws.id;
+          if (!m.fecha || !matchArea) return false;
           const md = parseLocalDate(m.fecha);
           return getWeekNumber(md) === w.week && md.getFullYear() === w.year;
         });
+
         const date = new Date(w.year, 0, 1);
         date.setDate(date.getDate() + (w.week - 1) * 7);
         const dateStr = date.toISOString().split('T')[0];
@@ -668,9 +606,11 @@ const calculateStatsForWorkshop = (
             objective = Math.round((d * r * c) / 10000);
           }
         }
+
         if (data.length === 0 && weekMermas.length === 0) return { stats: null, objective };
-        return { stats: calculateStatsForWorkshop(ws, data, weekMermas, workshopIndicators), objective };
+        return { stats: calculateStats(data, ws.id, weekMermas, workshopIndicators), objective };
       });
+
       indicators.forEach(ind => {
         const values = weekDataMap.map(wData => {
           if (!wData.stats) return null;
@@ -690,7 +630,7 @@ const calculateStatsForWorkshop = (
     return rows;
   }, [allData, last7Weeks, allObjectives, mermas, workshopIndicators]);
 
-    // Group weeklyStats by workshop for individual indicator charts
+  // Group weeklyStats by workshop for individual indicator charts
   const weeklyStatsByWorkshop = useMemo(() => {
     const map: Record<string, { id: string; name: string; taller: string; indicators: any[] }> = {};
     
@@ -767,8 +707,7 @@ const calculateStatsForWorkshop = (
 
   // Pareto data for selected workshop
   const paretos = useMemo(() => {
-    const wsAreas = getWorkshopAreas(selectedWorkshopPareto);
-    const wsData = allData.filter(a => wsAreas.includes(a.area) && a.fecha === selectedDate);
+    const wsData = allData.filter(a => a.area === selectedWorkshopPareto && a.fecha === selectedDate);
     const esperas: Record<string, number> = {};
     const performanceLoss: Record<string, number> = {};
     const qualityLoss: Record<string, number> = {};
@@ -857,9 +796,8 @@ const calculateStatsForWorkshop = (
     
     TALLERES.forEach(ws => {
       const rawIndicators = workshopIndicators[ws.id] || workshopIndicators["movimiento-jamones"] || workshopIndicators.default;
-      const isMov = (ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales');
       const indicators = rawIndicators.filter(ind => {
-        if (isMov && ind.id !== 'cantidad_colgada' && ind.id !== 'disponibilidad') {
+        if ((ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales') && ind.id !== 'cantidad_colgada') {
           return false;
         }
         const objs = allObjectives[ws.id] || [];
@@ -870,11 +808,13 @@ const calculateStatsForWorkshop = (
         }
         return true;
       });
-      const wsAreas = getWorkshopAreas(ws);
-      const yearActivities = allData.filter(a => wsAreas.includes(a.area) && a.fecha && a.fecha.startsWith(targetYear));
-      const yearMermas = mermas.filter(m => wsAreas.includes(m.area) && m.fecha && m.fecha.startsWith(targetYear));
+      const isMov = (ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales');
+      const movAreas = ['movimiento-jamones', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
+      const yearActivities = allData.filter(a => (isMov ? movAreas.includes(a.area) : a.area === ws.id) && a.fecha && a.fecha.startsWith(targetYear));
+      const yearMermas = mermas.filter(m => (isMov ? movAreas.includes(m.area) : m.area === ws.id) && m.fecha && m.fecha.startsWith(targetYear));
       
-      const stats = (yearActivities.length === 0 && yearMermas.length === 0) ? null : calculateStatsForWorkshop(ws, yearActivities, yearMermas, workshopIndicators);
+      const stats = (yearActivities.length === 0 && yearMermas.length === 0) ? null : calculateStats(yearActivities, ws.id, yearMermas);
+
       indicators.forEach(ind => {
         const val = stats ? stats[ind.id as keyof typeof stats] : null;
         rows.push({
@@ -890,7 +830,7 @@ const calculateStatsForWorkshop = (
     return rows;
   }, [allData, selectedDate, mermas, workshopIndicators]);
 
-    const mobileGroupedData = useMemo(() => {
+  const mobileGroupedData = useMemo(() => {
     let sourceStats: any[] = [];
     if (mobileViewMode === 'diaria') {
       sourceStats = dailyStats;
@@ -1541,8 +1481,7 @@ const ParetoModal: React.FC<ParetoModalProps> = ({ workshopId, date, allData, on
   const workshopName = TALLERES.find(t => t.id === workshopId)?.name || workshopId;
   
   const paretos = useMemo(() => {
-    const wsAreas = getWorkshopAreas(workshopId);
-    const wsData = allData.filter(a => wsAreas.includes(a.area) && a.fecha === date);
+    const wsData = allData.filter(a => a.area === workshopId && a.fecha === date);
     const disponibilidad: Record<string, number> = {};
     const rendimiento: Record<string, number> = {};
     const calidad: Record<string, number> = {};
@@ -1642,9 +1581,8 @@ interface RecordsModalProps {
 
 const RecordsModal: React.FC<RecordsModalProps> = ({ workshopId, date, type, category, allData, onClose }) => {
   const filteredRecords = useMemo(() => {
-    const wsAreas = getWorkshopAreas(workshopId);
     return allData.filter(a => {
-      if (!wsAreas.includes(a.area) || a.fecha !== date) return false;
+      if (a.area !== workshopId || a.fecha !== date) return false;
       
       if (type === 'disponibilidad') {
         return (a.tipoTarea === TaskType.ESPERAS || a.tipoTarea === TaskType.AVERIA) && a.formato === category && !a.afectaCalidad;
