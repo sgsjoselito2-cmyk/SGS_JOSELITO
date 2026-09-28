@@ -37,7 +37,7 @@ import {
 import { Activity, MasterSpeed, IncidenceMaster, TaskType, OEEObjectives, User, Bodega, TipoProducto, MovimientoBodega, PlanAccionSeguridad, GapSeguridad, IdeaDeMejora } from './types';
 import BodegasModule from './components/BodegasModule';
 import SavingsPanel from './components/SavingsPanel';
-import { INITIAL_WORKSHOP_INDICATORS, getInitialMasterSpeeds, getInitialOperarios, getInitialIncidenceMaster, INITIAL_OEE_OBJECTIVES, AREA_NAMES, INITIAL_ACTION_PLAN_TOP15, JOSELITO_LOGO } from './constants';
+import { INITIAL_WORKSHOP_INDICATORS, getInitialMasterSpeeds, getMaestroArea, getInitialOperarios, getInitialIncidenceMaster, INITIAL_OEE_OBJECTIVES, AREA_NAMES, INITIAL_ACTION_PLAN_TOP15, JOSELITO_LOGO } from './constants';
 import { supabase, isConfigured, debugConfig } from './lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { calcDuration } from './src/utils/index';
@@ -1208,9 +1208,10 @@ const App: React.FC = () => {
         // But for safety, we can check if any user has area === selectedArea
         
         // Filter speeds and incidences
+        const areaParaMaestro = getMaestroArea(selectedArea);
         const allSpeeds = safeParse('zitron_all_speeds', []);
         localSpeeds = Array.isArray(allSpeeds) 
-          ? allSpeeds.filter((s: any) => s && s.area === selectedArea).map((s: any) => ({
+          ? allSpeeds.filter((s: any) => s && (s.area === areaParaMaestro || s.area === selectedArea)).map((s: any) => ({
               ...s,
               tiempoTeorico: s.tiempoTeorico !== undefined ? s.tiempoTeorico : s.tiempo_teorico
             }))
@@ -1844,7 +1845,11 @@ const App: React.FC = () => {
     console.log(`handleSetSpeeds called for ${selectedArea} with ${newSpeeds.length} items`);
     setMasterSpeeds(newSpeeds);
     if (!selectedArea) return;
+    const areaParaMaestro = getMaestroArea(selectedArea);
     safeLocalStorageSetItem(`zitron_${selectedArea}_speeds`, JSON.stringify(newSpeeds));
+    if (areaParaMaestro !== selectedArea) {
+      safeLocalStorageSetItem(`zitron_${areaParaMaestro}_speeds`, JSON.stringify(newSpeeds));
+    }
     
     if (newSpeeds.length > 0) {
       const success = await executeOrQueue({
@@ -1856,7 +1861,7 @@ const App: React.FC = () => {
           tiempoTeorico: s.tiempoTeorico,
           peso: s.peso || 0,
           unidad: s.unidad || 'unidades',
-          area: selectedArea
+          area: areaParaMaestro
         })),
         filter: { column: 'id' }
       });
@@ -1866,9 +1871,13 @@ const App: React.FC = () => {
 
   const handleDeleteTask = useCallback(async (id: string) => {
     if (!selectedArea) return;
+    const areaParaMaestro = getMaestroArea(selectedArea);
     setMasterSpeeds(prev => {
       const next = prev.filter(task => String(task.id) !== String(id));
       safeLocalStorageSetItem(`zitron_${selectedArea}_speeds`, JSON.stringify(next));
+      if (areaParaMaestro !== selectedArea) {
+        safeLocalStorageSetItem(`zitron_${areaParaMaestro}_speeds`, JSON.stringify(next));
+      }
       
       executeOrQueue({
         table: 'master_speeds',
@@ -3128,13 +3137,14 @@ const App: React.FC = () => {
 
   const handleResetMasterSpeeds = async () => {
     if (!selectedArea) return;
+    const areaParaMaestro = getMaestroArea(selectedArea);
     setIsLoading(true);
     try {
       if (isConfigured) {
         const { error: delError } = await supabase
           .from('master_speeds')
           .delete()
-          .eq('area', selectedArea);
+          .eq('area', areaParaMaestro);
         
         if (delError) throw delError;
 
@@ -3145,7 +3155,7 @@ const App: React.FC = () => {
           tiempoTeorico: ms.tiempoTeorico,
           peso: ms.peso || 0,
           unidad: ms.unidad || 'unidades',
-          area: selectedArea
+          area: areaParaMaestro
         }));
 
         const { error: insError } = await supabase

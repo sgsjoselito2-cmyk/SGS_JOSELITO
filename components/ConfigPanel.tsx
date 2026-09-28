@@ -327,13 +327,20 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
     const p1 = parseFloat(newTaskPeso) || 0;
     
     if (name.length > 0) {
+      const newTaskArea = (
+        selectedArea === 'movimiento-jamones-equipo1' ||
+        selectedArea === 'movimiento-jamones-equipo2' ||
+        selectedArea === 'movimiento-jamones-paco' ||
+        selectedArea === 'movimiento-jamones-perales'
+      ) ? 'movimiento-jamones' : selectedArea;
+
       const newTask: MasterSpeed = {
         id: crypto.randomUUID(),
         formato: name,
         tiempoTeorico: t1,
         peso: p1,
         unidad: newTaskUnidad,
-        area: selectedArea
+        area: newTaskArea
       };
       setMasterSpeeds([...masterSpeeds, newTask]);
       setNewTaskName('');

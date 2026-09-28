@@ -90,11 +90,25 @@ export const AREA_COLUMNS: Record<string, string[]> = {
   'movimiento-jamones': ['Unidades Hora']
 };
 
+export const getMaestroArea = (areaId?: string | null): string => {
+  if (!areaId) return '';
+  if (
+    areaId === 'movimiento-jamones-equipo1' ||
+    areaId === 'movimiento-jamones-equipo2' ||
+    areaId === 'movimiento-jamones-paco' ||
+    areaId === 'movimiento-jamones-perales'
+  ) {
+    return 'movimiento-jamones';
+  }
+  return areaId;
+};
+
 export const getInitialMasterSpeeds = (areaId: string): MasterSpeed[] => {
+  const effectiveArea = getMaestroArea(areaId);
   return [
-    { id: `ms-${areaId}-1`, formato: 'FORMATO ESTÁNDAR', tiempoTeorico: 60, area: areaId },
-    { id: `ms-${areaId}-2`, formato: 'FORMATO GRANDE', tiempoTeorico: 40, area: areaId },
-    { id: `ms-${areaId}-3`, formato: 'FORMATO PEQUEÑO', tiempoTeorico: 120, area: areaId }
+    { id: `ms-${effectiveArea}-1`, formato: 'FORMATO ESTÁNDAR', tiempoTeorico: 60, area: effectiveArea },
+    { id: `ms-${effectiveArea}-2`, formato: 'FORMATO GRANDE', tiempoTeorico: 40, area: effectiveArea },
+    { id: `ms-${effectiveArea}-3`, formato: 'FORMATO PEQUEÑO', tiempoTeorico: 120, area: effectiveArea }
   ];
 };
 

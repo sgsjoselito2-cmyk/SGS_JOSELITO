@@ -123,7 +123,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
     const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
     const envAreas = ['env-envasado', 'env-empaquetado'];
     const expAreas = ['expedicion', 'preparacion-exp'];
-    const movAreas = ['movimiento-jamones'];
+    const movAreas = ['movimiento-jamones', 'movimiento-jamones-equipo1', 'movimiento-jamones-equipo2', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
 
     if (selectedArea === 'sala-blanca-dashboard') {
       combined = combined.filter(r => sbAreas.includes(r.area));
@@ -235,7 +235,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
     const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
     const envAreas = ['env-envasado', 'env-empaquetado'];
     const expAreas = ['expedicion', 'preparacion-exp'];
-    const movAreas = ['movimiento-jamones'];
+    const movAreas = ['movimiento-jamones', 'movimiento-jamones-equipo1', 'movimiento-jamones-equipo2', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
 
     if (selectedArea === 'sala-blanca-dashboard') {
       combined = combined.filter(r => sbAreas.includes(r.area));
@@ -336,7 +336,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
       const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
       const envAreas = ['env-envasado', 'env-empaquetado'];
       const expAreas = ['expedicion', 'preparacion-exp'];
-      const movAreas = ['movimiento-jamones'];
+      const movAreas = ['movimiento-jamones', 'movimiento-jamones-equipo1', 'movimiento-jamones-equipo2', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
 
       if (selectedArea === 'sala-blanca-dashboard') {
         return sbAreas.includes(r.area);
@@ -433,7 +433,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
         const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
         const envAreas = ['env-envasado', 'env-empaquetado'];
         const expAreas = ['expedicion', 'preparacion-exp'];
-        const movAreas = ['movimiento-jamones'];
+        const movAreas = ['movimiento-jamones', 'movimiento-jamones-equipo1', 'movimiento-jamones-equipo2', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
         
         if (selectedArea === 'sala-blanca-dashboard') {
           speedObj = masterSpeeds.find(ms => normalizeFormato(ms.formato) === normalizeFormato(formato) && ms.area && sbAreas.includes(ms.area));
