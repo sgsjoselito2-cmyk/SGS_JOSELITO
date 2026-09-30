@@ -179,9 +179,14 @@ const App: React.FC = () => {
     }
     
     // Ensure expedicion indicators exist
-    if (parsed && !parsed['expedicion']) {
-      parsed['expedicion'] = INITIAL_WORKSHOP_INDICATORS['expedicion'];
-      changed = true;
+    if (parsed) {
+      if (!parsed['expedicion']) {
+        parsed['expedicion'] = INITIAL_WORKSHOP_INDICATORS['expedicion'];
+        changed = true;
+      } else if (!parsed['expedicion'].some((ind: any) => ind.id === 'piezas_persona_hora')) {
+        parsed['expedicion'].unshift({ id: 'piezas_persona_hora', name: 'PIEZAS / PERSONA / HORA' });
+        changed = true;
+      }
     }
 
     // Ensure sb-empaquetado-loncheado indicators are strictly restricted to PPH blister empaquetado
@@ -223,10 +228,12 @@ const App: React.FC = () => {
       }
     });
     
-    // Ensure preparacion-exp indicators exist
-    if (parsed && !parsed['preparacion-exp']) {
-      parsed['preparacion-exp'] = INITIAL_WORKSHOP_INDICATORS['preparacion-exp'];
-      changed = true;
+    // Ensure preparacion-exp indicators exist and have strictly pph and disponibilidad
+    if (parsed) {
+      if (!parsed['preparacion-exp'] || parsed['preparacion-exp'].length !== 2 || !parsed['preparacion-exp'].some((i: any) => i.id === 'pph') || !parsed['preparacion-exp'].some((i: any) => i.id === 'disponibilidad')) {
+        parsed['preparacion-exp'] = INITIAL_WORKSHOP_INDICATORS['preparacion-exp'];
+        changed = true;
+      }
     }
     
     if (changed) {
@@ -3361,7 +3368,8 @@ const App: React.FC = () => {
     aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, 
     mermasToSave?: any[],
     jefe_equipo_filter?: string | null,
-    turnoIdFilter?: string | null
+    turnoIdFilter?: string | null,
+    closureComment?: string
   ) => {
     if (!selectedArea) return;
     setIsLoading(true);
@@ -3377,7 +3385,8 @@ const App: React.FC = () => {
     const remainingActivities = activities.filter(a => !filteredActivities.some(fa => fa.id === a.id));
 
     try {
-      const readyToArchive: Activity[] = filteredActivities.map(a => {
+      let closureCommentSaved = false;
+      const readyToArchive: Activity[] = filteredActivities.map((a, idx) => {
         const durMin = a.horaFin
           ? ((a.duracionMin && a.duracionMin > 0) ? a.duracionMin : calcDuration(a.horaInicio, a.horaFin))
           : calcDuration(a.horaInicio, timeStr);
@@ -3410,6 +3419,14 @@ const App: React.FC = () => {
           );
         }
 
+        let com = a.comentarios || '';
+        if (closureComment && idx === filteredActivities.length - 1) {
+          com = com ? `${com} | ${closureComment}` : closureComment;
+          closureCommentSaved = true;
+        } else if (!a.horaFin) {
+          com = com ? `${com} (CIERRE TURNO)` : "CIERRE TURNO";
+        }
+
         if (!a.horaFin) {
           return { 
             ...a, 
@@ -3417,13 +3434,31 @@ const App: React.FC = () => {
             duracionMin: durMin, 
             cantidad,
             cantidadNok,
-            comentarios: a.comentarios ? `${a.comentarios} (CIERRE TURNO)` : "CIERRE TURNO", 
+            comentarios: com, 
             fecha, 
             area: selectedArea 
           };
         }
-        return { ...a, fecha, area: selectedArea, cantidad, cantidadNok, duracionMin: durMin };
+        return { ...a, fecha, area: selectedArea, cantidad, cantidadNok, duracionMin: durMin, comentarios: com };
       });
+
+      if (closureComment && !closureCommentSaved) {
+        const closureAct: Activity = {
+          id: `cierre-${selectedArea}-${Date.now()}`,
+          operarios: [],
+          formato: 'CIERRE TURNO',
+          tipoTarea: TaskType.PRODUCCION,
+          horaInicio: timeStr,
+          horaFin: timeStr,
+          duracionMin: 0,
+          cantidad: 0,
+          cantidadNok: 0,
+          comentarios: closureComment,
+          fecha,
+          area: selectedArea
+        };
+        readyToArchive.push(closureAct);
+      }
 
       setHistory(prev => {
         const next = [...readyToArchive, ...prev].slice(0, 500);

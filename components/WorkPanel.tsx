@@ -17,7 +17,7 @@ interface WorkPanelProps {
   onEndTurn: (userNames: string[], closureData?: { cantidad: number, comentarios: string, id?: string }) => void;
   onUpdateActivity?: (activity: Activity) => void;
   onDeleteActivity?: (id: string, isHistory: boolean) => void;
-  onFinalizeShift: (fecha: string, forceClose?: boolean, aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, mermasToSave?: any[], jefe_equipo_filter?: string | null, turnoIdFilter?: string | null) => void;
+  onFinalizeShift: (fecha: string, forceClose?: boolean, aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, mermasToSave?: any[], jefe_equipo_filter?: string | null, turnoIdFilter?: string | null, closureComment?: string) => void;
   onRefresh: () => void;
   onAddMultipleActivities?: (newActivities: any[], closedActivitiesData: any[]) => void;
   isEndModalOpen: boolean;
@@ -440,7 +440,12 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
     }
   }, [shiftDate, showShiftClosureModal, activities, selectedArea]);
   const [activeOperators, setActiveOperators] = useState<string[]>([]);
-  const [pendingShiftFinalization, setPendingShiftFinalization] = useState<{fecha: string, force: boolean, aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, mermasToSave?: any[], turnoIdFilter?: string | null} | null>(null);
+  const [expedicionCounts, setExpedicionCounts] = useState<{ jamones: number | string, paletas: number | string, cajasNavidad: number | string }>({
+    jamones: 0,
+    paletas: 0,
+    cajasNavidad: 0
+  });
+  const [pendingShiftFinalization, setPendingShiftFinalization] = useState<{fecha: string, force: boolean, aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, mermasToSave?: any[], turnoIdFilter?: string | null, closureComment?: string} | null>(null);
 
   const handleEdit = (record: Activity) => {
     setEditingId(record.id);
@@ -543,7 +548,8 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
             selectedArea === 'movimiento-jamones' ? jefeEquipoTurno : 
             selectedArea === 'movimiento-jamones-paco' ? 'PACO MORENO' : 
             selectedArea === 'movimiento-jamones-perales' ? 'PERALES' : null,
-            pendingShiftFinalization.turnoIdFilter
+            pendingShiftFinalization.turnoIdFilter,
+            pendingShiftFinalization.closureComment
           );
           if (selectedArea === 'movimiento-jamones') {
             setJefeEquipoTurno(null);
@@ -809,8 +815,18 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       ));
       
       if (formats.length === 0) {
+        if (selectedArea === 'expedicion') {
+          setExpedicionCounts({ jamones: 0, paletas: 0, cajasNavidad: 0 });
+          setShiftClosureData({});
+          setShowShiftClosureModal(true);
+          return;
+        }
         setShowShiftConfirmModal(true);
         return;
+      }
+
+      if (selectedArea === 'expedicion') {
+        setExpedicionCounts({ jamones: 0, paletas: 0, cajasNavidad: 0 });
       }
 
       const initialData: Record<string, any> = {};
@@ -835,7 +851,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
     handleShiftFinalizeRequestForDate(fechaHoy);
   };
 
-  const executeFinalizeShift = (aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, mermasToSave?: any[]) => {
+  const executeFinalizeShift = (aggregatedQuantities?: Record<string, { cantidad: number, cantidadNok?: number }>, mermasToSave?: any[], closureComment?: string) => {
     const relevantActivities = activities.filter(a => 
       a.fecha === shiftDate && 
       a.operarios?.some(o => selectedUsers.includes(o))
@@ -847,7 +863,8 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       force: isForcingClosure, 
       aggregatedQuantities, 
       mermasToSave,
-      turnoIdFilter: currentTurnId
+      turnoIdFilter: currentTurnId,
+      closureComment
     });
     setShowPassModal(true);
     setShowShiftConfirmModal(false);
@@ -857,16 +874,25 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
   };
 
   const handleConfirmClosure = () => {
+    const isExpedicion = selectedArea === 'expedicion';
     const isValid = Object.values(shiftClosureData).every(d => d.cantidad !== '');
-    if (!isValid) {
+    if (!isValid && !isExpedicion) {
       setValidationError('⚠️ Por favor, rellene todas las cantidades.');
       return;
     }
 
     const totalQty = Object.values(shiftClosureData).reduce((sum, d) => sum + (safeParse(d.cantidad) || 0), 0);
-    if (totalQty === 0) {
+    if (totalQty === 0 && !isExpedicion) {
       setValidationError('⚠️ La cantidad tiene que ser diferente de 0');
       return;
+    }
+
+    let closureComment: string | undefined = undefined;
+    if (isExpedicion) {
+      const jamones = Math.max(0, parseInt(String(expedicionCounts.jamones || '0'), 10) || 0);
+      const paletas = Math.max(0, parseInt(String(expedicionCounts.paletas || '0'), 10) || 0);
+      const cajasNavidad = Math.max(0, parseInt(String(expedicionCounts.cajasNavidad || '0'), 10) || 0);
+      closureComment = `CIERRE TURNO | ${JSON.stringify({ jamones, paletas, cajasNavidad })}`;
     }
 
     const aggregated: Record<string, { cantidad: number, cantidadNok?: number }> = {};
@@ -914,7 +940,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
           });
       }
     });
-    executeFinalizeShift(aggregated, mermasToSave);
+    executeFinalizeShift(aggregated, mermasToSave, closureComment);
   };
 
   const getIncidenceBtnClass = (i: IncidenceMaster) => {
@@ -1107,12 +1133,71 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
             </div>
 
             <div className="max-h-[65vh] overflow-y-auto p-5 space-y-4">
-              {Object.keys(shiftClosureData).length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">
-                    No hay actividades de producción para esta fecha
-                  </p>
+              {selectedArea === 'expedicion' && (
+                <div className="p-4 bg-blue-50/80 rounded-2xl border-2 border-blue-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-black text-blue-900 uppercase text-[13px] tracking-wide">
+                      Cantidades Expedición
+                    </h3>
+                    <span className="text-[10px] font-black text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full uppercase">
+                      Cierre de Turno
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-700 uppercase mb-1">Jamones</label>
+                      <input 
+                        type="number" 
+                        min="0"
+                        value={expedicionCounts.jamones}
+                        onChange={(e) => setExpedicionCounts(prev => ({ 
+                          ...prev, 
+                          jamones: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0) 
+                        }))}
+                        className="w-full border-2 border-blue-200 bg-white p-2.5 rounded-xl font-black text-[15px] text-center focus:border-blue-600 outline-none text-slate-900" 
+                        placeholder="0" 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-700 uppercase mb-1">Paletas</label>
+                      <input 
+                        type="number" 
+                        min="0"
+                        value={expedicionCounts.paletas}
+                        onChange={(e) => setExpedicionCounts(prev => ({ 
+                          ...prev, 
+                          paletas: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0) 
+                        }))}
+                        className="w-full border-2 border-blue-200 bg-white p-2.5 rounded-xl font-black text-[15px] text-center focus:border-blue-600 outline-none text-slate-900" 
+                        placeholder="0" 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-700 uppercase mb-1">Cajas de Navidad</label>
+                      <input 
+                        type="number" 
+                        min="0"
+                        value={expedicionCounts.cajasNavidad}
+                        onChange={(e) => setExpedicionCounts(prev => ({ 
+                          ...prev, 
+                          cajasNavidad: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0) 
+                        }))}
+                        className="w-full border-2 border-blue-200 bg-white p-2.5 rounded-xl font-black text-[15px] text-center focus:border-blue-600 outline-none text-slate-900" 
+                        placeholder="0" 
+                      />
+                    </div>
+                  </div>
                 </div>
+              )}
+
+              {Object.keys(shiftClosureData).length === 0 ? (
+                selectedArea === 'expedicion' ? null : (
+                  <div className="text-center py-8">
+                    <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">
+                      No hay actividades de producción para esta fecha
+                    </p>
+                  </div>
+                )
               ) : (
                 Object.keys(shiftClosureData).map(formato => {
                   const d = shiftClosureData[formato];
@@ -1214,7 +1299,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
             </div>
             <div className="flex gap-3 p-4 border-t border-slate-100">
               <button id="btn-cancel-closure" onClick={() => setShowShiftClosureModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-400 font-black rounded-xl uppercase text-[12px]">Cancelar</button>
-              {Object.keys(shiftClosureData).length === 0 ? (
+              {(Object.keys(shiftClosureData).length === 0 && selectedArea !== 'expedicion') ? (
                 <button 
                   id="btn-close-no-qty"
                   onClick={() => executeFinalizeShift({}, [])} 

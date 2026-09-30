@@ -105,6 +105,13 @@ export const getMaestroArea = (areaId?: string | null): string => {
 
 export const getInitialMasterSpeeds = (areaId: string): MasterSpeed[] => {
   const effectiveArea = getMaestroArea(areaId);
+  if (effectiveArea === 'expedicion' || areaId === 'expedicion') {
+    return [
+      { id: `ms-expedicion-1`, formato: 'JAMONES', tiempoTeorico: 0, area: 'expedicion' },
+      { id: `ms-expedicion-2`, formato: 'PALETAS', tiempoTeorico: 0, area: 'expedicion' },
+      { id: `ms-expedicion-3`, formato: 'CAJAS DE NAVIDAD', tiempoTeorico: 0, area: 'expedicion' }
+    ];
+  }
   return [
     { id: `ms-${effectiveArea}-1`, formato: 'FORMATO ESTÁNDAR', tiempoTeorico: 60, area: effectiveArea },
     { id: `ms-${effectiveArea}-2`, formato: 'FORMATO GRANDE', tiempoTeorico: 40, area: effectiveArea },
@@ -134,7 +141,7 @@ export const WORKSHOP_HELP_CONTENT: Record<string, { usage: string; indicators: 
   'env-envasado': { usage: "Selecciona tu nombre, elige el formato de envasado y pulsa 'INICIAR TAREA'. Al finalizar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
   'env-empaquetado': { usage: "Selecciona tu nombre, elige el formato de empaquetado y pulsa 'INICIAR TAREA'. Al finalizar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
   'expedicion': { usage: "Selecciona tu nombre, elige el formato de expedición y pulsa 'INICIAR TAREA'. Al finalizar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
-  'preparacion-exp': { usage: "Selecciona tu nombre, elige el formato de prep. expediciones y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
+  'preparacion-exp': { usage: "Selecciona tu nombre, elige el formato de prep. expediciones y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "PPH = Cantidad total producción / Horas de producción\nDispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A)) x 100" },
   'movimiento-jamones-paco': { usage: "Selecciona tu nombre, elige el tipo de movimiento y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
   'movimiento-jamones-perales': { usage: "Selecciona tu nombre, elige el tipo de movimiento y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
   'movimiento-jamones': { usage: "Selecciona tu nombre, elige el tipo de movimiento y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
@@ -211,10 +218,14 @@ export const INITIAL_WORKSHOP_INDICATORS: Record<string, {id: string, name: stri
     { id: 'productividad', name: 'Productividad (OEE)' }
   ],
   'expedicion': [
+    { id: 'piezas_persona_hora', name: 'PIEZAS / PERSONA / HORA' },
+    { id: 'rendimiento', name: 'Rendimiento' },
+    { id: 'disponibilidad', name: 'Disponibilidad' },
     { id: 'productividad', name: 'OEE EXPEDICIONES' }
   ],
   'preparacion-exp': [
-    { id: 'productividad', name: 'OEE PREPARACIÓN' }
+    { id: 'pph', name: 'PPH' },
+    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' }
   ],
   'movimiento-jamones-paco': [
     { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },

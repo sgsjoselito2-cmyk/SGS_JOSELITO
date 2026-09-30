@@ -8,6 +8,7 @@ import { GoogleGenAI } from "@google/genai";
 import { Activity, MasterSpeed, IncidenceMaster, OEEObjectives, TaskType } from '../types';
 import { generateContentWithRetry } from '../src/utils/aiUtils';
 import { calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals, normalizeFormato } from '../src/utils/index';
+import { getInitialMasterSpeeds } from '../constants';
 import { X } from 'lucide-react';
 
 interface DashboardProps {
@@ -337,6 +338,12 @@ export const calculateStats = (
     const pmInput = acts.reduce((sum, a) => sum + getDur(a) * getOps(a), 0);
     const qtyInput = acts.reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
     pph = calcPPHFromMinutes(pmInput, qtyInput);
+  } else if (aid.includes('preparacion-exp') || aid === 'preparacion-exp') {
+    const acts = data.filter(a => isP(a));
+    const qtyInput = acts.reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
+    const prodMinutes = uniqueTimeP > 0 ? uniqueTimeP : acts.reduce((sum, a) => sum + getDur(a), 0);
+    const horasProduccion = prodMinutes / 60;
+    pph = horasProduccion > 0 ? qtyInput / horasProduccion : 0;
   } else if (aid.includes('sb-empaquetado-loncheado')) {
     const bActs = data.filter(a => isP(a) && (!a.formato || a.formato.toUpperCase().includes('BLISTER') || a.formato.toUpperCase().includes('BLÍSTER')));
     const cuchilloActs = data.filter(a => isP(a) && a.formato?.toUpperCase().includes('CUCHILLO'));
@@ -442,12 +449,10 @@ export const calculateStats = (
     cantidad_colgada: hasData ? cantidad_colgada.toFixed(0) : '',
     tiempo_produccion_real: uniqueTimeP,
     tiempo_esperas: uniqueTimeE,
-    tiempo_averias: uniqueTimeA
+    tiempo_averias: uniqueTimeA,
+    piezas_persona_hora: ''
   };
 
-  // 2. El CÁLCULO del indicador personalizado usa también AMBAS tablas para obtener los valores:
-  //    const datosCalculo = [...activities, ...history]
-  //      .filter(a => a.area === area && a.fecha === fecha);
   const targetArea = areaId;
   const targetFecha = data.find(a => a.fecha)?.fecha || '';
   
@@ -455,11 +460,113 @@ export const calculateStats = (
     ? [...activities, ...history].filter(a => a.area === targetArea && a.fecha === targetFecha)
     : data;
 
+  const isExpedicion = aid === 'expedicion' || (aid.includes('expedicion') && !aid.includes('preparacion'));
+  if (isExpedicion) {
+    const recordsToScan = [...data, ...activities, ...history];
+    const targetDates = Array.from(new Set([...data.map(a => a.fecha), targetFecha].filter(Boolean))) as string[];
+    
+    let totalJamones = 0;
+    let totalPaletas = 0;
+    let totalCajasNavidad = 0;
+    let foundClosureData = false;
+
+    if (targetDates.length > 0) {
+      targetDates.forEach(d => {
+        const dayRecs = recordsToScan.filter(a => a.fecha === d && (a.area === 'expedicion' || (!a.area && isExpedicion)));
+        for (const rec of dayRecs) {
+          const c = rec.comentarios || (rec as any).comments || '';
+          if (typeof c === 'string' && (c.includes('jamones') || c.includes('cajasNavidad') || c.includes('CIERRE TURNO'))) {
+            try {
+              const jsonMatch = c.match(/\{[\s\S]*"jamones"[\s\S]*\}/) || c.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (parsed.jamones !== undefined || parsed.paletas !== undefined || parsed.cajasNavidad !== undefined) {
+                  totalJamones += Number(parsed.jamones) || 0;
+                  totalPaletas += Number(parsed.paletas) || 0;
+                  totalCajasNavidad += Number(parsed.cajasNavidad) || 0;
+                  foundClosureData = true;
+                  break;
+                }
+              }
+            } catch (_) {}
+          }
+        }
+      });
+    }
+
+    if (!foundClosureData) {
+      for (const rec of recordsToScan) {
+        if (rec.area && rec.area !== 'expedicion') continue;
+        const c = rec.comentarios || (rec as any).comments || '';
+        if (typeof c === 'string' && (c.includes('jamones') || c.includes('cajasNavidad') || c.includes('CIERRE TURNO'))) {
+          try {
+            const jsonMatch = c.match(/\{[\s\S]*"jamones"[\s\S]*\}/) || c.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
+              if (parsed.jamones !== undefined || parsed.paletas !== undefined || parsed.cajasNavidad !== undefined) {
+                totalJamones = Number(parsed.jamones) || 0;
+                totalPaletas = Number(parsed.paletas) || 0;
+                totalCajasNavidad = Number(parsed.cajasNavidad) || 0;
+                foundClosureData = true;
+                break;
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
+    const speedsToUse = (masterSpeeds && masterSpeeds.length > 0)
+      ? masterSpeeds
+      : getInitialMasterSpeeds('expedicion');
+
+    const msJamon = speedsToUse.find(ms => (ms.area === 'expedicion' || !ms.area) && normalizeFormato(ms.formato) === 'JAMONES');
+    const msPaleta = speedsToUse.find(ms => (ms.area === 'expedicion' || !ms.area) && normalizeFormato(ms.formato) === 'PALETAS');
+    const msCaja = speedsToUse.find(ms => (ms.area === 'expedicion' || !ms.area) && normalizeFormato(ms.formato) === 'CAJAS DE NAVIDAD');
+
+    const T_jamon = Number(msJamon?.tiempoTeorico || 0);
+    const T_paleta = Number(msPaleta?.tiempoTeorico || 0);
+    const T_caja = Number(msCaja?.tiempoTeorico || 0);
+
+    const tiempoRealProduccion = uniqueTimeP > 0 ? uniqueTimeP : (totalTiempoDisponible > 0 ? totalTiempoDisponible : sumDurationP);
+
+    if (T_jamon === 0 && T_paleta === 0 && T_caja === 0) {
+      statsObj.rendimiento = '';
+      statsObj.productividad = '';
+    } else {
+      const tiempoTeorico = (totalJamones * T_jamon) + (totalPaletas * T_paleta) + (totalCajasNavidad * T_caja);
+      const renVal = tiempoRealProduccion > 0 ? (tiempoTeorico / tiempoRealProduccion) * 100 : 0;
+      statsObj.rendimiento = (hasData || foundClosureData) ? Math.min(100, Math.max(0, renVal)).toFixed(1) : '';
+      if (statsObj.rendimiento !== '' && statsObj.disponibilidad !== '') {
+        const renNum = parseFloat(statsObj.rendimiento) || 0;
+        const dispoNum = parseFloat(statsObj.disponibilidad) || 0;
+        const calNum = parseFloat(statsObj.calidad) || 100;
+        statsObj.productividad = ((dispoNum * renNum * calNum) / 10000).toFixed(1);
+      }
+    }
+
+    // CAMBIO 3: PIEZAS / PERSONA / HORA
+    const totalPiezas = totalJamones + totalPaletas + totalCajasNavidad;
+    const relevantOps = new Set(
+      (data.length > 0 ? data : (datosCalculo.length > 0 ? datosCalculo : recordsToScan.filter(a => (a.area === 'expedicion' || (!a.area && isExpedicion)))))
+        .flatMap(a => a.operarios || [])
+    );
+    const personas = relevantOps.size > 0 ? relevantOps.size : 1;
+    const horasProduccion = tiempoRealProduccion / 60;
+    const piezasPersonaHora = (horasProduccion > 0 && personas > 0)
+      ? (totalPiezas / personas / horasProduccion)
+      : 0;
+    statsObj.piezas_persona_hora = (hasData || foundClosureData)
+      ? (piezasPersonaHora > 0 ? (piezasPersonaHora % 1 === 0 ? piezasPersonaHora.toFixed(0) : piezasPersonaHora.toFixed(1)) : '0')
+      : '';
+  }
+
   const baseVars: Record<string, number> = {
     disponibilidad: parseFloat(statsObj.disponibilidad) || 0,
     rendimiento: parseFloat(statsObj.rendimiento) || 0,
     calidad: parseFloat(statsObj.calidad) || 0,
     pph: parseFloat(statsObj.pph) || 0,
+    piezas_persona_hora: parseFloat(statsObj.piezas_persona_hora) || 0,
     cantidad: totalParts,
     cantidadnok: totalPartsNok,
     personas: 0,
@@ -496,7 +603,7 @@ export const calculateStats = (
   }
 
   const rawIndicators = (resolvedIndicators && targetArea) ? (resolvedIndicators[targetArea] || resolvedIndicators.default || []) : [];
-  const standardKpiIds = ['productividad', 'oee', 'disponibilidad', 'rendimiento', 'calidad', 'pph', 'merma1', 'merma2', 'pph_blister_emp', 'pph_sin_blister_cuchillo', 'pph_sin_marcar', 'pph_empaquetado_jabu', 'pph_jamones', 'pph_paletas', 'pph_manteca', 'pph_descolgar_colgar', 'cantidad_colgada', 'subproducto'];
+  const standardKpiIds = ['productividad', 'oee', 'disponibilidad', 'rendimiento', 'calidad', 'pph', 'piezas_persona_hora', 'merma1', 'merma2', 'pph_blister_emp', 'pph_sin_blister_cuchillo', 'pph_sin_marcar', 'pph_empaquetado_jabu', 'pph_jamones', 'pph_paletas', 'pph_manteca', 'pph_descolgar_colgar', 'cantidad_colgada', 'subproducto'];
   rawIndicators.forEach((ind: any) => {
     if (ind.formula && !standardKpiIds.includes(ind.id)) {
       const val = evaluateFormula(ind.formula, baseVars, ind.escala);
@@ -688,7 +795,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // Filtered data for selected date
   const dayData = useMemo(() => allData.filter(a => a.fecha === selectedDate), [allData, selectedDate]);
-  const stats = useMemo(() => calculateStats(dayData, selectedArea, mermas.filter(m => m.fecha === selectedDate), workshopIndicators, filteredActivities, filteredHistory), [dayData, selectedArea, selectedDate, mermas, workshopIndicators, filteredActivities, filteredHistory]);
+  const stats = useMemo(() => calculateStats(dayData, selectedArea, mermas.filter(m => m.fecha === selectedDate), workshopIndicators, filteredActivities, filteredHistory, false, masterSpeeds), [dayData, selectedArea, selectedDate, mermas, workshopIndicators, filteredActivities, filteredHistory, masterSpeeds]);
 
   // Scorecard Data
   const scorecardData = useMemo(() => {
@@ -702,7 +809,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       const data = allData.filter(a => a.fecha === dateStr);
       return { 
         label: dateStr, 
-        total: calculateStats(data, selectedArea, mermas.filter(m => m.fecha === dateStr), workshopIndicators, filteredActivities, filteredHistory),
+        total: calculateStats(data, selectedArea, mermas.filter(m => m.fecha === dateStr), workshopIndicators, filteredActivities, filteredHistory, false, masterSpeeds),
       };
     });
 
@@ -724,7 +831,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       });
       return { 
         label: `S${weekNum}`, 
-        total: calculateStats(data, selectedArea, weekMermas, workshopIndicators, filteredActivities, filteredHistory),
+        total: calculateStats(data, selectedArea, weekMermas, workshopIndicators, filteredActivities, filteredHistory, false, masterSpeeds),
       };
     });
 
@@ -742,15 +849,15 @@ const Dashboard: React.FC<DashboardProps> = ({
       annual: [
         { 
           label: prevYear.toString(), 
-          total: calculateStats(prevYearData, selectedArea, prevYearMermas, workshopIndicators, filteredActivities, filteredHistory),
+          total: calculateStats(prevYearData, selectedArea, prevYearMermas, workshopIndicators, filteredActivities, filteredHistory, false, masterSpeeds),
         },
         { 
           label: currentYear.toString(), 
-          total: calculateStats(currentYearData, selectedArea, currentYearMermas, workshopIndicators, filteredActivities, filteredHistory),
+          total: calculateStats(currentYearData, selectedArea, currentYearMermas, workshopIndicators, filteredActivities, filteredHistory, false, masterSpeeds),
         }
       ]
     };
-  }, [allData, selectedDate, selectedArea, mermas, workshopIndicators, filteredActivities, filteredHistory]);
+  }, [allData, selectedDate, selectedArea, mermas, workshopIndicators, filteredActivities, filteredHistory, masterSpeeds]);
 
   const isTimeBased = false;
 
@@ -930,6 +1037,9 @@ const Dashboard: React.FC<DashboardProps> = ({
       if ((selectedArea || '').includes('movimiento-jamones') && (ind.id === 'pph' || ind.id === 'pph_pesar' || ind.label.includes('PESAR'))) {
         return false;
       }
+      if (selectedArea === 'preparacion-exp' && ind.id !== 'pph' && ind.id !== 'disponibilidad') {
+        return false;
+      }
       return ind.showInTop5 === true;
     });
     console.log('Indicadores TOP 5:', indicadoresFiltrados);
@@ -948,7 +1058,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             {indicadoresFiltrados.map((indicator) => {
               const staticObj = (oeeObjectives as any)[indicator.objKey || ''] || 0;
               const isLowerBetter = indicator.id.startsWith('merma') || indicator.id === 'subproducto';
-              const isPPH = indicator.id.startsWith('pph') || indicator.id === 'cantidad_colgada';
+              const isPPH = indicator.id.startsWith('pph') || indicator.id === 'cantidad_colgada' || indicator.id === 'piezas_persona_hora';
 
               return (
                 <tr key={indicator.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
@@ -1000,6 +1110,21 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
     if (aid.includes('sb-empaquetado-deshuesado') || aid.includes('env-envasado') || aid.includes('env-empaquetado')) {
       kpis.push({ label: 'PPH', val: stats.pph, obj: getObjectiveForDate('pph', selectedDate), color: 'indigo', key: 'pph' });
+    }
+    if (aid.includes('expedicion') && !aid.includes('preparacion')) {
+      kpis.push({ label: 'PIEZAS / PERSONA / HORA', val: stats.piezas_persona_hora, obj: getObjectiveForDate('piezas_persona_hora', selectedDate), color: 'indigo', key: 'piezas_persona_hora' });
+    }
+    if (aid === 'preparacion-exp' || aid.includes('preparacion-exp')) {
+      kpis.push({ label: 'PPH', val: stats.pph, obj: getObjectiveForDate('pph', selectedDate), color: 'indigo', key: 'pph' });
+      kpis.push({ 
+        label: 'DISPONIBILIDAD (%)', 
+        val: `${stats.disponibilidad}${stats.disponibilidad !== '' ? '%' : ''}`, 
+        obj: `${getObjectiveForDate('disponibilidad', selectedDate)}%`, 
+        color: 'blue', 
+        key: 'disponibilidad', 
+        rawVal: stats.disponibilidad, 
+        rawObj: getObjectiveForDate('disponibilidad', selectedDate) 
+      });
     }
     if (aid.includes('movimiento-jamones')) {
       kpis.push({ label: 'PPH COLGAR JAMONES', val: stats.pph_jamones, obj: getObjectiveForDate('pph_jamones', selectedDate), color: 'indigo', key: 'pph_jamones' });
@@ -1092,13 +1217,20 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* KPI Cards */}
-      <div className={`grid gap-1 sm:gap-2 shrink-0 ${(selectedArea || '').includes('movimiento-jamones') ? 'grid-cols-1 max-w-xs' : selectedArea === 'sb-empaquetado-loncheado' ? 'grid-cols-2 max-w-md' : 'grid-cols-2 md:grid-cols-4'}`}>
+      <div className={`grid gap-1 sm:gap-2 shrink-0 ${(selectedArea || '').includes('movimiento-jamones') ? 'grid-cols-1 max-w-xs' : (selectedArea === 'sb-empaquetado-loncheado' || selectedArea === 'preparacion-exp') ? 'grid-cols-2 max-w-md' : 'grid-cols-2 md:grid-cols-4'}`}>
         {[
+          { label: 'PPH', val: `${stats.pph || '—'}`, key: 'pph' },
           { label: 'Dispon.', val: `${stats.disponibilidad}${stats.disponibilidad !== '' ? '%' : ''}`, key: 'disponibilidad' },
           { label: 'Rendim.', val: `${stats.rendimiento}${stats.rendimiento !== '' ? '%' : ''}`, key: 'rendimiento' },
           { label: 'Calidad', val: `${stats.calidad}${stats.calidad !== '' ? '%' : ''}`, key: 'calidad' },
           { label: 'OEE', val: `${stats.productividad}${stats.productividad !== '' ? '%' : ''}`, key: 'productividad', isDark: true }
         ].filter(kpi => {
+          if (selectedArea === 'preparacion-exp') {
+            return kpi.key === 'pph' || kpi.key === 'disponibilidad';
+          }
+          if (kpi.key === 'pph') {
+            return false;
+          }
           if ((selectedArea || '').includes('movimiento-jamones') && kpi.key !== 'disponibilidad') {
             return false;
           }
@@ -1121,7 +1253,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto pr-1 space-y-2 no-scrollbar pb-24">
-        <div className={`grid gap-2 ${(selectedArea || '').includes('movimiento-jamones') ? 'grid-cols-1 max-w-xs' : selectedArea === 'sb-empaquetado-loncheado' ? 'grid-cols-2 max-w-md' : 'grid-cols-2 lg:grid-cols-4'}`}>
+        <div className={`grid gap-2 ${(selectedArea || '').includes('movimiento-jamones') ? 'grid-cols-1 max-w-xs' : (selectedArea === 'sb-empaquetado-loncheado' || selectedArea === 'preparacion-exp') ? 'grid-cols-2 max-w-md' : 'grid-cols-2 lg:grid-cols-4'}`}>
           {[
             { label: 'Disponibilidad', val: stats.disponibilidad, obj: getObjectiveForDate('disponibilidad', selectedDate), color: 'blue', key: 'disponibilidad' },
             { label: 'Rendimiento', val: stats.rendimiento, obj: getObjectiveForDate('rendimiento', selectedDate), color: 'emerald', key: 'rendimiento' },
@@ -1131,7 +1263,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             if ((selectedArea || '').includes('movimiento-jamones') && kpi.key !== 'disponibilidad') {
               return false;
             }
-            if (selectedArea === 'sb-empaquetado-loncheado') {
+            if (selectedArea === 'sb-empaquetado-loncheado' || selectedArea === 'preparacion-exp') {
               return false;
             }
             const objs = allObjectives[selectedArea || ''] || [];
@@ -1166,31 +1298,37 @@ const Dashboard: React.FC<DashboardProps> = ({
               </div>
             </div>
           ))}
-          {extraKPIs.map(kpi => (
-            <div key={kpi.label} className="bg-white p-2 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-100 shadow-md relative overflow-hidden group hover:shadow-lg transition-all flex flex-col justify-between">
-              <div>
-                <h3 className="text-slate-400 text-[10px] sm:text-[13px] font-black uppercase tracking-widest mb-0.5">{kpi.label}</h3>
-                <div className="text-lg sm:text-2xl font-black tracking-tighter">
-                  {kpi.val}
-                </div>
-              </div>
-              
-              <div className="mt-1 sm:mt-2 grid grid-cols-1 gap-2 border-t border-slate-100 pt-1 sm:pt-2">
-                <div className="flex flex-col">
-                  <span className={`text-[10px] sm:text-[15px] font-bold ${Number(kpi.val) >= kpi.obj ? 'text-emerald-500' : 'text-red-500'}`}>
+          {extraKPIs.map(kpi => {
+            const numVal = (kpi as any).rawVal !== undefined ? Number((kpi as any).rawVal) : parseFloat(String(kpi.val).replace('%', ''));
+            const numObj = (kpi as any).rawObj !== undefined ? Number((kpi as any).rawObj) : parseFloat(String(kpi.obj).replace('%', ''));
+            const isGood = !isNaN(numVal) && !isNaN(numObj) ? numVal >= numObj : true;
+            const progress = !isNaN(numVal) && !isNaN(numObj) && numObj > 0 ? (numVal / numObj) * 100 : 0;
+            return (
+              <div key={kpi.label} className="bg-white p-2 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-100 shadow-md relative overflow-hidden group hover:shadow-lg transition-all flex flex-col justify-between">
+                <div>
+                  <h3 className="text-slate-400 text-[10px] sm:text-[13px] font-black uppercase tracking-widest mb-0.5">{kpi.label}</h3>
+                  <div className="text-lg sm:text-2xl font-black tracking-tighter">
                     {kpi.val}
-                  </span>
+                  </div>
                 </div>
-              </div>
+                
+                <div className="mt-1 sm:mt-2 grid grid-cols-1 gap-2 border-t border-slate-100 pt-1 sm:pt-2">
+                  <div className="flex flex-col">
+                    <span className={`text-[10px] sm:text-[15px] font-bold ${isGood ? 'text-emerald-500' : 'text-red-500'}`}>
+                      {kpi.val}
+                    </span>
+                  </div>
+                </div>
 
-              <div className="mt-1">
-                <div className={`text-[10px] sm:text-[15px] font-bold text-${kpi.color}-600`}>Obj: {kpi.obj}</div>
-                <div className="w-full bg-slate-100 h-1 rounded-full mt-1 overflow-hidden">
-                  <div className={`h-full rounded-full transition-all duration-1000 ${Number(kpi.val) >= kpi.obj ? 'bg-emerald-500' : 'bg-red-500'}`} style={{ width: `${Math.min(100, (Number(kpi.val) / kpi.obj) * 100)}%` }}></div>
+                <div className="mt-1">
+                  <div className={`text-[10px] sm:text-[15px] font-bold text-${kpi.color}-600`}>Obj: {kpi.obj}</div>
+                  <div className="w-full bg-slate-100 h-1 rounded-full mt-1 overflow-hidden">
+                    <div className={`h-full rounded-full transition-all duration-1000 ${isGood ? 'bg-emerald-500' : 'bg-red-500'}`} style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}></div>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -1220,7 +1358,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* Pareto Section */}
-      <div className={`grid gap-4 sm:gap-6 ${(selectedArea || '').includes('movimiento-jamones') ? 'grid-cols-1 max-w-xl' : selectedArea === 'sb-empaquetado-loncheado' ? 'grid-cols-1 lg:grid-cols-2 max-w-4xl' : 'grid-cols-1 lg:grid-cols-3'}`}>
+      <div className={`grid gap-4 sm:gap-6 ${(selectedArea || '').includes('movimiento-jamones') ? 'grid-cols-1 max-w-xl' : selectedArea === 'sb-empaquetado-loncheado' ? 'grid-cols-1 lg:grid-cols-2 max-w-4xl' : selectedArea === 'preparacion-exp' ? 'grid-cols-1 max-w-xl' : 'grid-cols-1 lg:grid-cols-3'}`}>
         {[
           { title: 'Pareto de Esperas', data: paretos.esperas, type: 'disponibilidad' as const, unit: 'min' },
           { title: 'Pérdida Rendimiento', data: paretos.performance, type: 'rendimiento' as const, unit: 'min' },
@@ -1232,7 +1370,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           if (selectedArea === 'sb-empaquetado-loncheado') {
             return false;
           }
-          return true;
+          if (selectedArea === 'preparacion-exp' && pareto.type !== 'disponibilidad') {
+            return false;
+          }
         }).map(pareto => (
           <div key={pareto.title} className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-[2.5rem] border border-slate-100 shadow-lg">
             <h3 className="text-slate-900 text-[13px] sm:text-[15px] font-black uppercase tracking-widest mb-4 sm:mb-6 px-2">{pareto.title}</h3>

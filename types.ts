@@ -80,6 +80,7 @@ export interface OEEObjectives {
   pph_sin_blister_cuchillo?: number;
   pph_sin_marcar?: number;
   pph_empaquetado_jabu?: number;
+  piezas_persona_hora?: number;
   area: string;
   indicator_id?: string; // Standardized to snake_case
   valid_from: string; // ISO Date string (YYYY-MM-DD)

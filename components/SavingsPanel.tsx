@@ -222,7 +222,7 @@ const SavingsPanel: React.FC<SavingsPanelProps> = ({ onBack, activities: propAct
       'env-envasado': [{ id: 'productividad', name: 'OEE ENVASADO' }],
       'env-empaquetado': [{ id: 'productividad', name: 'OEE EMPAQUETADO' }],
       'expedicion': [{ id: 'productividad', name: 'OEE EXPEDICIONES' }],
-      'preparacion-exp': [{ id: 'productividad', name: 'OEE PREPARACIÓN' }],
+      'preparacion-exp': [{ id: 'pph', name: 'PPH PREPARACIÓN' }],
       'movimiento-jamones': [
           { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },
           { id: 'pph_paletas', name: 'PPH COLGAR PALETAS' },

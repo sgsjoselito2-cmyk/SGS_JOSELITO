@@ -114,7 +114,14 @@ interface TOP15IndicatorsProps {
   workshopIndicators: Record<string, {id: string, name: string, formula?: string}[]>;
 }
 
-const TALLERES = [
+export interface WorkshopEntry {
+  id: string;
+  name: string;
+  taller: string;
+  extraAreas?: string[];
+}
+
+const TALLERES: WorkshopEntry[] = [
   { id: 'sb-preparacion', name: 'DESHUESADO/PRENSADO', taller: 'SALA BLANCA' },
   { id: 'sb-loncheado', name: 'LONCHEADO', taller: 'SALA BLANCA' },
   { id: 'sb-empaquetado-loncheado', name: 'EMP. LONCHEADO', taller: 'SALA BLANCA' },
@@ -123,8 +130,7 @@ const TALLERES = [
   { id: 'env-empaquetado', name: 'EMPAQUETADO', taller: 'ENVASADO' },
   { id: 'expedicion', name: 'EXPEDICIONES', taller: 'EXPEDICIONES' },
   { id: 'preparacion-exp', name: 'PREPARACIÓN', taller: 'EXPEDICIONES' },
-  { id: 'movimiento-jamones-paco', name: 'MOVIMIENTOS EQUIPO PACO', taller: 'MOVIMIENTOS' },
-  { id: 'movimiento-jamones-perales', name: 'MOVIMIENTOS EQUIPO PERALES', taller: 'MOVIMIENTOS' }
+  { id: 'movimiento-jamones-paco', name: 'MOVIMIENTOS', taller: 'MOVIMIENTOS', extraAreas: ['movimiento-jamones-perales', 'movimiento-jamones'] }
 ];
 
 const TALLER_BG_COLORS: Record<string, string> = {
@@ -253,7 +259,10 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
 
   // Helper to get objective for a workshop and indicator
   const getWorkshopObjective = (wsId: string, indicator_id: string, dateStr?: string) => {
-    const objs = [...(allObjectives[wsId] || [])].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+    const objs = [
+      ...(allObjectives[wsId] || []),
+      ...(wsId === 'movimiento-jamones-paco' ? (allObjectives['movimiento-jamones'] || []) : [])
+    ].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
     const targetDate = dateStr || selectedDate;
     
     // Helper function for prioritized lookup
@@ -336,14 +345,15 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
     const results: any[] = [];
 
     TALLERES.forEach(ws => {
-      const wsData = dayData.filter(a => a.area === ws.id);
+      const targetAreas = [ws.id, ...(ws.extraAreas || [])];
+      const wsData = dayData.filter(a => targetAreas.includes(a.area));
       if (wsData.length === 0) return;
 
       const formats = Array.from(new Set(wsData.map(a => a.formato || 'Desconocido')));
       
       formats.forEach(f => {
         const data = wsData.filter(a => a.formato === f);
-        const stats = calculateStats(data, ws.id);
+        const stats = calculateStats(data, ws.id, [], workshopIndicators, allData, allData, false, masterSpeeds);
         
         results.push({
           workshopName: ws.name,
@@ -498,32 +508,157 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
     });
   }, [selectedDate]);
 
+  // Helper to compute stats for a workshop period, combining extraAreas and weighting availability
+  const computeWorkshopPeriodStats = useCallback((
+    ws: WorkshopEntry,
+    periodActivities: Activity[],
+    periodMermas: any[] = []
+  ) => {
+    const targetAreas = [ws.id, ...(ws.extraAreas || [])];
+    const isMovimientos = ws.id === 'movimiento-jamones-paco' || (ws.extraAreas && ws.extraAreas.includes('movimiento-jamones-perales'));
+
+    if (isMovimientos) {
+      const pacoActs = periodActivities.filter(a => a.area === 'movimiento-jamones-paco');
+      const peralesActs = periodActivities.filter(a => a.area === 'movimiento-jamones-perales');
+      const generalActs = periodActivities.filter(a => a.area === 'movimiento-jamones');
+      const allMovActs = periodActivities.filter(a => targetAreas.includes(a.area));
+      const allMovMermas = periodMermas.filter(m => targetAreas.includes(m.area));
+
+      if (allMovActs.length === 0 && allMovMermas.length === 0) {
+        return null;
+      }
+
+      // Base stats for the combined data
+      const baseStats = calculateStats(allMovActs, ws.id, allMovMermas, workshopIndicators, allData, allData, false, masterSpeeds);
+
+      // Separate stats for Paco and Perales to perform weighted availability and exact sums
+      const pacoStats = pacoActs.length > 0 ? calculateStats(pacoActs, 'movimiento-jamones-paco', [], workshopIndicators, allData, allData, false, masterSpeeds) : null;
+      const peralesStats = peralesActs.length > 0 ? calculateStats(peralesActs, 'movimiento-jamones-perales', [], workshopIndicators, allData, allData, false, masterSpeeds) : null;
+      const generalStats = generalActs.length > 0 ? calculateStats(generalActs, 'movimiento-jamones', [], workshopIndicators, allData, allData, false, masterSpeeds) : null;
+
+      // 1. CANTIDAD COLGADA: Sum of all three areas
+      const colgadaPaco = pacoStats?.cantidad_colgada ? Number(pacoStats.cantidad_colgada) : 0;
+      const colgadaPerales = peralesStats?.cantidad_colgada ? Number(peralesStats.cantidad_colgada) : 0;
+      const colgadaGeneral = generalStats?.cantidad_colgada ? Number(generalStats.cantidad_colgada) : 0;
+      const totalColgada = colgadaPaco + colgadaPerales + colgadaGeneral;
+      const finalCantidadColgada = totalColgada > 0 
+        ? totalColgada 
+        : (baseStats?.cantidad_colgada ? Number(baseStats.cantidad_colgada) : 0);
+
+      // 2. DISPONIBILIDAD: Weighted average of the two teams (Paco and Perales)
+      const pacoDispo = (pacoStats && pacoStats.disponibilidad !== '' && !isNaN(parseFloat(pacoStats.disponibilidad))) 
+        ? parseFloat(pacoStats.disponibilidad) 
+        : null;
+      const peralesDispo = (peralesStats && peralesStats.disponibilidad !== '' && !isNaN(parseFloat(peralesStats.disponibilidad))) 
+        ? parseFloat(peralesStats.disponibilidad) 
+        : null;
+
+      const pacoTime = pacoStats 
+        ? ((pacoStats.tiempo_produccion_real || 0) + (pacoStats.tiempo_esperas || 0) + (pacoStats.tiempo_averias || 0)) 
+        : 0;
+      const peralesTime = peralesStats 
+        ? ((peralesStats.tiempo_produccion_real || 0) + (peralesStats.tiempo_esperas || 0) + (peralesStats.tiempo_averias || 0)) 
+        : 0;
+
+      let weightedDisponibilidad: number | null = null;
+      if (pacoDispo !== null && peralesDispo !== null) {
+        if (pacoTime + peralesTime > 0) {
+          weightedDisponibilidad = (pacoDispo * pacoTime + peralesDispo * peralesTime) / (pacoTime + peralesTime);
+        } else {
+          const pacoDur = pacoActs.reduce((s, a) => s + (Number(a.duracionMin) || 0), 0);
+          const peralesDur = peralesActs.reduce((s, a) => s + (Number(a.duracionMin) || 0), 0);
+          if (pacoDur + peralesDur > 0) {
+            weightedDisponibilidad = (pacoDispo * pacoDur + peralesDispo * peralesDur) / (pacoDur + peralesDur);
+          } else {
+            weightedDisponibilidad = (pacoDispo + peralesDispo) / 2;
+          }
+        }
+      } else if (pacoDispo !== null) {
+        weightedDisponibilidad = pacoDispo;
+      } else if (peralesDispo !== null) {
+        weightedDisponibilidad = peralesDispo;
+      }
+
+      return {
+        ...baseStats,
+        cantidad_colgada: finalCantidadColgada > 0 ? String(finalCantidadColgada) : (baseStats?.cantidad_colgada || ''),
+        disponibilidad: weightedDisponibilidad !== null ? Math.min(100, Math.max(0, weightedDisponibilidad)).toFixed(1) : (baseStats?.disponibilidad || '')
+      };
+    }
+
+    const wsActs = periodActivities.filter(a => targetAreas.includes(a.area));
+    const wsMermas = periodMermas.filter(m => targetAreas.includes(m.area));
+    if (wsActs.length === 0 && wsMermas.length === 0) return null;
+    return calculateStats(wsActs, ws.id, wsMermas, workshopIndicators, allData, allData, false, masterSpeeds);
+  }, [workshopIndicators, allData, masterSpeeds]);
+
+  const getIndicatorsForWorkshop = useCallback((ws: WorkshopEntry) => {
+    const rawIndicators = workshopIndicators[ws.id] || workshopIndicators["movimiento-jamones"] || workshopIndicators.default || [];
+    const list = [...rawIndicators].filter(ind => {
+      if ((ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales') && ind.id !== 'cantidad_colgada' && ind.id !== 'disponibilidad') {
+        return false;
+      }
+      if (ws.id === 'sb-empaquetado-loncheado' && ind.id !== 'pph_blister_emp' && ind.id !== 'pph') {
+        return false;
+      }
+      if (ws.id === 'preparacion-exp' && ind.id !== 'pph' && ind.id !== 'disponibilidad') {
+        return false;
+      }
+      const objs = allObjectives[ws.id] || [];
+      const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+      const spec = sorted.find(o => o.indicator_id === ind.id);
+      if (spec) {
+        return spec.showInTop15 !== undefined ? !!spec.showInTop15 : true;
+      }
+      return true;
+    });
+
+    if (ws.id === 'preparacion-exp') {
+      const pphItem = list.find(i => i.id === 'pph') || { id: 'pph', name: 'PPH' };
+      const dispoItem = list.find(i => i.id === 'disponibilidad') || { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' };
+      return [pphItem, dispoItem];
+    }
+
+    if (ws.id === 'expedicion') {
+      if (!list.some(i => i.id === 'piezas_persona_hora')) {
+        const objs = allObjectives[ws.id] || [];
+        const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+        const spec = sorted.find(o => o.indicator_id === 'piezas_persona_hora');
+        if (!spec || spec.showInTop15 !== false) {
+          list.unshift({ id: 'piezas_persona_hora', name: 'PIEZAS / PERSONA / HORA' });
+        }
+      }
+    }
+
+    if (ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones') {
+      const objs = allObjectives[ws.id] || allObjectives['movimiento-jamones'] || [];
+      const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+      
+      if (!list.some(i => i.id === 'cantidad_colgada')) {
+        const spec = sorted.find(o => o.indicator_id === 'cantidad_colgada');
+        if (!spec || spec.showInTop15 !== false) {
+          list.unshift({ id: 'cantidad_colgada', name: 'CANTIDAD COLGADA' });
+        }
+      }
+      if (!list.some(i => i.id === 'disponibilidad')) {
+        const spec = sorted.find(o => o.indicator_id === 'disponibilidad');
+        if (!spec || spec.showInTop15 !== false) {
+          list.push({ id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' });
+        }
+      }
+    }
+    return list;
+  }, [workshopIndicators, allObjectives]);
+
   // Calculate stats for each workshop and each day
   const dailyStats = useMemo(() => {
     const rows: any[] = [];
     TALLERES.forEach(ws => {
-      const rawIndicators = workshopIndicators[ws.id] || workshopIndicators["movimiento-jamones"] || workshopIndicators.default;
-      const indicators = rawIndicators.filter(ind => {
-        if ((ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales') && ind.id !== 'cantidad_colgada') {
-          return false;
-        }
-        if (ws.id === 'sb-empaquetado-loncheado' && ind.id !== 'pph_blister_emp' && ind.id !== 'pph') {
-          return false;
-        }
-        const objs = allObjectives[ws.id] || [];
-        const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
-        const spec = sorted.find(o => o.indicator_id === ind.id);
-        if (spec) {
-          return spec.showInTop15 !== undefined ? !!spec.showInTop15 : true;
-        }
-        return true;
-      });
-      const isMov = (ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales');
-      const movAreas = ['movimiento-jamones', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
+      const indicators = getIndicatorsForWorkshop(ws);
       const dayDataMap = last7Days.map(date => {
-        const data = allData.filter(a => (isMov ? movAreas.includes(a.area) : a.area === ws.id) && a.fecha && a.fecha === date);
-        const dayMermas = mermas.filter(m => m.fecha === date && (isMov ? movAreas.includes(m.area) : m.area === ws.id));
-        return (data.length === 0 && dayMermas.length === 0) ? null : calculateStats(data, ws.id, dayMermas, workshopIndicators);
+        const dayActs = allData.filter(a => a.fecha === date);
+        const dayMermas = mermas.filter(m => m.fecha === date);
+        return computeWorkshopPeriodStats(ws, dayActs, dayMermas);
       });
 
       indicators.forEach(ind => {
@@ -542,41 +677,22 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
       });
     });
     return rows;
-  }, [allData, last7Days, mermas, workshopIndicators]);
+  }, [allData, last7Days, mermas, getIndicatorsForWorkshop, computeWorkshopPeriodStats]);
 
   // Calculate stats for each workshop and each week
   const weeklyStats = useMemo(() => {
     const rows: any[] = [];
     TALLERES.forEach(ws => {
-      const rawIndicators = workshopIndicators[ws.id] || workshopIndicators["movimiento-jamones"] || workshopIndicators.default;
-      const indicators = rawIndicators.filter(ind => {
-        if ((ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales') && ind.id !== 'cantidad_colgada') {
-          return false;
-        }
-        if (ws.id === 'sb-empaquetado-loncheado' && ind.id !== 'pph_blister_emp' && ind.id !== 'pph') {
-          return false;
-        }
-        const objs = allObjectives[ws.id] || [];
-        const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
-        const spec = sorted.find(o => o.indicator_id === ind.id);
-        if (spec) {
-          return spec.showInTop15 !== undefined ? !!spec.showInTop15 : true;
-        }
-        return true;
-      });
+      const indicators = getIndicatorsForWorkshop(ws);
       
-      const isMov = (ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales');
-      const movAreas = ['movimiento-jamones', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
       const weekDataMap = last7Weeks.map(w => {
-        const data = allData.filter(a => {
-          const matchArea = isMov ? movAreas.includes(a.area) : a.area === ws.id;
-          if (!matchArea || !a.fecha) return false;
+        const weekActs = allData.filter(a => {
+          if (!a.fecha) return false;
           const ad = parseLocalDate(a.fecha);
           return getWeekNumber(ad) === w.week && ad.getFullYear() === w.year;
         });
         const weekMermas = mermas.filter(m => {
-          const matchArea = isMov ? movAreas.includes(m.area) : m.area === ws.id;
-          if (!m.fecha || !matchArea) return false;
+          if (!m.fecha) return false;
           const md = parseLocalDate(m.fecha);
           return getWeekNumber(md) === w.week && md.getFullYear() === w.year;
         });
@@ -584,7 +700,10 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
         const date = new Date(w.year, 0, 1);
         date.setDate(date.getDate() + (w.week - 1) * 7);
         const dateStr = date.toISOString().split('T')[0];
-        const objs = [...(allObjectives[ws.id] || [])].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+        const objs = [
+          ...(allObjectives[ws.id] || []),
+          ...(ws.id === 'movimiento-jamones-paco' ? (allObjectives['movimiento-jamones'] || []) : [])
+        ].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
         const found = objs.find(o => o.valid_from <= dateStr && (o.indicator_id === 'productividad' || o.indicator_id === 'oee' || !o.indicator_id));
         
         let objective = 62;
@@ -607,8 +726,8 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
           }
         }
 
-        if (data.length === 0 && weekMermas.length === 0) return { stats: null, objective };
-        return { stats: calculateStats(data, ws.id, weekMermas, workshopIndicators), objective };
+        const stats = computeWorkshopPeriodStats(ws, weekActs, weekMermas);
+        return { stats, objective };
       });
 
       indicators.forEach(ind => {
@@ -628,7 +747,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
       });
     });
     return rows;
-  }, [allData, last7Weeks, allObjectives, mermas, workshopIndicators]);
+  }, [allData, last7Weeks, allObjectives, mermas, getIndicatorsForWorkshop, computeWorkshopPeriodStats]);
 
   // Group weeklyStats by workshop for individual indicator charts
   const weeklyStatsByWorkshop = useMemo(() => {
@@ -681,12 +800,11 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
         });
 
         const isPerc = ['productividad', 'oee', 'disponibilidad', 'rendimiento', 'calidad'].includes(indRow.indicatorId) || indRow.indicatorId.includes('merma');
-        let unit = isPerc ? '%' : 'PPH';
-        if (indRow.indicatorId === 'cantidad_colgada') unit = 'uds';
+        let unit = isPerc ? '%' : (indRow.indicatorId === 'piezas_persona_hora' ? 'piezas/p/h' : (indRow.indicatorId === 'cantidad_colgada' ? 'uds' : 'PPH'));
 
         let color = '#3b82f6';
         if (indRow.indicatorId.includes('merma')) color = '#f59e0b';
-        else if (indRow.indicatorId.startsWith('pph')) color = '#6366f1';
+        else if (indRow.indicatorId.startsWith('pph') || indRow.indicatorId === 'piezas_persona_hora') color = '#6366f1';
         else if (indRow.indicatorId === 'cantidad_colgada') color = '#10b981';
 
         cards.push({
@@ -707,7 +825,9 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
 
   // Pareto data for selected workshop
   const paretos = useMemo(() => {
-    const wsData = allData.filter(a => a.area === selectedWorkshopPareto && a.fecha === selectedDate);
+    const ws = TALLERES.find(t => t.id === selectedWorkshopPareto);
+    const targetAreas = ws ? [ws.id, ...(ws.extraAreas || [])] : [selectedWorkshopPareto];
+    const wsData = allData.filter(a => targetAreas.includes(a.area) && a.fecha === selectedDate);
     const esperas: Record<string, number> = {};
     const performanceLoss: Record<string, number> = {};
     const qualityLoss: Record<string, number> = {};
@@ -795,25 +915,11 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
     const targetYear = new Date(selectedDate).getFullYear().toString();
     
     TALLERES.forEach(ws => {
-      const rawIndicators = workshopIndicators[ws.id] || workshopIndicators["movimiento-jamones"] || workshopIndicators.default;
-      const indicators = rawIndicators.filter(ind => {
-        if ((ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales') && ind.id !== 'cantidad_colgada') {
-          return false;
-        }
-        const objs = allObjectives[ws.id] || [];
-        const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
-        const spec = sorted.find(o => o.indicator_id === ind.id);
-        if (spec) {
-          return spec.showInTop15 !== undefined ? !!spec.showInTop15 : true;
-        }
-        return true;
-      });
-      const isMov = (ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales');
-      const movAreas = ['movimiento-jamones', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
-      const yearActivities = allData.filter(a => (isMov ? movAreas.includes(a.area) : a.area === ws.id) && a.fecha && a.fecha.startsWith(targetYear));
-      const yearMermas = mermas.filter(m => (isMov ? movAreas.includes(m.area) : m.area === ws.id) && m.fecha && m.fecha.startsWith(targetYear));
+      const indicators = getIndicatorsForWorkshop(ws);
+      const yearActivities = allData.filter(a => a.fecha && a.fecha.startsWith(targetYear));
+      const yearMermas = mermas.filter(m => m.fecha && m.fecha.startsWith(targetYear));
       
-      const stats = (yearActivities.length === 0 && yearMermas.length === 0) ? null : calculateStats(yearActivities, ws.id, yearMermas);
+      const stats = computeWorkshopPeriodStats(ws, yearActivities, yearMermas);
 
       indicators.forEach(ind => {
         const val = stats ? stats[ind.id as keyof typeof stats] : null;
@@ -828,7 +934,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
       });
     });
     return rows;
-  }, [allData, selectedDate, mermas, workshopIndicators]);
+  }, [allData, selectedDate, mermas, getIndicatorsForWorkshop, computeWorkshopPeriodStats]);
 
   const mobileGroupedData = useMemo(() => {
     let sourceStats: any[] = [];
@@ -913,7 +1019,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
                     {row.indicatorName}
                   </td>
                   <td className="p-1 text-center font-black border border-slate-200 text-blue-600 bg-blue-50/30">
-                    {objective !== 0 ? ((row.indicatorId.startsWith('pph') || row.indicatorId === 'cantidad_colgada') ? objective : `${objective}%`) : '—'}
+                    {objective !== 0 ? ((row.indicatorId.startsWith('pph') || row.indicatorId === 'cantidad_colgada' || row.indicatorId === 'piezas_persona_hora') ? objective : `${objective}%`) : '—'}
                   </td>
                   {row.values.map((val: any, i: number) => {
                     const isKPI = (row.indicatorId === 'productividad' || row.indicatorId === 'oee' || row.indicatorId === 'disponibilidad' || row.indicatorId === 'rendimiento' || row.indicatorId === 'calidad');
@@ -938,7 +1044,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
                         className={`p-1 text-center font-bold border border-slate-200 select-none ${isEmpty ? 'text-slate-300' : (isGood ? 'text-emerald-600 bg-emerald-50/30' : 'text-red-500 bg-red-50/30')}`}
                         title={date && isKPI ? "Doble clic para ver Pareto" : ""}
                       >
-                        {isEmpty ? '-' : ((row.indicatorId.startsWith('pph') || row.indicatorId === 'cantidad_colgada') ? val : `${val}%`)}
+                        {isEmpty ? '-' : ((row.indicatorId.startsWith('pph') || row.indicatorId === 'cantidad_colgada' || row.indicatorId === 'piezas_persona_hora') ? val : `${val}%`)}
                       </td>
                     );
                   })}
@@ -1092,7 +1198,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
                       </h4>
                       <div className="pl-1 space-y-1">
                         {rows.map(row => {
-                          const isPPHOrColgada = row.indicatorId.startsWith('pph') || row.indicatorId === 'cantidad_colgada';
+                          const isPPHOrColgada = row.indicatorId.startsWith('pph') || row.indicatorId === 'cantidad_colgada' || row.indicatorId === 'piezas_persona_hora';
                           const val = row.value;
                           const isEmpty = val === null || val === undefined || val === '';
                           const formattedVal = isEmpty ? '—' : (isPPHOrColgada ? val : `${val}%`);
@@ -1478,10 +1584,12 @@ interface ParetoModalProps {
 }
 
 const ParetoModal: React.FC<ParetoModalProps> = ({ workshopId, date, allData, onClose, onBarDoubleClick }) => {
-  const workshopName = TALLERES.find(t => t.id === workshopId)?.name || workshopId;
+  const ws = TALLERES.find(t => t.id === workshopId);
+  const workshopName = ws?.name || workshopId;
+  const targetAreas = ws ? [ws.id, ...(ws.extraAreas || [])] : [workshopId];
   
   const paretos = useMemo(() => {
-    const wsData = allData.filter(a => a.area === workshopId && a.fecha === date);
+    const wsData = allData.filter(a => targetAreas.includes(a.area) && a.fecha === date);
     const disponibilidad: Record<string, number> = {};
     const rendimiento: Record<string, number> = {};
     const calidad: Record<string, number> = {};
@@ -1511,7 +1619,7 @@ const ParetoModal: React.FC<ParetoModalProps> = ({ workshopId, date, allData, on
       disponibilidad: formatPareto(disponibilidad),
       rendimiento: formatPareto(rendimiento)
     };
-  }, [allData, workshopId, date]);
+  }, [allData, targetAreas, date, workshopId]);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300 overflow-y-auto">
@@ -1580,9 +1688,12 @@ interface RecordsModalProps {
 }
 
 const RecordsModal: React.FC<RecordsModalProps> = ({ workshopId, date, type, category, allData, onClose }) => {
+  const ws = TALLERES.find(t => t.id === workshopId);
+  const targetAreas = ws ? [ws.id, ...(ws.extraAreas || [])] : [workshopId];
+
   const filteredRecords = useMemo(() => {
     return allData.filter(a => {
-      if (a.area !== workshopId || a.fecha !== date) return false;
+      if (!targetAreas.includes(a.area) || a.fecha !== date) return false;
       
       if (type === 'disponibilidad') {
         return (a.tipoTarea === TaskType.ESPERAS || a.tipoTarea === TaskType.AVERIA) && a.formato === category && !a.afectaCalidad;
@@ -1599,7 +1710,7 @@ const RecordsModal: React.FC<RecordsModalProps> = ({ workshopId, date, type, cat
       }
       return false;
     });
-  }, [allData, workshopId, date, type, category]);
+  }, [allData, targetAreas, date, type, category]);
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300 overflow-y-auto">
