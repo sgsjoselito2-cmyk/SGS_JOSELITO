@@ -460,7 +460,7 @@ export const calculateStats = (
     ? [...activities, ...history].filter(a => a.area === targetArea && a.fecha === targetFecha)
     : data;
 
-  const isExpedicion = aid === 'expedicion' || (aid.includes('expedicion') && !aid.includes('preparacion'));
+  const isExpedicion = aid === 'envolver';
   if (isExpedicion) {
     const recordsToScan = [...data, ...activities, ...history];
     const targetDates = Array.from(new Set([...data.map(a => a.fecha), targetFecha].filter(Boolean))) as string[];
@@ -472,7 +472,7 @@ export const calculateStats = (
 
     if (targetDates.length > 0) {
       targetDates.forEach(d => {
-        const dayRecs = recordsToScan.filter(a => a.fecha === d && (a.area === 'expedicion' || (!a.area && isExpedicion)));
+        const dayRecs = recordsToScan.filter(a => a.fecha === d && (a.area === 'envolver' || (!a.area && isExpedicion)));
         for (const rec of dayRecs) {
           const c = rec.comentarios || (rec as any).comments || '';
           if (typeof c === 'string' && (c.includes('jamones') || c.includes('cajasNavidad') || c.includes('CIERRE TURNO'))) {
@@ -496,7 +496,7 @@ export const calculateStats = (
 
     if (!foundClosureData) {
       for (const rec of recordsToScan) {
-        if (rec.area && rec.area !== 'expedicion') continue;
+        if (rec.area && rec.area !== 'envolver') continue;
         const c = rec.comentarios || (rec as any).comments || '';
         if (typeof c === 'string' && (c.includes('jamones') || c.includes('cajasNavidad') || c.includes('CIERRE TURNO'))) {
           try {
@@ -518,11 +518,11 @@ export const calculateStats = (
 
     const speedsToUse = (masterSpeeds && masterSpeeds.length > 0)
       ? masterSpeeds
-      : getInitialMasterSpeeds('expedicion');
+      : getInitialMasterSpeeds('envolver');
 
-    const msJamon = speedsToUse.find(ms => (ms.area === 'expedicion' || !ms.area) && normalizeFormato(ms.formato) === 'JAMONES');
-    const msPaleta = speedsToUse.find(ms => (ms.area === 'expedicion' || !ms.area) && normalizeFormato(ms.formato) === 'PALETAS');
-    const msCaja = speedsToUse.find(ms => (ms.area === 'expedicion' || !ms.area) && normalizeFormato(ms.formato) === 'CAJAS DE NAVIDAD');
+    const msJamon = speedsToUse.find(ms => (ms.area === 'envolver' || !ms.area) && normalizeFormato(ms.formato) === 'JAMONES');
+    const msPaleta = speedsToUse.find(ms => (ms.area === 'envolver' || !ms.area) && normalizeFormato(ms.formato) === 'PALETAS');
+    const msCaja = speedsToUse.find(ms => (ms.area === 'envolver' || !ms.area) && normalizeFormato(ms.formato) === 'CAJAS DE NAVIDAD');
 
     const T_jamon = Number(msJamon?.tiempoTeorico || 0);
     const T_paleta = Number(msPaleta?.tiempoTeorico || 0);
@@ -548,7 +548,7 @@ export const calculateStats = (
     // CAMBIO 3: PIEZAS / PERSONA / HORA
     const totalPiezas = totalJamones + totalPaletas + totalCajasNavidad;
     const relevantOps = new Set(
-      (data.length > 0 ? data : (datosCalculo.length > 0 ? datosCalculo : recordsToScan.filter(a => (a.area === 'expedicion' || (!a.area && isExpedicion)))))
+      (data.length > 0 ? data : (datosCalculo.length > 0 ? datosCalculo : recordsToScan.filter(a => (a.area === 'envolver' || (!a.area && isExpedicion)))))
         .flatMap(a => a.operarios || [])
     );
     const personas = relevantOps.size > 0 ? relevantOps.size : 1;
@@ -1111,8 +1111,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     if (aid.includes('sb-empaquetado-deshuesado') || aid.includes('env-envasado') || aid.includes('env-empaquetado')) {
       kpis.push({ label: 'PPH', val: stats.pph, obj: getObjectiveForDate('pph', selectedDate), color: 'indigo', key: 'pph' });
     }
-    if (aid.includes('expedicion') && !aid.includes('preparacion')) {
-      kpis.push({ label: 'PIEZAS / PERSONA / HORA', val: stats.piezas_persona_hora, obj: getObjectiveForDate('piezas_persona_hora', selectedDate), color: 'indigo', key: 'piezas_persona_hora' });
+    if (aid === 'envolver') {
+      kpis.push({ label: 'PIEZAS / PERSONA / HORA (ENVOLVER)', val: stats.piezas_persona_hora, obj: getObjectiveForDate('piezas_persona_hora', selectedDate), color: 'indigo', key: 'piezas_persona_hora' });
     }
     if (aid === 'preparacion-exp' || aid.includes('preparacion-exp')) {
       kpis.push({ label: 'PPH', val: stats.pph, obj: getObjectiveForDate('pph', selectedDate), color: 'indigo', key: 'pph' });

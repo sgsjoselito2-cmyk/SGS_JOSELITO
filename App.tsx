@@ -178,13 +178,17 @@ const App: React.FC = () => {
       }
     }
     
-    // Ensure expedicion indicators exist
+    // Ensure envolver indicators exist
     if (parsed) {
-      if (!parsed['expedicion']) {
-        parsed['expedicion'] = INITIAL_WORKSHOP_INDICATORS['expedicion'];
+      if (!parsed['envolver']) {
+        parsed['envolver'] = INITIAL_WORKSHOP_INDICATORS['envolver'];
         changed = true;
-      } else if (!parsed['expedicion'].some((ind: any) => ind.id === 'piezas_persona_hora')) {
-        parsed['expedicion'].unshift({ id: 'piezas_persona_hora', name: 'PIEZAS / PERSONA / HORA' });
+      } else if (!parsed['envolver'].some((ind: any) => ind.id === 'piezas_persona_hora')) {
+        parsed['envolver'].unshift({ id: 'piezas_persona_hora', name: 'PIEZAS / PERSONA / HORA (ENVOLVER)' });
+        changed = true;
+      }
+      if (!parsed['envios']) {
+        parsed['envios'] = INITIAL_WORKSHOP_INDICATORS['envios'];
         changed = true;
       }
     }
@@ -2911,7 +2915,7 @@ const App: React.FC = () => {
     const getTargetAreas = (area: string): string[] => {
       if (area === 'sala-blanca-dashboard') return ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
       if (area === 'envasado-dashboard') return ['env-envasado', 'env-empaquetado'];
-      if (area === 'expediciones-dashboard') return ['expedicion', 'preparacion-exp'];
+      if (area === 'expediciones-dashboard') return ['envolver', 'envios', 'preparacion-exp'];
       if (area === 'movimientos-dashboard') return ['movimiento-jamones', 'movimiento-jamones-equipo1', 'movimiento-jamones-equipo2', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
       return [area];
     };
@@ -3031,7 +3035,7 @@ const App: React.FC = () => {
         const currentAreaNext = next.filter(item => {
           if (selectedArea === 'sala-blanca-dashboard') return ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'].includes(item.area);
           if (selectedArea === 'envasado-dashboard') return ['env-envasado', 'env-empaquetado'].includes(item.area);
-          if (selectedArea === 'expediciones-dashboard') return ['expedicion', 'preparacion-exp'].includes(item.area);
+          if (selectedArea === 'expediciones-dashboard') return ['envolver', 'envios', 'preparacion-exp'].includes(item.area);
           if (selectedArea === 'movimientos-dashboard') return ['movimiento-jamones', 'movimiento-jamones-equipo1', 'movimiento-jamones-equipo2', 'movimiento-jamones-paco', 'movimiento-jamones-perales'].includes(item.area);
           return item.area === selectedArea;
         });
@@ -3067,7 +3071,7 @@ const App: React.FC = () => {
         const currentAreaNext = next.filter(item => {
           if (selectedArea === 'sala-blanca-dashboard') return ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'].includes(item.area);
           if (selectedArea === 'envasado-dashboard') return ['env-envasado', 'env-empaquetado'].includes(item.area);
-          if (selectedArea === 'expediciones-dashboard') return ['expedicion', 'preparacion-exp'].includes(item.area);
+          if (selectedArea === 'expediciones-dashboard') return ['envolver', 'envios', 'preparacion-exp'].includes(item.area);
           if (selectedArea === 'movimientos-dashboard') return ['movimiento-jamones', 'movimiento-jamones-equipo1', 'movimiento-jamones-equipo2', 'movimiento-jamones-paco', 'movimiento-jamones-perales'].includes(item.area);
           return item.area === selectedArea;
         });

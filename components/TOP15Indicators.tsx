@@ -127,8 +127,8 @@ const TALLERES: WorkshopEntry[] = [
   { id: 'sb-empaquetado-loncheado', name: 'EMP. LONCHEADO', taller: 'SALA BLANCA' },
   { id: 'sb-empaquetado-deshuesado', name: 'EMP. DESHUESADO', taller: 'SALA BLANCA' },
   { id: 'env-envasado', name: 'ENVASADO', taller: 'ENVASADO' },
-  { id: 'env-empaquetado', name: 'EMPAQUETADO', taller: 'ENVASADO' },
-  { id: 'expedicion', name: 'EXPEDICIONES', taller: 'EXPEDICIONES' },
+  { id: 'envolver', name: 'ENVOLVER', taller: 'ENVOLVER' },
+  { id: 'envios', name: 'ENVÍOS', taller: 'ENVÍOS' },
   { id: 'preparacion-exp', name: 'PREPARACIÓN', taller: 'EXPEDICIONES' },
   { id: 'movimiento-jamones-paco', name: 'MOVIMIENTOS', taller: 'MOVIMIENTOS', extraAreas: ['movimiento-jamones-perales', 'movimiento-jamones'] }
 ];
@@ -137,6 +137,8 @@ const TALLER_BG_COLORS: Record<string, string> = {
   'SALA BLANCA': 'bg-indigo-50/30',
   'ENVASADO': 'bg-cyan-50/30',
   'EXPEDICIONES': 'bg-amber-50/30',
+  'ENVOLVER': 'bg-amber-50/30',
+  'ENVÍOS': 'bg-amber-50/30',
   'MOVIMIENTOS': 'bg-slate-50/30'
 };
 
@@ -619,13 +621,13 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
       return [pphItem, dispoItem];
     }
 
-    if (ws.id === 'expedicion') {
+    if (ws.id === 'envolver') {
       if (!list.some(i => i.id === 'piezas_persona_hora')) {
         const objs = allObjectives[ws.id] || [];
         const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
         const spec = sorted.find(o => o.indicator_id === 'piezas_persona_hora');
         if (!spec || spec.showInTop15 !== false) {
-          list.unshift({ id: 'piezas_persona_hora', name: 'PIEZAS / PERSONA / HORA' });
+          list.unshift({ id: 'piezas_persona_hora', name: 'PIEZAS / PERSONA / HORA (ENVOLVER)' });
         }
       }
     }

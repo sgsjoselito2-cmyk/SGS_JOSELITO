@@ -482,7 +482,8 @@ export const ExpedicionesDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'su
     title="Expediciones"
     subtitle="Expediciones · Prep. Expediciones"
     areas={[
-      { id: 'expedicion',      name: 'EXPEDICIONES' },
+      { id: 'envolver', name: 'ENVOLVER' },
+      { id: 'envios', name: 'ENVÍOS' },
       { id: 'preparacion-exp', name: 'PREP. EXPEDICIONES' },
     ]}
     workshopIndicators={props.workshopIndicators}

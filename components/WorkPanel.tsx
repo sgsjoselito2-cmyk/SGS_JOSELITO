@@ -815,7 +815,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       ));
       
       if (formats.length === 0) {
-        if (selectedArea === 'expedicion') {
+        if (selectedArea === 'envolver') {
           setExpedicionCounts({ jamones: 0, paletas: 0, cajasNavidad: 0 });
           setShiftClosureData({});
           setShowShiftClosureModal(true);
@@ -825,7 +825,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
         return;
       }
 
-      if (selectedArea === 'expedicion') {
+      if (selectedArea === 'envolver') {
         setExpedicionCounts({ jamones: 0, paletas: 0, cajasNavidad: 0 });
       }
 
@@ -874,7 +874,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
   };
 
   const handleConfirmClosure = () => {
-    const isExpedicion = selectedArea === 'expedicion';
+    const isExpedicion = selectedArea === 'envolver';
     const isValid = Object.values(shiftClosureData).every(d => d.cantidad !== '');
     if (!isValid && !isExpedicion) {
       setValidationError('⚠️ Por favor, rellene todas las cantidades.');
@@ -892,7 +892,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       const jamones = Math.max(0, parseInt(String(expedicionCounts.jamones || '0'), 10) || 0);
       const paletas = Math.max(0, parseInt(String(expedicionCounts.paletas || '0'), 10) || 0);
       const cajasNavidad = Math.max(0, parseInt(String(expedicionCounts.cajasNavidad || '0'), 10) || 0);
-      closureComment = `CIERRE TURNO | ${JSON.stringify({ jamones, paletas, cajasNavidad })}`;
+      closureComment = `CIERRE TURNO ENVOLVER | ${JSON.stringify({ jamones, paletas, cajasNavidad })}`;
     }
 
     const aggregated: Record<string, { cantidad: number, cantidadNok?: number }> = {};
@@ -1133,7 +1133,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
             </div>
 
             <div className="max-h-[65vh] overflow-y-auto p-5 space-y-4">
-              {selectedArea === 'expedicion' && (
+              {selectedArea === 'envolver' && (
                 <div className="p-4 bg-blue-50/80 rounded-2xl border-2 border-blue-200">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-black text-blue-900 uppercase text-[13px] tracking-wide">
@@ -1191,7 +1191,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
               )}
 
               {Object.keys(shiftClosureData).length === 0 ? (
-                selectedArea === 'expedicion' ? null : (
+                selectedArea === 'envolver' ? null : (
                   <div className="text-center py-8">
                     <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">
                       No hay actividades de producción para esta fecha
@@ -1299,7 +1299,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
             </div>
             <div className="flex gap-3 p-4 border-t border-slate-100">
               <button id="btn-cancel-closure" onClick={() => setShowShiftClosureModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-400 font-black rounded-xl uppercase text-[12px]">Cancelar</button>
-              {(Object.keys(shiftClosureData).length === 0 && selectedArea !== 'expedicion') ? (
+              {(Object.keys(shiftClosureData).length === 0 && selectedArea !== 'envolver') ? (
                 <button 
                   id="btn-close-no-qty"
                   onClick={() => executeFinalizeShift({}, [])} 

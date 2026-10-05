@@ -45,7 +45,7 @@ export const getInitialOperarios = (areaId: string): User[] => {
       nombre: nombre.toUpperCase()
     }));
   }
-  if (['sb-preparacion','sb-loncheado','sb-empaquetado-loncheado','sb-empaquetado-deshuesado','env-envasado','env-empaquetado','expedicion','preparacion-exp','movimiento-jamones','movimiento-jamones-paco','movimiento-jamones-perales'].includes(areaId)) {
+  if (['sb-preparacion','sb-loncheado','sb-empaquetado-loncheado','sb-empaquetado-deshuesado','env-envasado','env-empaquetado','envolver','envios','preparacion-exp','movimiento-jamones','movimiento-jamones-paco','movimiento-jamones-perales'].includes(areaId)) {
     return MASTER_PEOPLE_LIST.map((nombre, i) => ({
       id: `op-jos-${areaId}-${i}-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       nombre: nombre.toUpperCase()
@@ -69,7 +69,8 @@ export const AREA_NAMES: Record<string, string> = {
   'sb-empaquetado-deshuesado': 'EMP. DESHUESADO',
   'env-envasado': 'ENVASADO',
   'env-empaquetado': 'EMPAQUETADO',
-  'expedicion': 'EXPEDICIONES',
+  'envolver': 'ENVOLVER',
+  'envios': 'ENVÍOS',
   'preparacion-exp': 'PREPARACIÓN',
   'movimiento-jamones-paco': 'MOVIMIENTOS EQUIPO PACO',
   'movimiento-jamones-perales': 'MOVIMIENTOS EQUIPO PERALES',
@@ -83,7 +84,8 @@ export const AREA_COLUMNS: Record<string, string[]> = {
   'sb-empaquetado-deshuesado': ['Unidades Hora'],
   'env-envasado': ['Unidades Hora'],
   'env-empaquetado': ['Unidades Hora'],
-  'expedicion': ['Unidades Hora'],
+  'envolver': ['Unidades Hora'],
+  'envios': ['Bultos'],
   'preparacion-exp': ['Unidades Hora'],
   'movimiento-jamones-paco': ['Unidades Hora'],
   'movimiento-jamones-perales': ['Unidades Hora'],
@@ -105,11 +107,11 @@ export const getMaestroArea = (areaId?: string | null): string => {
 
 export const getInitialMasterSpeeds = (areaId: string): MasterSpeed[] => {
   const effectiveArea = getMaestroArea(areaId);
-  if (effectiveArea === 'expedicion' || areaId === 'expedicion') {
+  if (effectiveArea === 'envolver' || areaId === 'envolver' || effectiveArea === 'expedicion' || areaId === 'expedicion') {
     return [
-      { id: `ms-expedicion-1`, formato: 'JAMONES', tiempoTeorico: 0, area: 'expedicion' },
-      { id: `ms-expedicion-2`, formato: 'PALETAS', tiempoTeorico: 0, area: 'expedicion' },
-      { id: `ms-expedicion-3`, formato: 'CAJAS DE NAVIDAD', tiempoTeorico: 0, area: 'expedicion' }
+      { id: `ms-envolver-1`, formato: 'JAMONES', tiempoTeorico: 0, area: 'envolver' },
+      { id: `ms-envolver-2`, formato: 'PALETAS', tiempoTeorico: 0, area: 'envolver' },
+      { id: `ms-envolver-3`, formato: 'CAJAS DE NAVIDAD', tiempoTeorico: 0, area: 'envolver' }
     ];
   }
   return [
@@ -140,7 +142,11 @@ export const WORKSHOP_HELP_CONTENT: Record<string, { usage: string; indicators: 
   'sb-empaquetado-deshuesado': { usage: "Selecciona tu nombre, elige el formato de empaquetado deshuesado y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
   'env-envasado': { usage: "Selecciona tu nombre, elige el formato de envasado y pulsa 'INICIAR TAREA'. Al finalizar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
   'env-empaquetado': { usage: "Selecciona tu nombre, elige el formato de empaquetado y pulsa 'INICIAR TAREA'. Al finalizar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
-  'expedicion': { usage: "Selecciona tu nombre, elige el formato de expedición y pulsa 'INICIAR TAREA'. Al finalizar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
+  'envolver': { usage: "Selecciona tu nombre, elige el formato de expedición y pulsa 'INICIAR TAREA'. Al finalizar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
+  'envios': {
+    usage: "Selecciona las personas del turno. Al cerrar el turno introduce los bultos realizados por categoría y los errores.",
+    indicators: "BULTOS/PERSONA/HORA · CUMPLIMIENTO PLAN (%) · Nº ERRORES"
+  },
   'preparacion-exp': { usage: "Selecciona tu nombre, elige el formato de prep. expediciones y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "PPH = Cantidad total producción / Horas de producción\nDispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A)) x 100" },
   'movimiento-jamones-paco': { usage: "Selecciona tu nombre, elige el tipo de movimiento y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
   'movimiento-jamones-perales': { usage: "Selecciona tu nombre, elige el tipo de movimiento y pulsa 'INICIAR TAREA'. Al terminar introduce las cantidades.", indicators: "Dispo = T.trabajo(P) / (T.trabajo(P) + T.Esperas(E) + T.Averías(A))\nRen = T.teórico / T.trabajo(P)\nCali = Cantidad OK / (Cantidad OK + Cantidad NOK) x 100" },
@@ -217,11 +223,14 @@ export const INITIAL_WORKSHOP_INDICATORS: Record<string, {id: string, name: stri
     { id: 'calidad', name: 'Calidad' },
     { id: 'productividad', name: 'Productividad (OEE)' }
   ],
-  'expedicion': [
-    { id: 'piezas_persona_hora', name: 'PIEZAS / PERSONA / HORA' },
-    { id: 'rendimiento', name: 'Rendimiento' },
-    { id: 'disponibilidad', name: 'Disponibilidad' },
-    { id: 'productividad', name: 'OEE EXPEDICIONES' }
+  'envolver': [
+    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' },
+    { id: 'piezas_persona_hora', name: 'PIEZAS / PERSONA / HORA (ENVOLVER)' }
+  ],
+  'envios': [
+    { id: 'bultos_persona_hora', name: 'BULTOS / PERSONA / HORA' },
+    { id: 'cumplimiento_plan', name: 'CUMPLIMIENTO PLAN (%)' },
+    { id: 'num_errores', name: 'Nº ERRORES' }
   ],
   'preparacion-exp': [
     { id: 'pph', name: 'PPH' },
