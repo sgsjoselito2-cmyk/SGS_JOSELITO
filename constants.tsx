@@ -237,6 +237,7 @@ export const INITIAL_WORKSHOP_INDICATORS: Record<string, {id: string, name: stri
     { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' }
   ],
   'movimiento-jamones-paco': [
+    { id: 'pph_colgar', name: 'PPH COLGAR' },
     { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },
     { id: 'pph_paletas', name: 'PPH COLGAR PALETAS' },
     { id: 'pph_manteca', name: 'PPH COLGAR JAMONES MANTECA' },
@@ -245,6 +246,7 @@ export const INITIAL_WORKSHOP_INDICATORS: Record<string, {id: string, name: stri
     { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' }
   ],
   'movimiento-jamones-perales': [
+    { id: 'pph_colgar', name: 'PPH COLGAR' },
     { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },
     { id: 'pph_paletas', name: 'PPH COLGAR PALETAS' },
     { id: 'pph_manteca', name: 'PPH COLGAR JAMONES MANTECA' },
@@ -253,6 +255,7 @@ export const INITIAL_WORKSHOP_INDICATORS: Record<string, {id: string, name: stri
     { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' }
   ],
   'movimiento-jamones': [
+    { id: 'pph_colgar', name: 'PPH COLGAR' },
     { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },
     { id: 'pph_paletas', name: 'PPH COLGAR PALETAS' },
     { id: 'pph_manteca', name: 'PPH COLGAR JAMONES MANTECA' },

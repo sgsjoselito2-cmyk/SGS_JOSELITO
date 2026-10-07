@@ -123,7 +123,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
     // Filter by area to align with Dashboard and App.tsx targetAreas
     const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
     const envAreas = ['env-envasado', 'env-empaquetado'];
-    const expAreas = ['expedicion', 'preparacion-exp'];
+    const expAreas = ['envolver', 'envios', 'expedicion', 'preparacion-exp'];
     const movAreas = ['movimiento-jamones', 'movimiento-jamones-equipo1', 'movimiento-jamones-equipo2', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
 
     if (selectedArea === 'sala-blanca-dashboard') {
@@ -235,7 +235,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
     // Filtrado por área según el contexto del Dashboard
     const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
     const envAreas = ['env-envasado', 'env-empaquetado'];
-    const expAreas = ['expedicion', 'preparacion-exp'];
+    const expAreas = ['envolver', 'envios', 'expedicion', 'preparacion-exp'];
     const movAreas = ['movimiento-jamones', 'movimiento-jamones-equipo1', 'movimiento-jamones-equipo2', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
 
     if (selectedArea === 'sala-blanca-dashboard') {
@@ -344,7 +344,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
 
       const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
       const envAreas = ['env-envasado', 'env-empaquetado'];
-      const expAreas = ['expedicion', 'preparacion-exp'];
+      const expAreas = ['envolver', 'envios', 'expedicion', 'preparacion-exp'];
       const movAreas = ['movimiento-jamones', 'movimiento-jamones-equipo1', 'movimiento-jamones-equipo2', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
 
       if (selectedArea === 'sala-blanca-dashboard') {
@@ -441,7 +441,7 @@ const DatabasePanel: React.FC<DatabasePanelProps> = ({
       if (!speedObj) {
         const sbAreas = ['sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado'];
         const envAreas = ['env-envasado', 'env-empaquetado'];
-        const expAreas = ['expedicion', 'preparacion-exp'];
+        const expAreas = ['envolver', 'envios', 'expedicion', 'preparacion-exp'];
         const movAreas = ['movimiento-jamones', 'movimiento-jamones-equipo1', 'movimiento-jamones-equipo2', 'movimiento-jamones-paco', 'movimiento-jamones-perales'];
         
         if (selectedArea === 'sala-blanca-dashboard') {

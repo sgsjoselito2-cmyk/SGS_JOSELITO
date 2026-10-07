@@ -215,6 +215,9 @@ const App: React.FC = () => {
             const nameLower = (ind.name || '').toLowerCase();
             return idLower !== 'pph' && idLower !== 'pph_pesar' && !nameLower.includes('pesar');
           });
+          if (!list.some((ind: any) => ind.id === 'pph_colgar')) {
+            list.unshift({ id: 'pph_colgar', name: 'PPH COLGAR' });
+          }
           if (!list.some((ind: any) => ind.id === 'pph_descolgar_colgar')) {
             const idx = list.findIndex((ind: any) => ind.id === 'cantidad_colgada');
             const item = { id: 'pph_descolgar_colgar', name: 'PPH DESCOLGAR - COLGAR (EN LINEA)' };

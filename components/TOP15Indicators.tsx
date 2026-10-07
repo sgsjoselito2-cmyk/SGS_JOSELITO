@@ -801,12 +801,12 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
           };
         });
 
-        const isPerc = ['productividad', 'oee', 'disponibilidad', 'rendimiento', 'calidad'].includes(indRow.indicatorId) || indRow.indicatorId.includes('merma');
-        let unit = isPerc ? '%' : (indRow.indicatorId === 'piezas_persona_hora' ? 'piezas/p/h' : (indRow.indicatorId === 'cantidad_colgada' ? 'uds' : 'PPH'));
+        const isPerc = ['productividad', 'oee', 'disponibilidad', 'rendimiento', 'calidad', 'cumplimiento_plan'].includes(indRow.indicatorId) || indRow.indicatorId.includes('merma');
+        let unit = isPerc ? '%' : (indRow.indicatorId === 'piezas_persona_hora' ? 'piezas/p/h' : (indRow.indicatorId === 'bultos_persona_hora' ? 'bultos/p/h' : (indRow.indicatorId === 'num_errores' ? 'errores' : (indRow.indicatorId === 'cantidad_colgada' ? 'uds' : 'PPH'))));
 
         let color = '#3b82f6';
-        if (indRow.indicatorId.includes('merma')) color = '#f59e0b';
-        else if (indRow.indicatorId.startsWith('pph') || indRow.indicatorId === 'piezas_persona_hora') color = '#6366f1';
+        if (indRow.indicatorId.includes('merma') || indRow.indicatorId === 'num_errores') color = '#f59e0b';
+        else if (indRow.indicatorId.startsWith('pph') || indRow.indicatorId === 'piezas_persona_hora' || indRow.indicatorId === 'bultos_persona_hora') color = '#6366f1';
         else if (indRow.indicatorId === 'cantidad_colgada') color = '#10b981';
 
         cards.push({
@@ -1021,7 +1021,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
                     {row.indicatorName}
                   </td>
                   <td className="p-1 text-center font-black border border-slate-200 text-blue-600 bg-blue-50/30">
-                    {objective !== 0 ? ((row.indicatorId.startsWith('pph') || row.indicatorId === 'cantidad_colgada' || row.indicatorId === 'piezas_persona_hora') ? objective : `${objective}%`) : '—'}
+                    {objective !== 0 ? ((row.indicatorId.startsWith('pph') || row.indicatorId === 'cantidad_colgada' || row.indicatorId === 'piezas_persona_hora' || row.indicatorId === 'bultos_persona_hora' || row.indicatorId === 'num_errores') ? objective : `${objective}%`) : '—'}
                   </td>
                   {row.values.map((val: any, i: number) => {
                     const isKPI = (row.indicatorId === 'productividad' || row.indicatorId === 'oee' || row.indicatorId === 'disponibilidad' || row.indicatorId === 'rendimiento' || row.indicatorId === 'calidad');
@@ -1030,7 +1030,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
                     const colObj = getWorkshopObjective(row.id, row.indicatorId, title.includes('Diario') ? last7Days[i] : undefined);
                     
                     let isGood = false;
-                    if (row.indicatorId.startsWith('merma') || row.indicatorId === 'subproducto') {
+                    if (row.indicatorId.startsWith('merma') || row.indicatorId === 'subproducto' || row.indicatorId === 'num_errores') {
                       isGood = !isNaN(numVal) && numVal <= colObj;
                     } else {
                       isGood = !isNaN(numVal) && numVal >= colObj;
@@ -1046,7 +1046,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
                         className={`p-1 text-center font-bold border border-slate-200 select-none ${isEmpty ? 'text-slate-300' : (isGood ? 'text-emerald-600 bg-emerald-50/30' : 'text-red-500 bg-red-50/30')}`}
                         title={date && isKPI ? "Doble clic para ver Pareto" : ""}
                       >
-                        {isEmpty ? '-' : ((row.indicatorId.startsWith('pph') || row.indicatorId === 'cantidad_colgada' || row.indicatorId === 'piezas_persona_hora') ? val : `${val}%`)}
+                        {isEmpty ? '-' : ((row.indicatorId.startsWith('pph') || row.indicatorId === 'cantidad_colgada' || row.indicatorId === 'piezas_persona_hora' || row.indicatorId === 'bultos_persona_hora' || row.indicatorId === 'num_errores') ? val : `${val}%`)}
                       </td>
                     );
                   })}

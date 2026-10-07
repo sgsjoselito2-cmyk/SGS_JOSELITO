@@ -467,7 +467,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
 
   const workshopsList = [
     'sb-preparacion', 'sb-loncheado', 'sb-empaquetado-loncheado', 'sb-empaquetado-deshuesado',
-    'env-envasado', 'env-empaquetado', 'expedicion', 'preparacion-exp',
+    'env-envasado', 'env-empaquetado', 'envolver', 'envios', 'preparacion-exp',
     'movimiento-jamones-paco', 'movimiento-jamones-perales', 'movimiento-jamones'
   ];
 

@@ -64,7 +64,8 @@ const TALLERES_POR_AREA = [
       { id: 'sb-empaquetado-deshuesado', name: 'EMP. DESHUESADO SB' },
       { id: 'env-envasado', name: 'ENVASADO' },
       { id: 'env-empaquetado', name: 'EMPAQUETADO ENV' },
-      { id: 'expedicion', name: 'EXPEDICIONES' },
+      { id: 'envolver', name: 'ENVOLVER' },
+      { id: 'envios', name: 'ENVÍOS' },
       { id: 'preparacion-exp', name: 'PREP. EXPEDICIONES' },
       { id: 'movimientos-dashboard', name: 'DASHBOARD MOVIMIENTOS' }
     ]

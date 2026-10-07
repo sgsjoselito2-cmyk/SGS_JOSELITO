@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
   PieChart, Pie, Cell, Cell as RechartsCell
 } from 'recharts';
 import Markdown from 'react-markdown';
@@ -320,6 +320,7 @@ export const calculateStats = (
   let pph_jamones = 0;
   let pph_paletas = 0;
   let pph_manteca = 0;
+  let pph_colgar = 0;
   let pph_descolgar_colgar = 0;
   let cantidad_colgada = 0;
   const calcPPHFromMinutes = (m: number, qty: number) => m > 0 ? qty / (m / 60) : 0;
@@ -415,6 +416,13 @@ export const calculateStats = (
     pph_descolgar_colgar = actsDescolgarColgar.length > 0 && horasDescolgarColgar > 0
       ? Math.round(cantDescolgarColgar / persDescolgarColgar / horasDescolgarColgar)
       : 0;
+
+    // PPH COLGAR (total: jamones + paletas + manteca + descolgar-colgar)
+    const actsColgarTotal = [...actsJamones, ...actsPaletas, ...actsManteca, ...actsDescolgarColgar];
+    const cantColgarTotal = cantJamones + cantPaletas + cantManteca + cantDescolgarColgar;
+    const persColgarTotal = new Set(actsColgarTotal.flatMap(a => a.operarios || [])).size || 1;
+    const horasColgarTotal = calculateUniqueMinutesMultiDay(actsColgarTotal) / 60;
+    pph_colgar = horasColgarTotal > 0 ? Math.round(cantColgarTotal / persColgarTotal / horasColgarTotal) : 0;
   }
 
   const finalAvailability = Math.min(100, availability > 0 ? availability : 0);
@@ -445,12 +453,16 @@ export const calculateStats = (
     pph_jamones: hasData ? pph_jamones.toFixed(0) : '',
     pph_paletas: hasData ? pph_paletas.toFixed(0) : '',
     pph_manteca: hasData ? pph_manteca.toFixed(0) : '',
+    pph_colgar: hasData ? pph_colgar.toFixed(0) : '',
     pph_descolgar_colgar: pph_descolgar_colgar > 0 ? pph_descolgar_colgar.toFixed(0) : '',
     cantidad_colgada: hasData ? cantidad_colgada.toFixed(0) : '',
     tiempo_produccion_real: uniqueTimeP,
     tiempo_esperas: uniqueTimeE,
     tiempo_averias: uniqueTimeA,
-    piezas_persona_hora: ''
+    piezas_persona_hora: '',
+    bultos_persona_hora: '',
+    num_errores: '',
+    cumplimiento_plan: ''
   };
 
   const targetArea = areaId;
@@ -469,6 +481,7 @@ export const calculateStats = (
     let totalPaletas = 0;
     let totalCajasNavidad = 0;
     let foundClosureData = false;
+    let cambioFormato = 0;
 
     if (targetDates.length > 0) {
       targetDates.forEach(d => {
@@ -484,6 +497,7 @@ export const calculateStats = (
                   totalJamones += Number(parsed.jamones) || 0;
                   totalPaletas += Number(parsed.paletas) || 0;
                   totalCajasNavidad += Number(parsed.cajasNavidad) || 0;
+                  cambioFormato += Number(parsed.cambioFormato) || 0;
                   foundClosureData = true;
                   break;
                 }
@@ -507,6 +521,7 @@ export const calculateStats = (
                 totalJamones = Number(parsed.jamones) || 0;
                 totalPaletas = Number(parsed.paletas) || 0;
                 totalCajasNavidad = Number(parsed.cajasNavidad) || 0;
+                cambioFormato = Number(parsed.cambioFormato) || 0;
                 foundClosureData = true;
                 break;
               }
@@ -514,6 +529,13 @@ export const calculateStats = (
           } catch (_) {}
         }
       }
+    }
+
+    // Recalcular disponibilidad para ENVOLVER incluyendo cambio de formato
+    const tiempoTotalConCambio = uniqueTimeP + uniqueTimeE + uniqueTimeA + cambioFormato;
+    if (tiempoTotalConCambio > 0) {
+      const dispoConCambio = (uniqueTimeP / tiempoTotalConCambio) * 100;
+      statsObj.disponibilidad = (hasData || foundClosureData) ? Math.min(100, Math.max(0, dispoConCambio)).toFixed(1) : '';
     }
 
     const speedsToUse = (masterSpeeds && masterSpeeds.length > 0)
@@ -561,12 +583,56 @@ export const calculateStats = (
       : '';
   }
 
+  if (aid === 'envios') {
+    const recordsToScan = [...data, ...activities, ...history];
+    let totalBultos = 0;
+    let totalErrores = 0;
+    let totalPedidosNoAtendidos = 0;
+    let foundEnviosData = false;
+
+    for (const rec of recordsToScan) {
+      if (rec.area && rec.area !== 'envios') continue;
+      const c = rec.comentarios || (rec as any).comments || '';
+      if (typeof c === 'string' && c.includes('CIERRE TURNO ENVIOS')) {
+        try {
+          const jsonMatch = c.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            totalBultos += Number(parsed.bultos) || 0;
+            totalErrores += Number(parsed.errores) || 0;
+            totalPedidosNoAtendidos += Number(parsed.pedidosNoAtendidos) || 0;
+            foundEnviosData = true;
+          }
+        } catch (_) {}
+      }
+    }
+
+    const relevantOpsEnvios = new Set(
+      recordsToScan.filter(a => a.area === 'envios').flatMap(a => a.operarios || [])
+    );
+    const personasEnvios = relevantOpsEnvios.size > 0 ? relevantOpsEnvios.size : 1;
+    const horasEnvios = (uniqueTimeP > 0 ? uniqueTimeP : sumDurationP) / 60;
+
+    statsObj.bultos_persona_hora = foundEnviosData
+      ? (horasEnvios > 0 ? (totalBultos / personasEnvios / horasEnvios).toFixed(1) : '0')
+      : '';
+    statsObj.num_errores = foundEnviosData ? totalErrores.toFixed(0) : '';
+    const totalPedidos = totalBultos + totalPedidosNoAtendidos;
+    statsObj.cumplimiento_plan = foundEnviosData && totalPedidos > 0
+      ? ((totalBultos / totalPedidos) * 100).toFixed(1)
+      : '';
+  }
+
   const baseVars: Record<string, number> = {
     disponibilidad: parseFloat(statsObj.disponibilidad) || 0,
     rendimiento: parseFloat(statsObj.rendimiento) || 0,
     calidad: parseFloat(statsObj.calidad) || 0,
     pph: parseFloat(statsObj.pph) || 0,
+    pph_colgar: parseFloat(statsObj.pph_colgar) || 0,
     piezas_persona_hora: parseFloat(statsObj.piezas_persona_hora) || 0,
+    bultos_persona_hora: parseFloat(statsObj.bultos_persona_hora) || 0,
+    num_errores: parseFloat(statsObj.num_errores) || 0,
+    cumplimiento_plan: parseFloat(statsObj.cumplimiento_plan) || 0,
     cantidad: totalParts,
     cantidadnok: totalPartsNok,
     personas: 0,
@@ -603,7 +669,7 @@ export const calculateStats = (
   }
 
   const rawIndicators = (resolvedIndicators && targetArea) ? (resolvedIndicators[targetArea] || resolvedIndicators.default || []) : [];
-  const standardKpiIds = ['productividad', 'oee', 'disponibilidad', 'rendimiento', 'calidad', 'pph', 'piezas_persona_hora', 'merma1', 'merma2', 'pph_blister_emp', 'pph_sin_blister_cuchillo', 'pph_sin_marcar', 'pph_empaquetado_jabu', 'pph_jamones', 'pph_paletas', 'pph_manteca', 'pph_descolgar_colgar', 'cantidad_colgada', 'subproducto'];
+  const standardKpiIds = ['productividad', 'oee', 'disponibilidad', 'rendimiento', 'calidad', 'pph', 'piezas_persona_hora', 'bultos_persona_hora', 'cumplimiento_plan', 'num_errores', 'merma1', 'merma2', 'pph_blister_emp', 'pph_sin_blister_cuchillo', 'pph_sin_marcar', 'pph_empaquetado_jabu', 'pph_jamones', 'pph_paletas', 'pph_manteca', 'pph_colgar', 'pph_descolgar_colgar', 'cantidad_colgada', 'subproducto'];
   rawIndicators.forEach((ind: any) => {
     if (ind.formula && !standardKpiIds.includes(ind.id)) {
       const val = evaluateFormula(ind.formula, baseVars, ind.escala);
@@ -925,6 +991,58 @@ const Dashboard: React.FC<DashboardProps> = ({
     return { daily, weekly, annual };
   }, [mermas, selectedDate, selectedArea]);
 
+  // Datos diarios de los últimos 30 días para envíos (Bultos vs Errores)
+  const enviosTrendData = useMemo(() => {
+    if (selectedArea !== 'envios') return [];
+
+    const baseDate = new Date(selectedDate || new Date().toISOString().split('T')[0]);
+    if (isNaN(baseDate.getTime())) return [];
+
+    const days: { fecha: string; label: string; bultos: number; errores: number; pedidosNoAtendidos: number }[] = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(baseDate);
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const dayLabel = `${d.getDate()}/${d.getMonth() + 1}`;
+      days.push({ fecha: dateStr, label: dayLabel, bultos: 0, errores: 0, pedidosNoAtendidos: 0 });
+    }
+
+    const dayMap = new Map<string, { fecha: string; label: string; bultos: number; errores: number; pedidosNoAtendidos: number }>();
+    days.forEach(d => dayMap.set(d.fecha, d));
+
+    // Deduplicar registros entre activities y history
+    const seenIds = new Set<string>();
+    const recordsToScan: Activity[] = [];
+    [...activities, ...history].forEach(r => {
+      const key = r.id || `${r.fecha}-${r.horaInicio}-${r.comentarios}`;
+      if (!seenIds.has(key)) {
+        seenIds.add(key);
+        recordsToScan.push(r);
+      }
+    });
+
+    for (const rec of recordsToScan) {
+      if (rec.area && rec.area !== 'envios') continue;
+      if (!rec.fecha || !dayMap.has(rec.fecha)) continue;
+
+      const c = rec.comentarios || (rec as any).comments || '';
+      if (typeof c === 'string' && c.includes('CIERRE TURNO ENVIOS')) {
+        try {
+          const jsonMatch = c.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            const target = dayMap.get(rec.fecha)!;
+            target.bultos += Number(parsed.bultos) || 0;
+            target.errores += Number(parsed.errores) || 0;
+            target.pedidosNoAtendidos += Number(parsed.pedidosNoAtendidos) || 0;
+          }
+        } catch (_) {}
+      }
+    }
+
+    return days;
+  }, [selectedArea, selectedDate, activities, history]);
+
   // Pareto Data
   const paretos = useMemo(() => {
     const esperas: Record<string, number> = {};
@@ -1057,8 +1175,8 @@ const Dashboard: React.FC<DashboardProps> = ({
           <tbody>
             {indicadoresFiltrados.map((indicator) => {
               const staticObj = (oeeObjectives as any)[indicator.objKey || ''] || 0;
-              const isLowerBetter = indicator.id.startsWith('merma') || indicator.id === 'subproducto';
-              const isPPH = indicator.id.startsWith('pph') || indicator.id === 'cantidad_colgada' || indicator.id === 'piezas_persona_hora';
+              const isLowerBetter = indicator.id.startsWith('merma') || indicator.id === 'subproducto' || indicator.id === 'num_errores';
+              const isPPH = indicator.id.startsWith('pph') || indicator.id === 'cantidad_colgada' || indicator.id === 'piezas_persona_hora' || indicator.id === 'bultos_persona_hora' || indicator.id === 'num_errores';
 
               return (
                 <tr key={indicator.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
@@ -1114,6 +1232,28 @@ const Dashboard: React.FC<DashboardProps> = ({
     if (aid === 'envolver') {
       kpis.push({ label: 'PIEZAS / PERSONA / HORA (ENVOLVER)', val: stats.piezas_persona_hora, obj: getObjectiveForDate('piezas_persona_hora', selectedDate), color: 'indigo', key: 'piezas_persona_hora' });
     }
+    if (aid === 'envios') {
+      kpis.push({ label: 'BULTOS / PERSONA / HORA', val: stats.bultos_persona_hora, obj: getObjectiveForDate('bultos_persona_hora', selectedDate), color: 'indigo', key: 'bultos_persona_hora' });
+      kpis.push({ 
+        label: 'CUMPLIMIENTO PLAN (%)', 
+        val: `${stats.cumplimiento_plan}${stats.cumplimiento_plan !== '' ? '%' : ''}`, 
+        obj: `${getObjectiveForDate('cumplimiento_plan', selectedDate)}%`, 
+        color: 'blue', 
+        key: 'cumplimiento_plan',
+        rawVal: stats.cumplimiento_plan,
+        rawObj: getObjectiveForDate('cumplimiento_plan', selectedDate)
+      });
+      kpis.push({ 
+        label: 'Nº ERRORES', 
+        val: stats.num_errores, 
+        obj: getObjectiveForDate('num_errores', selectedDate), 
+        color: 'amber', 
+        key: 'num_errores',
+        isLowerBetter: true,
+        rawVal: stats.num_errores,
+        rawObj: getObjectiveForDate('num_errores', selectedDate)
+      });
+    }
     if (aid === 'preparacion-exp' || aid.includes('preparacion-exp')) {
       kpis.push({ label: 'PPH', val: stats.pph, obj: getObjectiveForDate('pph', selectedDate), color: 'indigo', key: 'pph' });
       kpis.push({ 
@@ -1132,6 +1272,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       kpis.push({ label: 'PPH COLGAR JAMONES MANTECA', val: stats.pph_manteca, obj: getObjectiveForDate('pph_manteca', selectedDate), color: 'indigo', key: 'pph_manteca' });
       kpis.push({ label: 'PPH DESCOLGAR - COLGAR (EN LINEA)', val: stats.pph_descolgar_colgar, obj: getObjectiveForDate('pph_descolgar_colgar', selectedDate), color: 'indigo', key: 'pph_descolgar_colgar' });
       kpis.push({ label: 'CANTIDAD COLGADA', val: stats.cantidad_colgada, obj: getObjectiveForDate('cantidad_colgada', selectedDate) || 2000, color: 'indigo', key: 'cantidad_colgada' });
+      kpis.push({ label: 'PPH COLGAR', val: stats.pph_colgar, obj: getObjectiveForDate('pph_colgar', selectedDate), color: 'indigo', key: 'pph_colgar' });
     }
     return kpis.filter(kpi => {
       const objs = allObjectives[selectedArea || ''] || [];
@@ -1234,7 +1375,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           if ((selectedArea || '').includes('movimiento-jamones') && kpi.key !== 'disponibilidad') {
             return false;
           }
-          if (selectedArea === 'sb-empaquetado-loncheado') {
+          if (selectedArea === 'sb-empaquetado-loncheado' || selectedArea === 'envios') {
             return false;
           }
           const objs = allObjectives[selectedArea || ''] || [];
@@ -1253,7 +1394,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto pr-1 space-y-2 no-scrollbar pb-24">
-        <div className={`grid gap-2 ${(selectedArea || '').includes('movimiento-jamones') ? 'grid-cols-1 max-w-xs' : (selectedArea === 'sb-empaquetado-loncheado' || selectedArea === 'preparacion-exp') ? 'grid-cols-2 max-w-md' : 'grid-cols-2 lg:grid-cols-4'}`}>
+        <div className={`grid gap-2 ${(selectedArea || '').includes('movimiento-jamones') ? 'grid-cols-1 max-w-xs' : (selectedArea === 'sb-empaquetado-loncheado' || selectedArea === 'preparacion-exp') ? 'grid-cols-2 max-w-md' : selectedArea === 'envios' ? 'grid-cols-1 md:grid-cols-3 max-w-4xl' : 'grid-cols-2 lg:grid-cols-4'}`}>
           {[
             { label: 'Disponibilidad', val: stats.disponibilidad, obj: getObjectiveForDate('disponibilidad', selectedDate), color: 'blue', key: 'disponibilidad' },
             { label: 'Rendimiento', val: stats.rendimiento, obj: getObjectiveForDate('rendimiento', selectedDate), color: 'emerald', key: 'rendimiento' },
@@ -1263,7 +1404,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             if ((selectedArea || '').includes('movimiento-jamones') && kpi.key !== 'disponibilidad') {
               return false;
             }
-            if (selectedArea === 'sb-empaquetado-loncheado' || selectedArea === 'preparacion-exp') {
+            if (selectedArea === 'sb-empaquetado-loncheado' || selectedArea === 'preparacion-exp' || selectedArea === 'envios') {
               return false;
             }
             const objs = allObjectives[selectedArea || ''] || [];
@@ -1301,7 +1442,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           {extraKPIs.map(kpi => {
             const numVal = (kpi as any).rawVal !== undefined ? Number((kpi as any).rawVal) : parseFloat(String(kpi.val).replace('%', ''));
             const numObj = (kpi as any).rawObj !== undefined ? Number((kpi as any).rawObj) : parseFloat(String(kpi.obj).replace('%', ''));
-            const isGood = !isNaN(numVal) && !isNaN(numObj) ? numVal >= numObj : true;
+            const isGood = !isNaN(numVal) && !isNaN(numObj) ? ((kpi as any).isLowerBetter ? numVal <= numObj : numVal >= numObj) : true;
             const progress = !isNaN(numVal) && !isNaN(numObj) && numObj > 0 ? (numVal / numObj) * 100 : 0;
             return (
               <div key={kpi.label} className="bg-white p-2 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-100 shadow-md relative overflow-hidden group hover:shadow-lg transition-all flex flex-col justify-between">
@@ -1357,6 +1498,130 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
+      {/* Gráfico Comparativo de Envíos: Bultos vs Errores (Último Mes) */}
+      {selectedArea === 'envios' && (
+        <div className="bg-white p-6 sm:p-8 rounded-2xl sm:rounded-[3rem] border border-slate-100 shadow-xl space-y-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-emerald-600 rounded-2xl flex items-center justify-center text-white font-black text-base shadow-md shadow-emerald-600/20">
+                📦
+              </div>
+              <div>
+                <h3 className="text-lg sm:text-xl font-black text-slate-900 uppercase tracking-tighter">
+                  Evolución Diaria: Nº Bultos vs Nº Errores
+                </h3>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                  Últimos 30 días · Tendencia diaria de rendimiento y errores en envíos
+                </p>
+              </div>
+            </div>
+
+            {/* Resumen mensual */}
+            <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+              <div className="bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-xl text-center flex-1 sm:flex-initial">
+                <span className="block text-[9px] font-black text-emerald-700 uppercase tracking-wider">Total Bultos (30d)</span>
+                <span className="text-base sm:text-lg font-black text-emerald-900 leading-none">
+                  {enviosTrendData.reduce((acc, d) => acc + d.bultos, 0).toLocaleString()}
+                </span>
+              </div>
+              <div className="bg-red-50 border border-red-200 px-3 py-2 rounded-xl text-center flex-1 sm:flex-initial">
+                <span className="block text-[9px] font-black text-red-700 uppercase tracking-wider">Total Errores (30d)</span>
+                <span className="text-base sm:text-lg font-black text-red-900 leading-none">
+                  {enviosTrendData.reduce((acc, d) => acc + d.errores, 0).toLocaleString()}
+                </span>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 px-3 py-2 rounded-xl text-center flex-1 sm:flex-initial">
+                <span className="block text-[9px] font-black text-blue-700 uppercase tracking-wider">% Error Global</span>
+                <span className="text-base sm:text-lg font-black text-blue-900 leading-none">
+                  {(() => {
+                    const totalB = enviosTrendData.reduce((acc, d) => acc + d.bultos, 0);
+                    const totalE = enviosTrendData.reduce((acc, d) => acc + d.errores, 0);
+                    return totalB > 0 ? ((totalE / totalB) * 100).toFixed(2) + '%' : '0%';
+                  })()}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="h-80 w-full relative pt-2">
+            {enviosTrendData.some(d => d.bultos > 0 || d.errores > 0) ? (
+              <ResponsiveContainer width="100%" height="100%" minHeight={300} debounce={100}>
+                <LineChart data={enviosTrendData} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis 
+                    dataKey="label" 
+                    tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }}
+                    tickLine={false}
+                    axisLine={{ stroke: '#e2e8f0' }}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis 
+                    yAxisId="left"
+                    orientation="left"
+                    stroke="#10b981"
+                    tick={{ fontSize: 10, fontWeight: 700, fill: '#10b981' }}
+                    tickLine={false}
+                    axisLine={false}
+                    label={{ value: 'Bultos', angle: -90, position: 'insideLeft', fill: '#10b981', fontSize: 10, fontWeight: 800 }}
+                  />
+                  <YAxis 
+                    yAxisId="right"
+                    orientation="right"
+                    stroke="#ef4444"
+                    tick={{ fontSize: 10, fontWeight: 700, fill: '#ef4444' }}
+                    tickLine={false}
+                    axisLine={false}
+                    label={{ value: 'Errores', angle: 90, position: 'insideRight', fill: '#ef4444', fontSize: 10, fontWeight: 800 }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)', fontSize: '12px', fontWeight: 600 }}
+                    labelFormatter={(label, payload) => {
+                      const item = payload && payload[0]?.payload;
+                      return item?.fecha ? `Fecha: ${item.fecha.split('-').reverse().join('/')}` : label;
+                    }}
+                  />
+                  <Legend 
+                    verticalAlign="top" 
+                    align="right" 
+                    wrapperStyle={{ paddingBottom: '12px', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase' }} 
+                  />
+                  <Line 
+                    yAxisId="left"
+                    type="monotone" 
+                    dataKey="bultos" 
+                    name="Nº Bultos" 
+                    stroke="#10b981" 
+                    strokeWidth={3}
+                    dot={{ r: 3, fill: '#10b981', strokeWidth: 1 }}
+                    activeDot={{ r: 6, fill: '#059669' }}
+                  />
+                  <Line 
+                    yAxisId="right"
+                    type="monotone" 
+                    dataKey="errores" 
+                    name="Nº Errores" 
+                    stroke="#ef4444" 
+                    strokeWidth={3}
+                    dot={{ r: 3, fill: '#ef4444', strokeWidth: 1 }}
+                    activeDot={{ r: 6, fill: '#dc2626' }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-slate-300 py-12">
+                <span className="text-4xl mb-2">📊</span>
+                <p className="text-sm font-bold uppercase tracking-widest text-slate-400">
+                  Sin registros de cierre en los últimos 30 días
+                </p>
+                <p className="text-xs text-slate-400 mt-1 font-medium">
+                  Los datos se reflejarán automáticamente al cerrar turnos con bultos y errores registrados.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Pareto Section */}
       <div className={`grid gap-4 sm:gap-6 ${(selectedArea || '').includes('movimiento-jamones') ? 'grid-cols-1 max-w-xl' : selectedArea === 'sb-empaquetado-loncheado' ? 'grid-cols-1 lg:grid-cols-2 max-w-4xl' : selectedArea === 'preparacion-exp' ? 'grid-cols-1 max-w-xl' : 'grid-cols-1 lg:grid-cols-3'}`}>
         {[
@@ -1367,12 +1632,13 @@ const Dashboard: React.FC<DashboardProps> = ({
           if ((selectedArea || '').includes('movimiento-jamones') && pareto.type !== 'disponibilidad') {
             return false;
           }
-          if (selectedArea === 'sb-empaquetado-loncheado') {
+          if (selectedArea === 'sb-empaquetado-loncheado' || selectedArea === 'envios') {
             return false;
           }
           if (selectedArea === 'preparacion-exp' && pareto.type !== 'disponibilidad') {
             return false;
           }
+          return true;
         }).map(pareto => (
           <div key={pareto.title} className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-[2.5rem] border border-slate-100 shadow-lg">
             <h3 className="text-slate-900 text-[13px] sm:text-[15px] font-black uppercase tracking-widest mb-4 sm:mb-6 px-2">{pareto.title}</h3>
