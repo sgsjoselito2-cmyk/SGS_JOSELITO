@@ -183,9 +183,15 @@ const App: React.FC = () => {
       if (!parsed['envolver']) {
         parsed['envolver'] = INITIAL_WORKSHOP_INDICATORS['envolver'];
         changed = true;
-      } else if (!parsed['envolver'].some((ind: any) => ind.id === 'piezas_persona_hora')) {
-        parsed['envolver'].unshift({ id: 'piezas_persona_hora', name: 'PIEZAS / PERSONA / HORA (ENVOLVER)' });
-        changed = true;
+      } else {
+        const pphInd = parsed['envolver'].find((ind: any) => ind.id === 'piezas_persona_hora');
+        if (!pphInd) {
+          parsed['envolver'].push({ id: 'piezas_persona_hora', name: 'PIEZAS / PERSONA / HORA (ENVOLVER)', format: 'number' });
+          changed = true;
+        } else if (pphInd.format !== 'number') {
+          pphInd.format = 'number';
+          changed = true;
+        }
       }
       if (!parsed['envios']) {
         parsed['envios'] = INITIAL_WORKSHOP_INDICATORS['envios'];

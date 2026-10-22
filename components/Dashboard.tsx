@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import Markdown from 'react-markdown';
 import { GoogleGenAI } from "@google/genai";
-import { Activity, MasterSpeed, IncidenceMaster, OEEObjectives, TaskType } from '../types';
+import { Activity, MasterSpeed, IncidenceMaster, OEEObjectives, TaskType, WorkshopIndicator } from '../types';
 import { generateContentWithRetry } from '../src/utils/aiUtils';
 import { calculateUniqueMinutes, mergeIntervals, getIntervalsInMinutes, subtractIntervals, normalizeFormato } from '../src/utils/index';
 import { getInitialMasterSpeeds } from '../constants';
@@ -23,7 +23,7 @@ interface DashboardProps {
   mermas?: any[];
   selectedDate?: string;
   setSelectedDate?: (d: string) => void;
-  workshopIndicators: Record<string, {id: string, name: string, formula?: string, escala?: string}[]>;
+  workshopIndicators: Record<string, WorkshopIndicator[]>;
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
@@ -112,7 +112,7 @@ export const calculateStats = (
   data: Activity[],
   areaId?: string,
   mermas: any[] = [],
-  workshopIndicators?: Record<string, {id: string, name: string, formula?: string, escala?: string}[]>,
+  workshopIndicators?: Record<string, WorkshopIndicator[]>,
   activities: Activity[] = [],
   history: Activity[] = [],
   useNewFormula: boolean = false,
@@ -569,15 +569,57 @@ export const calculateStats = (
 
     // CAMBIO 3: PIEZAS / PERSONA / HORA
     const totalPiezas = totalJamones + totalPaletas + totalCajasNavidad;
-    const relevantOps = new Set(
-      (data.length > 0 ? data : (datosCalculo.length > 0 ? datosCalculo : recordsToScan.filter(a => (a.area === 'envolver' || (!a.area && isExpedicion)))))
-        .flatMap(a => a.operarios || [])
-    );
-    const personas = relevantOps.size > 0 ? relevantOps.size : 1;
-    const horasProduccion = tiempoRealProduccion / 60;
-    const piezasPersonaHora = (horasProduccion > 0 && personas > 0)
-      ? (totalPiezas / personas / horasProduccion)
-      : 0;
+    const targetDatesWithData = targetDates.filter(d => {
+      const dayRecs = recordsToScan.filter(a => a.fecha === d && (a.area === 'envolver' || (!a.area && isExpedicion)));
+      return dayRecs.some(rec => {
+        const c = rec.comentarios || (rec as any).comments || '';
+        return typeof c === 'string' && c.includes('CIERRE TURNO ENVOLVER');
+      });
+    });
+
+    let piezasPersonaHora = 0;
+    if (targetDatesWithData.length > 1) {
+      // Múltiples días: calcular PPH por día y hacer la media
+      const dailyPPHs: number[] = [];
+      for (const d of targetDatesWithData) {
+        const dayRecs = recordsToScan.filter(a => a.fecha === d && (a.area === 'envolver' || (!a.area && isExpedicion)));
+        let dayJamones = 0, dayPaletas = 0, dayCajas = 0, dayCambio = 0;
+        for (const rec of dayRecs) {
+          const c = rec.comentarios || (rec as any).comments || '';
+          if (typeof c === 'string' && c.includes('CIERRE TURNO ENVOLVER')) {
+            try {
+              const jsonMatch = c.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                dayJamones = Number(parsed.jamones) || 0;
+                dayPaletas = Number(parsed.paletas) || 0;
+                dayCajas = Number(parsed.cajasNavidad) || 0;
+                dayCambio = Number(parsed.cambioFormato) || 0;
+              }
+            } catch (_) {}
+            break;
+          }
+        }
+        const dayPiezas = dayJamones + dayPaletas + dayCajas;
+        if (dayPiezas === 0) continue;
+        const dayOps = new Set(dayRecs.filter(a => a.tipoTarea === 'P').flatMap(a => a.operarios || []));
+        const dayPersonas = dayOps.size > 0 ? dayOps.size : 1;
+        const dayProdActs = dayRecs.filter(a => a.tipoTarea === 'P');
+        const dayHoras = calculateUniqueMinutesMultiDay(dayProdActs) / 60;
+        const effectiveHoras = dayHoras > 0 ? dayHoras : 8;
+        dailyPPHs.push(dayPiezas / dayPersonas / effectiveHoras);
+      }
+      piezasPersonaHora = dailyPPHs.length > 0 ? dailyPPHs.reduce((s, v) => s + v, 0) / dailyPPHs.length : 0;
+    } else {
+      // Un solo día: cálculo normal
+      const relevantOps = new Set(
+        (data.length > 0 ? data : (datosCalculo.length > 0 ? datosCalculo : recordsToScan.filter(a => (a.area === 'envolver' || (!a.area && isExpedicion)))))
+          .flatMap(a => a.operarios || [])
+      );
+      const personas = relevantOps.size > 0 ? relevantOps.size : 1;
+      const horasProduccion = tiempoRealProduccion > 0 ? tiempoRealProduccion / 60 : 8;
+      piezasPersonaHora = totalPiezas > 0 && personas > 0 ? totalPiezas / personas / horasProduccion : 0;
+    }
     statsObj.piezas_persona_hora = (hasData || foundClosureData)
       ? (piezasPersonaHora > 0 ? (piezasPersonaHora % 1 === 0 ? piezasPersonaHora.toFixed(0) : piezasPersonaHora.toFixed(1)) : '0')
       : '';
@@ -1144,7 +1186,8 @@ const Dashboard: React.FC<DashboardProps> = ({
         id: ind.id,
         objKey: ind.id,
         label: ind.name.toUpperCase(),
-        showInTop5: spec ? spec.showInTop5 === true : true
+        showInTop5: spec ? spec.showInTop5 === true : true,
+        format: (ind as any).format || ((ind.id.startsWith('pph') || ind.id === 'cantidad_colgada' || ind.id === 'piezas_persona_hora' || ind.id === 'bultos_persona_hora' || ind.id === 'num_errores') ? 'number' : 'percentage')
       };
     });
 
@@ -1174,9 +1217,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           </thead>
           <tbody>
             {indicadoresFiltrados.map((indicator) => {
-              const staticObj = (oeeObjectives as any)[indicator.objKey || ''] || 0;
+              const currentObj = getObjectiveForDate(indicator.objKey || indicator.id, selectedDate) || (oeeObjectives as any)[indicator.objKey || ''] || 0;
               const isLowerBetter = indicator.id.startsWith('merma') || indicator.id === 'subproducto' || indicator.id === 'num_errores';
-              const isPPH = indicator.id.startsWith('pph') || indicator.id === 'cantidad_colgada' || indicator.id === 'piezas_persona_hora' || indicator.id === 'bultos_persona_hora' || indicator.id === 'num_errores';
+              const isPPH = indicator.format === 'number' || indicator.id.startsWith('pph') || indicator.id === 'cantidad_colgada' || indicator.id === 'piezas_persona_hora' || indicator.id === 'bultos_persona_hora' || indicator.id === 'num_errores';
 
               return (
                 <tr key={indicator.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
@@ -1184,7 +1227,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     {indicator.label}
                   </td>
                   <td className="p-2 text-center font-black border border-slate-200 text-blue-600 bg-blue-50/20">
-                    {staticObj !== 0 ? (isPPH ? staticObj : `${staticObj}%`) : '—'}
+                    {currentObj !== 0 ? (isPPH ? currentObj : `${currentObj}%`) : '—'}
                   </td>
                   {data.map(d => {
                     const rawVal = d.total[indicator.id];
@@ -1267,12 +1310,12 @@ const Dashboard: React.FC<DashboardProps> = ({
       });
     }
     if (aid.includes('movimiento-jamones')) {
+      kpis.push({ label: 'CANTIDAD COLGADA', val: stats.cantidad_colgada, obj: getObjectiveForDate('cantidad_colgada', selectedDate) || 2000, color: 'indigo', key: 'cantidad_colgada' });
+      kpis.push({ label: 'PPH COLGAR', val: stats.pph_colgar, obj: getObjectiveForDate('pph_colgar', selectedDate), color: 'indigo', key: 'pph_colgar' });
       kpis.push({ label: 'PPH COLGAR JAMONES', val: stats.pph_jamones, obj: getObjectiveForDate('pph_jamones', selectedDate), color: 'indigo', key: 'pph_jamones' });
       kpis.push({ label: 'PPH COLGAR PALETAS', val: stats.pph_paletas, obj: getObjectiveForDate('pph_paletas', selectedDate), color: 'indigo', key: 'pph_paletas' });
       kpis.push({ label: 'PPH COLGAR JAMONES MANTECA', val: stats.pph_manteca, obj: getObjectiveForDate('pph_manteca', selectedDate), color: 'indigo', key: 'pph_manteca' });
       kpis.push({ label: 'PPH DESCOLGAR - COLGAR (EN LINEA)', val: stats.pph_descolgar_colgar, obj: getObjectiveForDate('pph_descolgar_colgar', selectedDate), color: 'indigo', key: 'pph_descolgar_colgar' });
-      kpis.push({ label: 'CANTIDAD COLGADA', val: stats.cantidad_colgada, obj: getObjectiveForDate('cantidad_colgada', selectedDate) || 2000, color: 'indigo', key: 'cantidad_colgada' });
-      kpis.push({ label: 'PPH COLGAR', val: stats.pph_colgar, obj: getObjectiveForDate('pph_colgar', selectedDate), color: 'indigo', key: 'pph_colgar' });
     }
     return kpis.filter(kpi => {
       const objs = allObjectives[selectedArea || ''] || [];

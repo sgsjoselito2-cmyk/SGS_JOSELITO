@@ -1,4 +1,4 @@
-import { MasterSpeed, IncidenceMaster, TaskType, OEEObjectives, User, ActionPlanItem } from './types';
+import { MasterSpeed, IncidenceMaster, TaskType, OEEObjectives, User, ActionPlanItem, WorkshopIndicator } from './types';
 
 export const JOSELITO_LOGO = "https://www.joselito.com/media/logo/stores/1/logo_joselito.png";
 
@@ -190,7 +190,7 @@ export const getInitialIncidenceMaster = (areaId: string): IncidenceMaster[] => 
 
 export const INITIAL_INCIDENCE_MASTER: IncidenceMaster[] = getInitialIncidenceMaster('sb-preparacion');
 
-export const INITIAL_WORKSHOP_INDICATORS: Record<string, {id: string, name: string, formula?: string}[]> = {
+export const INITIAL_WORKSHOP_INDICATORS: Record<string, WorkshopIndicator[]> = {
   'sb-loncheado': [
     { id: 'disponibilidad', name: 'Disponibilidad' },
     { id: 'rendimiento', name: 'Rendimiento' },
@@ -224,8 +224,8 @@ export const INITIAL_WORKSHOP_INDICATORS: Record<string, {id: string, name: stri
     { id: 'productividad', name: 'Productividad (OEE)' }
   ],
   'envolver': [
-    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' },
-    { id: 'piezas_persona_hora', name: 'PIEZAS / PERSONA / HORA (ENVOLVER)' }
+    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)', format: 'percentage' },
+    { id: 'piezas_persona_hora', name: 'PIEZAS / PERSONA / HORA (ENVOLVER)', format: 'number' }
   ],
   'envios': [
     { id: 'bultos_persona_hora', name: 'BULTOS / PERSONA / HORA' },
@@ -237,31 +237,31 @@ export const INITIAL_WORKSHOP_INDICATORS: Record<string, {id: string, name: stri
     { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' }
   ],
   'movimiento-jamones-paco': [
+    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' },
+    { id: 'cantidad_colgada', name: 'CANTIDAD COLGADA' },
     { id: 'pph_colgar', name: 'PPH COLGAR' },
     { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },
     { id: 'pph_paletas', name: 'PPH COLGAR PALETAS' },
     { id: 'pph_manteca', name: 'PPH COLGAR JAMONES MANTECA' },
-    { id: 'pph_descolgar_colgar', name: 'PPH DESCOLGAR - COLGAR (EN LINEA)' },
-    { id: 'cantidad_colgada', name: 'CANTIDAD COLGADA' },
-    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' }
+    { id: 'pph_descolgar_colgar', name: 'PPH DESCOLGAR - COLGAR (EN LINEA)' }
   ],
   'movimiento-jamones-perales': [
+    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' },
+    { id: 'cantidad_colgada', name: 'CANTIDAD COLGADA' },
     { id: 'pph_colgar', name: 'PPH COLGAR' },
     { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },
     { id: 'pph_paletas', name: 'PPH COLGAR PALETAS' },
     { id: 'pph_manteca', name: 'PPH COLGAR JAMONES MANTECA' },
-    { id: 'pph_descolgar_colgar', name: 'PPH DESCOLGAR - COLGAR (EN LINEA)' },
-    { id: 'cantidad_colgada', name: 'CANTIDAD COLGADA' },
-    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' }
+    { id: 'pph_descolgar_colgar', name: 'PPH DESCOLGAR - COLGAR (EN LINEA)' }
   ],
   'movimiento-jamones': [
+    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' },
+    { id: 'cantidad_colgada', name: 'CANTIDAD COLGADA' },
     { id: 'pph_colgar', name: 'PPH COLGAR' },
     { id: 'pph_jamones', name: 'PPH COLGAR JAMONES' },
     { id: 'pph_paletas', name: 'PPH COLGAR PALETAS' },
     { id: 'pph_manteca', name: 'PPH COLGAR JAMONES MANTECA' },
-    { id: 'pph_descolgar_colgar', name: 'PPH DESCOLGAR - COLGAR (EN LINEA)' },
-    { id: 'cantidad_colgada', name: 'CANTIDAD COLGADA' },
-    { id: 'disponibilidad', name: 'DISPONIBILIDAD (%)' }
+    { id: 'pph_descolgar_colgar', name: 'PPH DESCOLGAR - COLGAR (EN LINEA)' }
   ],
   'default': [
     { id: 'disponibilidad', name: 'Disponibilidad' },

@@ -167,7 +167,8 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
       areaIndicators = configuredIndicators.map(ind => ({
         id: ind.id,
         label: ind.name.toUpperCase(),
-        objKey: ind.id
+        objKey: ind.id,
+        format: (ind as any).format || ((ind.id.startsWith('pph') || ind.id === 'cantidad_colgada' || ind.id === 'piezas_persona_hora' || ind.id === 'bultos_persona_hora' || ind.id === 'num_errores') ? 'number' : 'percentage')
       }));
 
       const rowsForArea: any[] = [];
@@ -331,7 +332,7 @@ const GroupDashboard: React.FC<Props> = ({ history, activities, allObjectives, a
                 const isFirstOfArea = idx === 0 || tableRows[idx - 1].area.id !== row.area.id;
                 
                 const currentObj = getObjectiveValue(row.area.id, row.indicator.id);
-                const isPPH = row.indicator.id.startsWith('pph') || row.indicator.id === 'cantidad_colgada';
+                const isPPH = row.indicator.format === 'number' || row.indicator.id.startsWith('pph') || row.indicator.id === 'cantidad_colgada' || row.indicator.id === 'piezas_persona_hora' || row.indicator.id === 'bultos_persona_hora' || row.indicator.id === 'num_errores';
 
                 return (
                   <tr key={`${row.area.id}-${row.indicator.id}`} className="hover:bg-slate-50 transition-colors">
@@ -480,7 +481,7 @@ export const EnvasadoDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'subtit
 export const ExpedicionesDashboard: React.FC<Omit<Props, 'areas' | 'title' | 'subtitle'>> = (props) => (
   <GroupDashboard {...props}
     title="Expediciones"
-    subtitle="Expediciones · Prep. Expediciones"
+    subtitle="Envolver · Envíos · Prep. Expediciones"
     areas={[
       { id: 'envolver', name: 'ENVOLVER' },
       { id: 'envios', name: 'ENVÍOS' },

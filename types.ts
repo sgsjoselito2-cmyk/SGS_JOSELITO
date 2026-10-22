@@ -208,5 +208,10 @@ export interface IdeaDeMejora {
   estado: 'Abierto' | 'En Marcha' | 'Cerrado' | 'Retrasado';
   fechaEmision?: string;
 }
-
-
+export interface WorkshopIndicator {
+  id: string;
+  name: string;
+  formula?: string;
+  format?: 'percentage' | 'number' | string;
+  escala?: string;
+}

@@ -7,7 +7,7 @@ import Markdown from 'react-markdown';
 import { GoogleGenAI } from "@google/genai";
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
-import { Activity, MasterSpeed, IncidenceMaster, OEEObjectives, TaskType, User, ActionPlanItem } from '../types';
+import { Activity, MasterSpeed, IncidenceMaster, OEEObjectives, TaskType, User, ActionPlanItem, WorkshopIndicator } from '../types';
 import { AREA_NAMES, JOSELITO_LOGO } from '../constants';
 import { calculateStats, getWeekNumber } from './Dashboard';
 import { generateContentWithRetry } from '../src/utils/aiUtils';
@@ -111,7 +111,7 @@ interface TOP15IndicatorsProps {
   mermas?: any[];
   selectedDate?: string;
   setSelectedDate?: (d: string) => void;
-  workshopIndicators: Record<string, {id: string, name: string, formula?: string}[]>;
+  workshopIndicators: Record<string, WorkshopIndicator[]>;
 }
 
 export interface WorkshopEntry {
@@ -597,7 +597,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
   const getIndicatorsForWorkshop = useCallback((ws: WorkshopEntry) => {
     const rawIndicators = workshopIndicators[ws.id] || workshopIndicators["movimiento-jamones"] || workshopIndicators.default || [];
     const list = [...rawIndicators].filter(ind => {
-      if ((ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales') && ind.id !== 'cantidad_colgada' && ind.id !== 'disponibilidad') {
+      if ((ws.id === 'movimiento-jamones' || ws.id === 'movimiento-jamones-paco' || ws.id === 'movimiento-jamones-perales') && ind.id !== 'cantidad_colgada' && ind.id !== 'disponibilidad' && ind.id !== 'pph_colgar') {
         return false;
       }
       if (ws.id === 'sb-empaquetado-loncheado' && ind.id !== 'pph_blister_emp' && ind.id !== 'pph') {
@@ -627,7 +627,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
         const sorted = [...objs].sort((a, b) => b.valid_from.localeCompare(a.valid_from));
         const spec = sorted.find(o => o.indicator_id === 'piezas_persona_hora');
         if (!spec || spec.showInTop15 !== false) {
-          list.unshift({ id: 'piezas_persona_hora', name: 'PIEZAS / PERSONA / HORA (ENVOLVER)' });
+          list.unshift({ id: 'piezas_persona_hora', name: 'PIEZAS / PERSONA / HORA (ENVOLVER)', format: 'number' });
         }
       }
     }
@@ -640,6 +640,12 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
         const spec = sorted.find(o => o.indicator_id === 'cantidad_colgada');
         if (!spec || spec.showInTop15 !== false) {
           list.unshift({ id: 'cantidad_colgada', name: 'CANTIDAD COLGADA' });
+        }
+      }
+      if (!list.some(i => i.id === 'pph_colgar')) {
+        const spec = sorted.find(o => o.indicator_id === 'pph_colgar');
+        if (!spec || spec.showInTop15 !== false) {
+          list.push({ id: 'pph_colgar', name: 'PPH COLGAR' });
         }
       }
       if (!list.some(i => i.id === 'disponibilidad')) {
@@ -1200,7 +1206,7 @@ const TOP15Indicators: React.FC<TOP15IndicatorsProps> = ({
                       </h4>
                       <div className="pl-1 space-y-1">
                         {rows.map(row => {
-                          const isPPHOrColgada = row.indicatorId.startsWith('pph') || row.indicatorId === 'cantidad_colgada' || row.indicatorId === 'piezas_persona_hora';
+                          const isPPHOrColgada = (row as any).format === 'number' || row.indicatorId.startsWith('pph') || row.indicatorId === 'cantidad_colgada' || row.indicatorId === 'piezas_persona_hora' || row.indicatorId === 'bultos_persona_hora' || row.indicatorId === 'num_errores';
                           const val = row.value;
                           const isEmpty = val === null || val === undefined || val === '';
                           const formattedVal = isEmpty ? '—' : (isPPHOrColgada ? val : `${val}%`);

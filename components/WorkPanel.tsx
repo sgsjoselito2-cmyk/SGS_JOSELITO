@@ -406,6 +406,9 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
 
   useEffect(() => {
     if (showShiftClosureModal) {
+      if (selectedArea === 'envolver' || selectedArea === 'envios') {
+        return;
+      }
       const actividadesDia = activities.filter(a => 
         a.fecha === shiftDate &&
         a.area === selectedArea &&
@@ -807,6 +810,19 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
     }
     else {
       setIsForcingClosure(false);
+
+      if (selectedArea === 'envolver') {
+        setExpedicionCounts({ jamones: 0, paletas: 0, cajasNavidad: 0, cambioFormato: 0 });
+        setShiftClosureData({});
+        setShowShiftClosureModal(true);
+        return;
+      }
+      if (selectedArea === 'envios') {
+        setEnviosData({ bultos: 0, errores: 0, pedidosNoAtendidos: 0 });
+        setShiftClosureData({});
+        setShowShiftClosureModal(true);
+        return;
+      }
       
       const prodActivities = activities.filter(a =>
         a.fecha === fechaCierre &&
@@ -819,27 +835,8 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       ));
       
       if (formats.length === 0) {
-        if (selectedArea === 'envolver') {
-          setExpedicionCounts({ jamones: 0, paletas: 0, cajasNavidad: 0, cambioFormato: 0 });
-          setShiftClosureData({});
-          setShowShiftClosureModal(true);
-          return;
-        }
-        if (selectedArea === 'envios') {
-          setEnviosData({ bultos: 0, errores: 0, pedidosNoAtendidos: 0 });
-          setShiftClosureData({});
-          setShowShiftClosureModal(true);
-          return;
-        }
         setShowShiftConfirmModal(true);
         return;
-      }
-
-      if (selectedArea === 'envolver') {
-        setExpedicionCounts({ jamones: 0, paletas: 0, cajasNavidad: 0, cambioFormato: 0 });
-      }
-      if (selectedArea === 'envios') {
-        setEnviosData({ bultos: 0, errores: 0, pedidosNoAtendidos: 0 });
       }
 
       const initialData: Record<string, any> = {};
@@ -1263,111 +1260,111 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                 </div>
               )}
 
-              {Object.keys(shiftClosureData).length === 0 ? (
-                (selectedArea === 'envolver' || selectedArea === 'envios') ? null : (
+              {selectedArea !== 'envolver' && selectedArea !== 'envios' && (
+                Object.keys(shiftClosureData).length === 0 ? (
                   <div className="text-center py-8">
                     <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">
                       No hay actividades de producción para esta fecha
                     </p>
                   </div>
-                )
-              ) : (
-                Object.keys(shiftClosureData).map(formato => {
-                  const d = shiftClosureData[formato];
-                  const showMerma = isLoncheadoArea && d.esProduccion;
-                  const kgEntrada = safeParse(d.kgEntrada || '0') || 0;
-                  const kgTacos = safeParse(d.kgTacos || '0') || 0;
-                  const kgPieles = safeParse(d.kgPieles || '0') || 0;
-                  const kgHueco = safeParse(d.kgHueco || '0') || 0;
-                  
-                  const formatInfo = masterSpeeds.find(ms => normalizeFormato(ms.formato) === normalizeFormato(formato));
-                  const formatPeso = formatInfo?.peso || 0;
-                  const cantOk = safeParse(d.cantidad || '0') || 0;
-                  const cantNok = safeParse(d.cantidadNok || '0') || 0;
+                ) : (
+                  Object.keys(shiftClosureData).map(formato => {
+                    const d = shiftClosureData[formato];
+                    const showMerma = isLoncheadoArea && d.esProduccion;
+                    const kgEntrada = safeParse(d.kgEntrada || '0') || 0;
+                    const kgTacos = safeParse(d.kgTacos || '0') || 0;
+                    const kgPieles = safeParse(d.kgPieles || '0') || 0;
+                    const kgHueco = safeParse(d.kgHueco || '0') || 0;
+                    
+                    const formatInfo = masterSpeeds.find(ms => normalizeFormato(ms.formato) === normalizeFormato(formato));
+                    const formatPeso = formatInfo?.peso || 0;
+                    const cantOk = safeParse(d.cantidad || '0') || 0;
+                    const cantNok = safeParse(d.cantidadNok || '0') || 0;
 
-                  const mediaCombi = formatPeso;
-                  const nEnvases = cantOk + cantNok;
-                  const kgSalida = nEnvases * mediaCombi;
-                  const kgMerma = kgEntrada - kgTacos - kgPieles - kgHueco - kgSalida;
-                  const pctMerma1 = kgEntrada > 0 ? (kgMerma / kgEntrada * 100) : 0;
-                  const pctMerma2 = kgEntrada > 0 ? ((kgMerma + kgTacos + kgPieles + kgHueco) / kgEntrada) * 105 : 0;
-                  return (
-                    <div key={formato} className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                      <h3 className="font-black text-slate-900 uppercase mb-3 text-[13px] tracking-wide">{formato}</h3>
-                      {/* Cantidades */}
-                      <div className="mb-3 grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Cantidad OK</label>
-                          <input type="text" inputMode="decimal" value={d.cantidad}
-                            onChange={(e) => setShiftClosureData(prev => ({ ...prev, [formato]: { ...prev[formato], cantidad: e.target.value } }))}
-                            className="w-full border-2 border-slate-200 p-2 rounded-xl font-bold text-[14px] focus:border-slate-900 outline-none" placeholder="0" />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black text-red-500 uppercase mb-1">CANTIDAD A REPROCESAR</label>
-                          <input type="text" inputMode="decimal" value={d.cantidadNok || ''}
-                            onChange={(e) => setShiftClosureData(prev => ({ ...prev, [formato]: { ...prev[formato], cantidadNok: e.target.value } }))}
-                            className="w-full border-2 border-red-50 p-2 rounded-xl font-bold text-[14px] focus:border-red-400 outline-none text-red-600" placeholder="0" />
-                        </div>
-                      </div>
-                      {/* Merma - só Loncheado e produção */}
-                      {showMerma && (
-                        <div className="border-t border-slate-200 pt-3 mt-1">
-                          <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2">Merma</p>
-                          <div className="grid grid-cols-3 gap-2 mb-2">
-                            {[
-                              { label: 'Kg Entrada', key: 'kgEntrada' },
-                              { label: 'Kg Tacos', key: 'kgTacos' },
-                              { label: 'Kg Pieles', key: 'kgPieles' },
-                              { label: 'Kg Hueco', key: 'kgHueco' },
-                            ].map(({ label, key }) => (
-                              <div key={key}>
-                                <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">{label}</label>
-                                <input type="text" inputMode="decimal"
-                                  value={(d as any)[key] || ''}
-                                  onChange={(e) => setShiftClosureData(prev => ({ ...prev, [formato]: { ...prev[formato], [key]: e.target.value } }))}
-                                  className="w-full border-2 border-slate-200 p-1.5 rounded-lg font-bold text-[13px] focus:border-amber-400 outline-none"
-                                  placeholder="0" />
-                              </div>
-                            ))}
-                            <div>
-                              <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">Media combinada</label>
-                              <input type="number" readOnly
-                                value={mediaCombi}
-                                className="w-full border-2 border-slate-100 bg-slate-100 p-1.5 rounded-lg font-bold text-[13px] outline-none text-slate-500" />
-                            </div>
-                            <div>
-                              <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">nº envases</label>
-                              <input type="number" readOnly
-                                value={nEnvases}
-                                className="w-full border-2 border-slate-100 bg-slate-100 p-1.5 rounded-lg font-bold text-[13px] outline-none text-slate-500" />
-                            </div>
+                    const mediaCombi = formatPeso;
+                    const nEnvases = cantOk + cantNok;
+                    const kgSalida = nEnvases * mediaCombi;
+                    const kgMerma = kgEntrada - kgTacos - kgPieles - kgHueco - kgSalida;
+                    const pctMerma1 = kgEntrada > 0 ? (kgMerma / kgEntrada * 100) : 0;
+                    const pctMerma2 = kgEntrada > 0 ? ((kgMerma + kgTacos + kgPieles + kgHueco) / kgEntrada) * 105 : 0;
+                    return (
+                      <div key={formato} className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                        <h3 className="font-black text-slate-900 uppercase mb-3 text-[13px] tracking-wide">{formato}</h3>
+                        {/* Cantidades */}
+                        <div className="mb-3 grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Cantidad OK</label>
+                            <input type="text" inputMode="decimal" value={d.cantidad}
+                              onChange={(e) => setShiftClosureData(prev => ({ ...prev, [formato]: { ...prev[formato], cantidad: e.target.value } }))}
+                              className="w-full border-2 border-slate-200 p-2 rounded-xl font-bold text-[14px] focus:border-slate-900 outline-none" placeholder="0" />
                           </div>
-                          {/* Resultados calculados */}
-                          {kgEntrada > 0 && (
-                            <div className="grid grid-cols-4 gap-2 mt-2">
-                              <div className="bg-white rounded-lg p-2 border border-slate-200 text-center">
-                                <p className="text-[8px] font-black text-slate-400 uppercase">Kg Envasados</p>
-                                <p className="text-[13px] font-black text-slate-900">{kgSalida.toFixed(1)}</p>
+                          <div>
+                            <label className="block text-[10px] font-black text-red-500 uppercase mb-1">CANTIDAD A REPROCESAR</label>
+                            <input type="text" inputMode="decimal" value={d.cantidadNok || ''}
+                              onChange={(e) => setShiftClosureData(prev => ({ ...prev, [formato]: { ...prev[formato], cantidadNok: e.target.value } }))}
+                              className="w-full border-2 border-red-50 p-2 rounded-xl font-bold text-[14px] focus:border-red-400 outline-none text-red-600" placeholder="0" />
+                          </div>
+                        </div>
+                        {/* Merma - só Loncheado e produção */}
+                        {showMerma && (
+                          <div className="border-t border-slate-200 pt-3 mt-1">
+                            <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2">Merma</p>
+                            <div className="grid grid-cols-3 gap-2 mb-2">
+                              {[
+                                { label: 'Kg Entrada', key: 'kgEntrada' },
+                                { label: 'Kg Tacos', key: 'kgTacos' },
+                                { label: 'Kg Pieles', key: 'kgPieles' },
+                                { label: 'Kg Hueco', key: 'kgHueco' },
+                              ].map(({ label, key }) => (
+                                <div key={key}>
+                                  <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">{label}</label>
+                                  <input type="text" inputMode="decimal"
+                                    value={(d as any)[key] || ''}
+                                    onChange={(e) => setShiftClosureData(prev => ({ ...prev, [formato]: { ...prev[formato], [key]: e.target.value } }))}
+                                    className="w-full border-2 border-slate-200 p-1.5 rounded-lg font-bold text-[13px] focus:border-amber-400 outline-none"
+                                    placeholder="0" />
+                                </div>
+                              ))}
+                              <div>
+                                <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">Media combinada</label>
+                                <input type="number" readOnly
+                                  value={mediaCombi}
+                                  className="w-full border-2 border-slate-100 bg-slate-100 p-1.5 rounded-lg font-bold text-[13px] outline-none text-slate-500" />
                               </div>
-                              <div className="bg-white rounded-lg p-2 border border-slate-200 text-center">
-                                <p className="text-[8px] font-black text-slate-400 uppercase">Kg Merma</p>
-                                <p className="text-[13px] font-black text-amber-600">{kgMerma.toFixed(1)}</p>
-                              </div>
-                              <div className={`rounded-lg p-2 border text-center ${pctMerma1 > 5 ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
-                                <p className="text-[8px] font-black text-slate-400 uppercase">% Merma 1</p>
-                                <p className={`text-[13px] font-black ${pctMerma1 > 5 ? 'text-red-600' : 'text-emerald-600'}`}>{pctMerma1.toFixed(1)}%</p>
-                              </div>
-                              <div className={`rounded-lg p-2 border text-center ${pctMerma2 > 5 ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
-                                <p className="text-[8px] font-black text-slate-400 uppercase">% Merma 2</p>
-                                <p className={`text-[13px] font-black ${pctMerma2 > 5 ? 'text-red-600' : 'text-emerald-600'}`}>{pctMerma2.toFixed(1)}%</p>
+                              <div>
+                                <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">nº envases</label>
+                                <input type="number" readOnly
+                                  value={nEnvases}
+                                  className="w-full border-2 border-slate-100 bg-slate-100 p-1.5 rounded-lg font-bold text-[13px] outline-none text-slate-500" />
                               </div>
                             </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
+                            {/* Resultados calculados */}
+                            {kgEntrada > 0 && (
+                              <div className="grid grid-cols-4 gap-2 mt-2">
+                                <div className="bg-white rounded-lg p-2 border border-slate-200 text-center">
+                                  <p className="text-[8px] font-black text-slate-400 uppercase">Kg Envasados</p>
+                                  <p className="text-[13px] font-black text-slate-900">{kgSalida.toFixed(1)}</p>
+                                </div>
+                                <div className="bg-white rounded-lg p-2 border border-slate-200 text-center">
+                                  <p className="text-[8px] font-black text-slate-400 uppercase">Kg Merma</p>
+                                  <p className="text-[13px] font-black text-amber-600">{kgMerma.toFixed(1)}</p>
+                                </div>
+                                <div className={`rounded-lg p-2 border text-center ${pctMerma1 > 5 ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                                  <p className="text-[8px] font-black text-slate-400 uppercase">% Merma 1</p>
+                                  <p className={`text-[13px] font-black ${pctMerma1 > 5 ? 'text-red-600' : 'text-emerald-600'}`}>{pctMerma1.toFixed(1)}%</p>
+                                </div>
+                                <div className={`rounded-lg p-2 border text-center ${pctMerma2 > 5 ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                                  <p className="text-[8px] font-black text-slate-400 uppercase">% Merma 2</p>
+                                  <p className={`text-[13px] font-black ${pctMerma2 > 5 ? 'text-red-600' : 'text-emerald-600'}`}>{pctMerma2.toFixed(1)}%</p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )
               )}
             </div>
             <div className="flex gap-3 p-4 border-t border-slate-100">
