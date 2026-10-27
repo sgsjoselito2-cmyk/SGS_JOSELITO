@@ -436,10 +436,10 @@ export const calculateStats = (
     const horasManteca = calculateUniqueMinutesMultiDay(actsManteca) / 60;
     pph_manteca = horasManteca > 0 ? Math.round(cantManteca / persManteca / horasManteca) : 0;
 
-    // CANTIDAD COLGADA — solo COLGAR, nunca DESCOLGAR
+    // CANTIDAD COLGADA — incluye también DESCOLGAR - COLGAR
     cantidad_colgada = data.filter(a => {
       const f = normalizeFormato(a.formato);
-      return f.includes('COLGAR') && !f.includes('DESCOLGAR')
+      return (f.includes('COLGAR') && !f.includes('DESCOLGAR') || f.includes('DESCOLGAR') && f.includes('COLGAR'))
         && a.tipoTarea === TaskType.PRODUCCION;
     }).reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
 
