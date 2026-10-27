@@ -341,10 +341,48 @@ export const calculateStats = (
     pph = calcPPHFromMinutes(pmInput, qtyInput);
   } else if (aid.includes('preparacion-exp') || aid === 'preparacion-exp') {
     const acts = data.filter(a => isP(a));
-    const qtyInput = acts.reduce((sum, a) => sum + Number(a.cantidad || 0), 0);
-    const prodMinutes = uniqueTimeP > 0 ? uniqueTimeP : acts.reduce((sum, a) => sum + getDur(a), 0);
-    const horasProduccion = prodMinutes / 60;
-    pph = horasProduccion > 0 ? qtyInput / horasProduccion : 0;
+    const pmInput = acts.reduce((sum, a) => sum + getDur(a) * getOps(a), 0);
+
+    // Leer jamones y paletas del closureComment
+    let prepJamones = 0;
+    let prepPaletas = 0;
+    let foundPrepClosure = false;
+
+    const recordsToScan = [...activities, ...history];
+    const allRecords = [...data, ...recordsToScan];
+    for (const act of allRecords) {
+      const comments = Array.isArray(act.comentarios) ? act.comentarios : (act.comentarios ? [act.comentarios] : []);
+      for (const c of comments) {
+        if (typeof c === 'string' && c.includes('CIERRE TURNO PREP EXPEDICIONES')) {
+          const jsonMatch = c.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            try {
+              const parsed = JSON.parse(jsonMatch[0]);
+              if (parsed.jamones !== undefined || parsed.paletas !== undefined) {
+                prepJamones = Number(parsed.jamones) || 0;
+                prepPaletas = Number(parsed.paletas) || 0;
+                foundPrepClosure = true;
+                break;
+              }
+            } catch {}
+          }
+        }
+      }
+      if (foundPrepClosure) break;
+    }
+
+    // PPH equivalente: Jamones referencia, fator paletas = velocidade_jamones / velocidade_paletas
+    const speedsToUse = (masterSpeeds && masterSpeeds.length > 0)
+      ? masterSpeeds
+      : getInitialMasterSpeeds('preparacion-exp');
+    const msJamon = speedsToUse.find(ms => ms.area === 'preparacion-exp' && normalizeFormato(ms.formato) === 'JAMONES');
+    const msPaleta = speedsToUse.find(ms => ms.area === 'preparacion-exp' && normalizeFormato(ms.formato) === 'PALETAS');
+    const T_ref = Number(msJamon?.tiempoTeorico || 120);
+    const T_paleta = Number(msPaleta?.tiempoTeorico || 300);
+    const factorPaleta = T_ref / T_paleta; // 120/300 = 0.4
+
+    const qtyEquiv = (prepJamones * 1) + (prepPaletas * factorPaleta);
+    pph = (foundPrepClosure && pmInput > 0) ? calcPPHFromMinutes(pmInput, qtyEquiv) : 0;
   } else if (aid.includes('sb-empaquetado-loncheado')) {
     const bActs = data.filter(a => isP(a) && (!a.formato || a.formato.toUpperCase().includes('BLISTER') || a.formato.toUpperCase().includes('BLÍSTER')));
     const cuchilloActs = data.filter(a => isP(a) && a.formato?.toUpperCase().includes('CUCHILLO'));

@@ -406,7 +406,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
 
   useEffect(() => {
     if (showShiftClosureModal) {
-      if (selectedArea === 'envolver' || selectedArea === 'envios') {
+      if (selectedArea === 'envolver' || selectedArea === 'envios' || selectedArea === 'preparacion-exp') {
         return;
       }
       const actividadesDia = activities.filter(a => 
@@ -447,6 +447,11 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
     jamones: 0,
     paletas: 0,
     cajasNavidad: 0,
+    cambioFormato: 0
+  });
+  const [prepExpCounts, setPrepExpCounts] = useState<{ jamones: number | string, paletas: number | string, cambioFormato: number | string }>({
+    jamones: 0,
+    paletas: 0,
     cambioFormato: 0
   });
   const [enviosData, setEnviosData] = useState<{ bultos: number | string, errores: number | string, pedidosNoAtendidos: number | string }>({
@@ -813,6 +818,13 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
 
       if (selectedArea === 'envolver') {
         setExpedicionCounts({ jamones: 0, paletas: 0, cajasNavidad: 0, cambioFormato: 0 });
+        setPrepExpCounts({ jamones: 0, paletas: 0, cambioFormato: 0 });
+        setShiftClosureData({});
+        setShowShiftClosureModal(true);
+        return;
+      }
+      if (selectedArea === 'preparacion-exp') {
+        setPrepExpCounts({ jamones: 0, paletas: 0, cambioFormato: 0 });
         setShiftClosureData({});
         setShowShiftClosureModal(true);
         return;
@@ -885,14 +897,15 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
 
   const handleConfirmClosure = () => {
     const isExpedicion = selectedArea === 'envolver';
+    const isPrepExp = selectedArea === 'preparacion-exp';
     const isValid = Object.values(shiftClosureData).every(d => d.cantidad !== '');
-    if (!isValid && !isExpedicion && selectedArea !== 'envios') {
+    if (!isValid && !isExpedicion && selectedArea !== 'envios' && !isPrepExp) {
       setValidationError('⚠️ Por favor, rellene todas las cantidades.');
       return;
     }
 
     const totalQty = Object.values(shiftClosureData).reduce((sum, d) => sum + (safeParse(d.cantidad) || 0), 0);
-    if (totalQty === 0 && !isExpedicion && selectedArea !== 'envios') {
+    if (totalQty === 0 && !isExpedicion && selectedArea !== 'envios' && !isPrepExp) {
       setValidationError('⚠️ La cantidad tiene que ser diferente de 0');
       return;
     }
@@ -910,6 +923,12 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
       const errores = Math.max(0, parseInt(String(enviosData.errores || '0'), 10) || 0);
       const pedidosNoAtendidos = Math.max(0, parseInt(String(enviosData.pedidosNoAtendidos || '0'), 10) || 0);
       closureComment = `CIERRE TURNO ENVIOS | ${JSON.stringify({ bultos, errores, pedidosNoAtendidos })}`;
+    }
+    if (selectedArea === 'preparacion-exp') {
+      const jamones = Math.max(0, parseInt(String(prepExpCounts.jamones || '0'), 10) || 0);
+      const paletas = Math.max(0, parseInt(String(prepExpCounts.paletas || '0'), 10) || 0);
+      const cambioFormato = Math.max(0, parseInt(String(prepExpCounts.cambioFormato || '0'), 10) || 0);
+      closureComment = `CIERRE TURNO PREP EXPEDICIONES | ${JSON.stringify({ jamones, paletas, cambioFormato })}`;
     }
 
     const aggregated: Record<string, { cantidad: number, cantidadNok?: number }> = {};
@@ -1221,6 +1240,60 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                 </div>
               )}
 
+              {selectedArea === 'preparacion-exp' && (
+                <div className="p-4 bg-orange-50/80 rounded-2xl border-2 border-orange-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-black text-orange-900 uppercase text-[13px] tracking-wide">
+                      Cantidades Prep. Expediciones
+                    </h3>
+                    <span className="text-[10px] font-black text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full uppercase">
+                      Cierre de Turno
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-700 uppercase mb-1">Jamones</label>
+                      <input
+                        type="number" min="0"
+                        value={prepExpCounts.jamones}
+                        onChange={(e) => setPrepExpCounts(prev => ({
+                          ...prev,
+                          jamones: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0)
+                        }))}
+                        className="w-full border-2 border-orange-200 bg-white p-2.5 rounded-xl font-black text-[15px] text-center focus:border-orange-600 outline-none text-slate-900"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-700 uppercase mb-1">Paletas</label>
+                      <input
+                        type="number" min="0"
+                        value={prepExpCounts.paletas}
+                        onChange={(e) => setPrepExpCounts(prev => ({
+                          ...prev,
+                          paletas: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0)
+                        }))}
+                        className="w-full border-2 border-orange-200 bg-white p-2.5 rounded-xl font-black text-[15px] text-center focus:border-orange-600 outline-none text-slate-900"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-700 uppercase mb-1">Cambio Formato (min)</label>
+                      <input
+                        type="number" min="0"
+                        value={prepExpCounts.cambioFormato}
+                        onChange={(e) => setPrepExpCounts(prev => ({
+                          ...prev,
+                          cambioFormato: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0)
+                        }))}
+                        className="w-full border-2 border-orange-200 bg-white p-2.5 rounded-xl font-black text-[15px] text-center focus:border-orange-600 outline-none text-slate-900"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {selectedArea === 'envios' && (
                 <div className="p-4 bg-green-50/80 rounded-2xl border-2 border-green-200">
                   <div className="flex items-center justify-between mb-3">
@@ -1260,7 +1333,7 @@ const WorkPanel: React.FC<WorkPanelProps> = ({
                 </div>
               )}
 
-              {selectedArea !== 'envolver' && selectedArea !== 'envios' && (
+              {selectedArea !== 'envolver' && selectedArea !== 'envios' && selectedArea !== 'preparacion-exp' && (
                 Object.keys(shiftClosureData).length === 0 ? (
                   <div className="text-center py-8">
                     <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">

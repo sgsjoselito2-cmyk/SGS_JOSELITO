@@ -114,6 +114,12 @@ export const getInitialMasterSpeeds = (areaId: string): MasterSpeed[] => {
       { id: `ms-envolver-3`, formato: 'CAJAS DE NAVIDAD', tiempoTeorico: 0, area: 'envolver' }
     ];
   }
+  if (areaId === 'preparacion-exp') {
+    return [
+      { id: 'ms-preparacion-exp-1', formato: 'JAMONES', tiempoTeorico: 120, area: 'preparacion-exp' },
+      { id: 'ms-preparacion-exp-2', formato: 'PALETAS', tiempoTeorico: 300, area: 'preparacion-exp' },
+    ];
+  }
   return [
     { id: `ms-${effectiveArea}-1`, formato: 'FORMATO ESTÁNDAR', tiempoTeorico: 60, area: effectiveArea },
     { id: `ms-${effectiveArea}-2`, formato: 'FORMATO GRANDE', tiempoTeorico: 40, area: effectiveArea },
